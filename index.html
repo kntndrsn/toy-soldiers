@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plastic Army Men - Third-Person Shooter</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #87ceeb;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    /* HUD Overlay */
+    #hud {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      color: #ffffff;
+      text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.85);
+    }
+
+    /* Instructions Banner (Top Left) */
+    #instructions {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      background: rgba(0, 0, 0, 0.55);
+      padding: 10px 14px;
+      border-radius: 6px;
+      border-left: 4px solid #3fa336;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    #instructions strong {
+      color: #8df57e;
+    }
+
+    /* Health & Enemy Status (Bottom Left) */
+    #status-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.55);
+      padding: 12px 16px;
+      border-radius: 6px;
+      min-width: 220px;
+    }
+
+    #health-label {
+      font-size: 15px;
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+
+    #health-bar-bg {
+      width: 100%;
+      height: 16px;
+      background: rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    #health-bar-fill {
+      width: 100%;
+      height: 100%;
+      background: #3bd13b;
+      transition: width 0.15s ease, background-color 0.15s ease;
+    }
+
+    #enemy-counter {
+      margin-top: 8px;
+      font-size: 14px;
+      color: #f0d59c;
+    }
+
+    /* Center Crosshair */
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 18px;
+      height: 18px;
+      transform: translate(-50%, -50%);
+    }
+
+    #crosshair::before,
+    #crosshair::after {
+      content: "";
+      position: absolute;
+      background: rgba(255, 255, 255, 0.85);
+      box-shadow: 0 0 2px #000;
+    }
+
+    #crosshair::before {
+      top: 8px;
+      left: 0;
+      width: 18px;
+      height: 2px;
+    }
+
+    #crosshair::after {
+      top: 0;
+      left: 8px;
+      width: 2px;
+      height: 18px;
+    }
+
+    /* Win / Game Over Message */
+    #end-message {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.8);
+      padding: 28px 40px;
+      border-radius: 8px;
+      text-align: center;
+      display: none;
+      pointer-events: auto;
+      border: 2px solid #ffffff;
+    }
+
+    #end-title {
+      font-size: 32px;
+      font-weight: bold;
+      margin: 0 0 10px 0;
+    }
+
+    #end-subtitle {
+      font-size: 16px;
+      margin: 0 0 18px 0;
+      color: #dddddd;
+    }
+
+    #restart-btn {
+      padding: 10px 22px;
+      font-size: 15px;
+      font-weight: bold;
+      color: #ffffff;
+      background: #2e7d26;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    #restart-btn:hover {
+      background: #3b9c31;
+    }
+  </style>
+</head>
+<body>
+  <!-- On-Screen HUD -->
+  <div id="hud">
+    <div id="instructions">
+      <strong>PLASTIC ARMY MEN</strong><br />
+      <strong>WASD</strong> : Move Soldier<br />
+      <strong>Mouse</strong> : Aim / Look (Click canvas to lock mouse)<br />
+      <strong>Left-Click / Space</strong> : Fire Rifle<br />
+      <strong>Goal</strong> : Eliminate all Tan Soldiers
+    </div>
+
+    <div id="crosshair"></div>
+
+    <div id="status-panel">
+      <div id="health-label">HEALTH: <span id="health-value">100</span>%</div>
+      <div id="health-bar-bg">
+        <div id="health-bar-fill"></div>
+      </div>
+      <div id="enemy-counter">Tan Soldiers Left: <span id="enemy-count">0</span></div>
+    </div>
+
+    <div id="end-message">
+      <div id="end-title">VICTORY!</div>
+      <div id="end-subtitle">All tan soldiers have been eliminated.</div>
+      <button id="restart-btn">Play Again (R)</button>
+    </div>
+  </div>
+
+  <!-- Three.js from CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <script>
+    // =========================================================================
+    // 1. SCENE, CAMERA, AND RENDERER SETUP
+    // =========================================================================
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb); // Open sky blue
+    scene.fog = new THREE.Fog(0x87ceeb, 45, 130);
+
+    const camera = new THREE.PerspectiveCamera(
+      60,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      200
+    );
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    // =========================================================================
+    // 2. LIGHTING
+    // =========================================================================
+    const hemiLight = new THREE.HemisphereLight(0xdff4ff, 0x5d6e3e, 0.65);
+    scene.add(hemiLight);
+
+    const dirLight = new THREE.DirectionalLight(0xfff6e0, 0.9);
+    dirLight.position.set(35, 55, 30);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 1024;
+    dirLight.shadow.mapSize.height = 1024;
+    dirLight.shadow.camera.near = 1;
+    dirLight.shadow.camera.far = 140;
+    const shadowExtent = 55;
+    dirLight.shadow.camera.left = -shadowExtent;
+    dirLight.shadow.camera.right = shadowExtent;
+    dirLight.shadow.camera.top = shadowExtent;
+    dirLight.shadow.camera.bottom = -shadowExtent;
+    scene.add(dirLight);
+
+    // =========================================================================
+    // 3. MATERIALS (SHINY PLASTIC FOR SOLDIERS, SIMPLE FOR SANDBOX)
+    // =========================================================================
+    const greenPlasticMat = new THREE.MeshPhongMaterial({
+      color: 0x266b1f,
+      specular: 0x77aa70,
+      shininess: 75
+    });
+
+    const tanPlasticMat = new THREE.MeshPhongMaterial({
+      color: 0xc8a464,
+      specular: 0xffe8bd,
+      shininess: 75
+    });
+
+    const darkPlasticMat = new THREE.MeshPhongMaterial({
+      color: 0x1c3617,
+      specular: 0x668866,
+      shininess: 85
+    });
+
+    const tanGunPlasticMat = new THREE.MeshPhongMaterial({
+      color: 0x997942,
+      specular: 0xffe8bd,
+      shininess: 85
+    });
+
+    const crateMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
+    const wallMat = new THREE.MeshLambertMaterial({ color: 0x9e9582 });
+    const rockMat = new THREE.MeshLambertMaterial({ color: 0x777b7e });
+
+    // =========================================================================
+    // 4. GROUND PLANE & COVER OBJECTS (OUTDOOR SANDBOX)
+    // =========================================================================
+    const WORLD_LIMIT = 48;
+    const obstacles = []; // Stores bounding boxes/radii for simple collision & cover
+
+    // Generate a subtle procedural grass/dirt canvas texture for the ground
+    function createGroundTexture() {
+      const canvas = document.createElement("canvas");
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext("2d");
+
+      ctx.fillStyle = "#4f7d36";
+      ctx.fillRect(0, 0, 256, 256);
+
+      // Add subtle grass & dirt speckles
+      for (let i = 0; i < 1800; i++) {
+        ctx.fillStyle = Math.random() > 0.25 ? "#446e2d" : "#6b5a38";
+        ctx.fillRect(
+          Math.floor(Math.random() * 256),
+          Math.floor(Math.random() * 256),
+          3,
+          3
+        );
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(24, 24);
+      return texture;
+    }
+
+    const groundGeo = new THREE.PlaneGeometry(WORLD_LIMIT * 2, WORLD_LIMIT * 2);
+    const groundMat = new THREE.MeshLambertMaterial({ map: createGroundTexture() });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Helper to add a cover object (crate, low wall, or rock)
+    function addObstacle(mesh, width, height, depth) {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+
+      const box = new THREE.Box3().setFromCenterAndSize(
+        mesh.position,
+        new THREE.Vector3(width, height, depth)
+      );
+      obstacles.push({ mesh, box, width, height, depth });
+    }
+
+    function buildSandboxCover() {
+      // Wooden crates
+      const crateSpecs = [
+        { x: -8, z: -8, w: 3, h: 3, d: 3 },
+        { x: 10, z: -6, w: 3.5, h: 3.5, d: 3.5 },
+        { x: -14, z: 12, w: 3, h: 3, d: 3 },
+        { x: 16, z: 15, w: 4, h: 3, d: 4 },
+        { x: -24, z: -18, w: 3.5, h: 3.5, d: 3.5 },
+        { x: 24, z: -20, w: 3.5, h: 3.5, d: 3.5 }
+      ];
+      crateSpecs.forEach((c) => {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(c.w, c.h, c.d), crateMat);
+        mesh.position.set(c.x, c.h / 2, c.z);
+        addObstacle(mesh, c.w, c.h, c.d);
+      });
+
+      // Low cover walls
+      const wallSpecs = [
+        { x: 0, z: -14, w: 7, h: 2.2, d: 1.4 },
+        { x: -16, z: 0, w: 1.4, h: 2.2, d: 7 },
+        { x: 18, z: 2, w: 1.4, h: 2.2, d: 7 },
+        { x: 2, z: 18, w: 8, h: 2.2, d: 1.4 },
+        { x: -6, z: -28, w: 8, h: 2.4, d: 1.5 },
+        { x: 12, z: -26, w: 7, h: 2.4, d: 1.5 }
+      ];
+      wallSpecs.forEach((w) => {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w.w, w.h, w.d), wallMat);
+        mesh.position.set(w.x, w.h / 2, w.z);
+        addObstacle(mesh, w.w, w.h, w.d);
+      });
+
+      // Simple low-poly rocks
+      const rockSpecs = [
+        { x: -22, z: -8, r: 2.2 },
+        { x: 22, z: -12, r: 2.5 },
+        { x: -8, z: 24, r: 2.3 },
+        { x: 25, z: 24, r: 2.6 },
+        { x: -28, z: 22, r: 2.4 }
+      ];
+      rockSpecs.forEach((rk) => {
+        const mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(rk.r, 0), rockMat);
+        mesh.position.set(rk.x, rk.r * 0.75, rk.z);
+        addObstacle(mesh, rk.r * 1.7, rk.r * 1.6, rk.r * 1.7);
+      });
+    }
+
+    buildSandboxCover();
+
+    // =========================================================================
+    // 5. PLASTIC SOLDIER BUILDER (LOW-POLY GEOMETRY)
+    // =========================================================================
+    function createPlasticSoldier(isPlayer) {
+      const bodyMat = isPlayer ? greenPlasticMat : tanPlasticMat;
+      const gunMat = isPlayer ? darkPlasticMat : tanGunPlasticMat;
+
+      const root = new THREE.Group();
+
+      // Sub-group that tips over when the soldier dies
+      const figure = new THREE.Group();
+      root.add(figure);
+
+      // Classic plastic toy soldier base plate at the feet
+      const baseGeo = new THREE.CylinderGeometry(0.65, 0.7, 0.1, 12);
+      const baseMesh = new THREE.Mesh(baseGeo, bodyMat);
+      baseMesh.position.y = 0.05;
+      baseMesh.scale.set(1, 1, 1.25);
+      figure.add(baseMesh);
+
+      // Legs
+      const legGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.85, 8);
+      const leftLeg = new THREE.Mesh(legGeo, bodyMat);
+      leftLeg.position.set(-0.2, 0.5, 0);
+      figure.add(leftLeg);
+
+      const rightLeg = new THREE.Mesh(legGeo, bodyMat);
+      rightLeg.position.set(0.2, 0.5, 0);
+      figure.add(rightLeg);
+
+      // Torso
+      const torsoGeo = new THREE.BoxGeometry(0.7, 0.9, 0.4);
+      const torso = new THREE.Mesh(torsoGeo, bodyMat);
+      torso.position.set(0, 1.35, 0);
+      figure.add(torso);
+
+      // Head
+      const headGeo = new THREE.SphereGeometry(0.24, 10, 10);
+      const head = new THREE.Mesh(headGeo, bodyMat);
+      head.position.set(0, 2.02, 0);
+      figure.add(head);
+
+      // Plastic Army Helmet
+      const helmetGeo = new THREE.SphereGeometry(
+        0.29,
+        12,
+        8,
+        0,
+        Math.PI * 2,
+        0,
+        Math.PI * 0.58
+      );
+      const helmet = new THREE.Mesh(helmetGeo, bodyMat);
+      helmet.position.set(0, 2.04, 0);
+      figure.add(helmet);
+
+      // Arms (posed holding rifle forward)
+      const armGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.65, 8);
+      const rightArm = new THREE.Mesh(armGeo, bodyMat);
+      rightArm.position.set(0.42, 1.45, -0.2);
+      rightArm.rotation.x = Math.PI / 2.2;
+      figure.add(rightArm);
+
+      const leftArm = new THREE.Mesh(armGeo, bodyMat);
+      leftArm.position.set(-0.25, 1.42, -0.32);
+      leftArm.rotation.x = Math.PI / 2.1;
+      leftArm.rotation.z = -0.45;
+      figure.add(leftArm);
+
+      // Basic Rifle (stock + barrel)
+      const rifleGroup = new THREE.Group();
+      const stockGeo = new THREE.BoxGeometry(0.1, 0.16, 0.65);
+      const stock = new THREE.Mesh(stockGeo, gunMat);
+      stock.position.set(0, 0, 0);
+      rifleGroup.add(stock);
+
+      const barrelGeo = new THREE.CylinderGeometry(0.035, 0.035, 0.75, 8);
+      const barrel = new THREE.Mesh(barrelGeo, gunMat);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0.03, -0.55);
+      rifleGroup.add(barrel);
+
+      // Muzzle flash mesh at the tip of the barrel
+      const flashGeo = new THREE.SphereGeometry(0.14, 6, 6);
+      const flashMat = new THREE.MeshBasicMaterial({ color: 0xffee55 });
+      const muzzleFlash = new THREE.Mesh(flashGeo, flashMat);
+      muzzleFlash.position.set(0, 0.03, -0.98);
+      muzzleFlash.visible = false;
+      rifleGroup.add(muzzleFlash);
+
+      rifleGroup.position.set(0.32, 1.45, -0.45);
+      figure.add(rifleGroup);
+
+      // Enable shadows on all parts
+      figure.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+
+      return {
+        root,
+        figure,
+        leftLeg,
+        rightLeg,
+        muzzleFlash,
+        flashTimer: 0
+      };
+    }
+
+    // =========================================================================
+    // 6. PLAYER STATE & CONTROLS
+    // =========================================================================
+    const playerModel = createPlasticSoldier(true);
+    scene.add(playerModel.root);
+
+    const player = {
+      model: playerModel,
+      position: playerModel.root.position,
+      yaw: 0,           // Horizontal aim angle
+      pitch: 0.08,      // Vertical camera look angle
+      speed: 9.5,
+      radius: 0.75,
+      health: 100,
+      maxHealth: 100,
+      fireCooldown: 0,
+      fireRate: 0.22,   // Seconds between shots
+      walkCycle: 0
+    };
+
+    const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, Space: false };
+    let isMouseDown = false;
+    let gameEnded = false;
+
+    window.addEventListener("keydown", (e) => {
+      if (e.code in keys) keys[e.code] = true;
+      if (e.code === "KeyR" && gameEnded) resetGame();
+    });
+
+    window.addEventListener("keyup", (e) => {
+      if (e.code in keys) keys[e.code] = false;
+    });
+
+    // Lock pointer on canvas click for smooth third-person mouse aiming
+    renderer.domElement.addEventListener("click", () => {
+      if ( !gameEnded && document.pointerLockElement !== renderer.domElement) {
+        renderer.domElement.requestPointerLock();
+      }
+    });
+
+    window.addEventListener("mousedown", (e) => {
+      if (e.button === 0 && !gameEnded) {
+        isMouseDown = true;
+      }
+    });
+
+    window.addEventListener("mouseup", (e) => {
+      if (e.button === 0) {
+        isMouseDown = false;
+      }
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (gameEnded) return;
+      const sensitivity = 0.0026;
+      player.yaw -= e.movementX * sensitivity;
+      player.pitch = Math.max(
+        -0.35,
+        Math.min(0.65, player.pitch + e.movementY * sensitivity)
+      );
+    });
+
+    // =========================================================================
+    // 7. ENEMY TEAM (TAN SOLDIERS)
+    // =========================================================================
+    const enemies = [];
+    const ENEMY_SPAWNS = [
+      { x: -18, z: -22 },
+      { x: 0, z: -30 },
+      { x: 20, z: -24 },
+      { x: -28, z: 4 },
+      { x: 28, z: -2 },
+      { x: -20, z: 26 },
+      { x: 6, z: 30 },
+      { x: 26, z: 20 }
+    ];
+
+    function spawnEnemies() {
+      // Remove any existing enemy meshes
+      enemies.forEach((e) => scene.remove(e.model.root));
+      enemies.length = 0;
+
+      ENEMY_SPAWNS.forEach((pt) => {
+        const model = createPlasticSoldier(false);
+        model.root.position.set(pt.x, 0, pt.z);
+        scene.add(model.root);
+
+        enemies.push({
+          model,
+          position: model.root.position,
+          alive: true,
+          fallProgress: 0,
+          speed: 2.8 + Math.random() * 0.8,
+          shootTimer: 1.0 + Math.random() * 2.0,
+          walkCycle: Math.random() * 10
+        });
+      });
+
+      updateHUD();
+    }
+
+    // =========================================================================
+    // 8. WEAPON & TRACER / HITSCAN SYSTEM
+    // =========================================================================
+    const tracers = [];
+    const raycaster = new THREE.Raycaster();
+
+    function spawnTracer(startPoint, endPoint, colorHex) {
+      const points = [startPoint.clone(), endPoint.clone()];
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      const material = new THREE.LineBasicMaterial({ color: colorHex });
+      const line = new THREE.Line(geometry, material);
+      scene.add(line);
+      tracers.push({ line, life: 0.07 });
+    }
+
+    function getMuzzleWorldPosition(soldierModel) {
+      const pos = new THREE.Vector3();
+      soldierModel.muzzleFlash.getWorldPosition(pos);
+      return pos;
+    }
+
+    // Fires a rifle shot from the player along the crosshair aim direction
+    function firePlayerWeapon() {
+      player.fireCooldown = player.fireRate;
+      player.model.muzzleFlash.visible = true;
+      player.model.flashTimer = 0.05;
+
+      // Raycast from camera through screen center to determine world aim target
+      raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+      const maxRange = 95;
+      let aimPoint = raycaster.ray.origin
+        .clone()
+        .add(raycaster.ray.direction.clone().multiplyScalar(maxRange));
+
+      // Now cast from the soldier's rifle muzzle toward that aim point
+      const muzzlePos = getMuzzleWorldPosition(player.model);
+      const shotDir = aimPoint.sub(muzzlePos).normalize();
+      raycaster.set(muzzlePos, shotDir);
+      raycaster.far = maxRange;
+
+      // Collect collidable meshes (cover obstacles + living enemy hitboxes)
+      const obstacleMeshes = obstacles.map((o) => o.mesh);
+      const obstacleHits = raycaster.intersectObjects(obstacleMeshes, false);
+      let closestDist = obstacleHits.length > 0 ? obstacleHits[0].distance : maxRange;
+      let hitPoint = muzzlePos.clone().add(shotDir.clone().multiplyScalar(closestDist));
+
+      // Check if any living tan soldier is hit before the obstacle
+      let hitEnemy = null;
+      enemies.forEach((enemy) => {
+        if (!enemy.alive) return;
+        // Approximate soldier body cylinder with a bounding box check
+        const enemyBox = new THREE.Box3(
+          new THREE.Vector3(enemy.position.x - 0.55, 0, enemy.position.z - 0.55),
+          new THREE.Vector3(enemy.position.x + 0.55, 2.3, enemy.position.z + 0.55)
+        );
+        const intersection = raycaster.ray.intersectBox(enemyBox, new THREE.Vector3());
+        if (intersection) {
+          const dist = muzzlePos.distanceTo(intersection);
+          if (dist < closestDist) {
+            closestDist = dist;
+            hitPoint = intersection;
+            hitEnemy = enemy;
+          }
+        }
+      });
+
+      if (hitEnemy) {
+        hitEnemy.alive = false;
+        updateHUD();
+        checkWinCondition();
+      }
+
+      spawnTracer(muzzlePos, hitPoint, 0xfff066);
+    }
+
+    // Fires a shot from an AI tan soldier toward the player
+    function fireEnemyWeapon(enemy) {
+      enemy.model.muzzleFlash.visible = true;
+      enemy.model.flashTimer = 0.06;
+
+      const muzzlePos = getMuzzleWorldPosition(enemy.model);
+      const targetPos = new THREE.Vector3(
+        player.position.x + (Math.random() - 0.5) * 1.8,
+        1.25 + (Math.random() - 0.5) * 0.8,
+        player.position.z + (Math.random() - 0.5) * 1.8
+      );
+
+      const shotDir = targetPos.sub(muzzlePos).normalize();
+      const maxRange = 60;
+      raycaster.set(muzzlePos, shotDir);
+      raycaster.far = maxRange;
+
+      // Check cover obstacles first
+      const obstacleMeshes = obstacles.map((o) => o.mesh);
+      const obstacleHits = raycaster.intersectObjects(obstacleMeshes, false);
+      let closestDist = obstacleHits.length > 0 ? obstacleHits[0].distance : maxRange;
+      let endPoint = muzzlePos.clone().add(shotDir.clone().multiplyScalar(closestDist));
+
+      // Check intersection with player bounding box
+      const playerBox = new THREE.Box3(
+        new THREE.Vector3(player.position.x - 0.5, 0, player.position.z - 0.5),
+        new THREE.Vector3(player.position.x + 0.5, 2.2, player.position.z + 0.5)
+      );
+      const hitPlayer = raycaster.ray.intersectBox(playerBox, new THREE.Vector3());
+      if (hitPlayer) {
+        const distToPlayer = muzzlePos.distanceTo(hitPlayer);
+        if (distToPlayer < closestDist) {
+          endPoint = hitPlayer;
+          damagePlayer(10);
+        }
+      }
+
+      spawnTracer(muzzlePos, endPoint, 0xffaa44);
+    }
+
+    // =========================================================================
+    // 9. COLLISION & MOVEMENT HELPERS
+    // =========================================================================
+    function resolveCollisions(pos, radius) {
+      // Keep inside sandbox boundaries
+      pos.x = Math.max(-WORLD_LIMIT + 1, Math.min(WORLD_LIMIT - 1, pos.x));
+      pos.z = Math.max(-WORLD_LIMIT + 1, Math.min(WORLD_LIMIT - 1, pos.z));
+
+      // Push soldier out of any overlapping cover boxes
+      for (const obs of obstacles) {
+        const minX = obs.box.min.x - radius;
+        const maxX = obs.box.max.x + radius;
+        const minZ = obs.box.min.z - radius;
+        const maxZ = obs.box.max.z + radius;
+
+        if (pos.x > minX && pos.x < maxX && pos.z > minZ && pos.z < maxZ) {
+          const overlapLeft = pos.x - minX;
+          const overlapRight = maxX - pos.x;
+          const overlapTop = pos.z - minZ;
+          const overlapBottom = maxZ - pos.z;
+          const minOverlap = Math.min(
+            overlapLeft,
+            overlapRight,
+            overlapTop,
+            overlapBottom
+          );
+
+          if (minOverlap === overlapLeft) pos.x = minX;
+          else if (minOverlap === overlapRight) pos.x = maxX;
+          else if (minOverlap === overlapTop) pos.z = minZ;
+          else pos.z = maxZ;
+        }
+      }
+    }
+
+    function animateWalkLegs(soldierModel, walkCycle, isMoving) {
+      if (isMoving) {
+        const swing = Math.sin(walkCycle) * 0.45;
+        soldierModel.leftLeg.rotation.x = swing;
+        soldierModel.rightLeg.rotation.x = -swing;
+      } else {
+        soldierModel.leftLeg.rotation.x = 0;
+        soldierModel.rightLeg.rotation.x = 0;
+      }
+    }
+
+    // =========================================================================
+    // 10. HEALTH, HUD, AND WIN / GAME OVER LOGIC
+    // =========================================================================
+    const healthValueEl = document.getElementById("health-value");
+    const healthBarFillEl = document.getElementById("health-bar-fill");
+    const enemyCountEl = document.getElementById("enemy-count");
+    const endMessageEl = document.getElementById("end-message");
+    const endTitleEl = document.getElementById("end-title");
+    const endSubtitleEl = document.getElementById("end-subtitle");
+    const restartBtn = document.getElementById("restart-btn");
+
+    restartBtn.addEventListener("click", resetGame);
+
+    function updateHUD() {
+      const hp = Math.max(0, Math.round(player.health));
+      healthValueEl.textContent = hp;
+      healthBarFillEl.style.width = hp + "%";
+
+      if (hp > 50) healthBarFillEl.style.backgroundColor = "#3bd13b";
+      else if (hp > 25) healthBarFillEl.style.backgroundColor = "#f0ad4e";
+      else healthBarFillEl.style.backgroundColor = "#d9534f";
+
+      const aliveCount = enemies.filter((e) => e.alive).length;
+      enemyCountEl.textContent = aliveCount;
+    }
+
+    function damagePlayer(amount) {
+      if (gameEnded) return;
+      player.health = Math.max(0, player.health - amount);
+      updateHUD();
+
+      if (player.health <= 0) {
+        endGame(false);
+      }
+    }
+
+    function checkWinCondition() {
+      const aliveCount = enemies.filter((e) => e.alive).length;
+      if (aliveCount === 0 && !gameEnded) {
+        endGame(true);
+      }
+    }
+
+    function endGame(victory) {
+      gameEnded = true;
+      isMouseDown = false;
+      if (document.pointerLockElement) {
+        document.exitPointerLock();
+      }
+
+      if (victory) {
+        endTitleEl.textContent = "VICTORY!";
+        endTitleEl.style.color = "#8df57e";
+        endSubtitleEl.textContent = "All tan plastic soldiers have been eliminated!";
+      } else {
+        endTitleEl.textContent = "GAME OVER";
+        endTitleEl.style.color = "#ff6b6b";
+        endSubtitleEl.textContent = "Your green soldier was melted in action.";
+      }
+      endMessageEl.style.display = "block";
+    }
+
+    function resetGame() {
+      gameEnded = false;
+      endMessageEl.style.display = "none";
+
+      player.position.set(0, 0, 6);
+      player.yaw = 0;
+      player.pitch = 0.08;
+      player.health = player.maxHealth;
+      player.model.figure.rotation.set(0, 0, 0);
+
+      spawnEnemies();
+      updateHUD();
+    }
+
+    // =========================================================================
+    // 11. MAIN GAME LOOP
+    // =========================================================================
+    resetGame();
+    let lastTime = performance.now();
+
+    function update(dt) {
+      // Update muzzle flashes
+      if (player.model.flashTimer > 0) {
+        player.model.flashTimer -= dt;
+        if (player.model.flashTimer <= 0) player.model.muzzleFlash.visible = false;
+      }
+
+      // Update active bullet tracers
+      for (let i = tracers.length - 1; i >= 0; i--) {
+        tracers[i].life -= dt;
+        if (tracers[i].life <= 0) {
+          scene.remove(tracers[i].line);
+          tracers[i].line.geometry.dispose();
+          tracers[i].line.material.dispose();
+          tracers.splice(i, 1);
+        }
+      }
+
+      if (gameEnded) {
+        // Tip player soldier over if defeated
+        if (player.health <= 0 && player.model.figure.rotation.z < Math.PI / 2) {
+          player.model.figure.rotation.z = Math.min(
+            Math.PI / 2,
+            player.model.figure.rotation.z + dt * 4
+          );
+        }
+        return;
+      }
+
+      // ----- PLAYER MOVEMENT & AIM -----
+      player.model.root.rotation.y = player.yaw;
+
+      const forward = new THREE.Vector3(
+        -Math.sin(player.yaw),
+        0,
+        -Math.cos(player.yaw)
+      );
+      const right = new THREE.Vector3(
+        Math.cos(player.yaw),
+        0,
+        -Math.sin(player.yaw)
+      );
+
+      const moveVec = new THREE.Vector3();
+      if (keys.KeyW) moveVec.add(forward);
+      if (keys.KeyS) moveVec.sub(forward);
+      if (keys.KeyD) moveVec.add(right);
+      if (keys.KeyA) moveVec.sub(right);
+
+      const isMoving = moveVec.lengthSq() > 0;
+      if (isMoving) {
+        moveVec.normalize().multiplyScalar(player.speed * dt);
+        player.position.add(moveVec);
+        resolveCollisions(player.position, player.radius);
+        player.walkCycle += dt * 11;
+      }
+      animateWalkLegs(player.model, player.walkCycle, isMoving);
+
+      // ----- PLAYER SHOOTING -----
+      if (player.fireCooldown > 0) player.fireCooldown -= dt;
+      if ((isMouseDown || keys.Space) && player.fireCooldown <= 0) {
+        firePlayerWeapon();
+      }
+
+      // ----- ENEMY AI UPDATE -----
+      enemies.forEach((enemy) => {
+        if (enemy.model.flashTimer > 0) {
+          enemy.model.flashTimer -= dt;
+          if (enemy.model.flashTimer <= 0) enemy.model.muzzleFlash.visible = false;
+        }
+
+        // Knocked-over plastic soldier animation when eliminated
+        if (!enemy.alive) {
+          if (enemy.fallProgress < Math.PI / 2) {
+            enemy.fallProgress = Math.min(Math.PI / 2, enemy.fallProgress + dt * 5);
+            enemy.model.figure.rotation.x = enemy.fallProgress;
+          }
+          return;
+        }
+
+        // Face the player
+        const toPlayer = new THREE.Vector3().subVectors(
+          player.position,
+          enemy.position
+        );
+        toPlayer.y = 0;
+        const dist = toPlayer.length();
+        const angleToPlayer = Math.atan2(-toPlayer.x, -toPlayer.z);
+        enemy.model.root.rotation.y = angleToPlayer;
+
+        // Walk slowly toward the player until within comfortable firing distance
+        if (dist > 7.5) {
+          const step = toPlayer.normalize().multiplyScalar(enemy.speed * dt);
+          enemy.position.add(step);
+          resolveCollisions(enemy.position, 0.75);
+          enemy.walkCycle += dt * 7;
+          animateWalkLegs(enemy.model, enemy.walkCycle, true);
+        } else {
+          animateWalkLegs(enemy.model, enemy.walkCycle, false);
+        }
+
+        // Avoid stacking on top of other living enemies
+        enemies.forEach((other) => {
+          if (other === enemy || !other.alive) return;
+          const diff = new THREE.Vector3().subVectors(enemy.position, other.position);
+          diff.y = 0;
+          const d = diff.length();
+          if (d > 0 && d < 1.5) {
+            enemy.position.add(diff.normalize().multiplyScalar((1.5 - d) * 0.5));
+          }
+        });
+
+        // Shoot occasionally at the player
+        enemy.shootTimer -= dt;
+        if (enemy.shootTimer <= 0) {
+          enemy.shootTimer = 1.6 + Math.random() * 1.8;
+          if (dist < 48) {
+            fireEnemyWeapon(enemy);
+          }
+        }
+      });
+
+      // ----- THIRD-PERSON FOLLOW CAMERA -----
+      // Positioned behind, slightly to the right shoulder, and above the green soldier
+      const camDistance = 5.5;
+      const camHeight = 2.8;
+      const shoulderOffset = 0.65;
+
+      const backDir = new THREE.Vector3(
+        Math.sin(player.yaw),
+        0,
+        Math.cos(player.yaw)
+      );
+      const rightDir = new THREE.Vector3(
+        Math.cos(player.yaw),
+        0,
+        -Math.sin(player.yaw)
+      );
+
+      const desiredCamPos = player.position
+        .clone()
+        .addScaledVector(backDir, camDistance)
+        .addScaledVector(rightDir, shoulderOffset);
+      desiredCamPos.y = camHeight + Math.sin(player.pitch) * 2.2;
+
+      camera.position.copy(desiredCamPos);
+
+      // Look ahead of the soldier based on yaw and pitch
+      const lookTarget = player.position
+        .clone()
+        .addScaledVector(backDir, -12)
+        .addScaledVector(rightDir, shoulderOffset * 0.5);
+      lookTarget.y = 1.6 - Math.sin(player.pitch) * 6.0;
+      camera.lookAt(lookTarget);
+    }
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+
+      update(dt);
+      renderer.render(scene, camera);
+    }
+
+    requestAnimationFrame(animate);
+
+    // Handle browser window resize
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
