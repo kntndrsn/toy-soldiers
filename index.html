@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>Plastic Army Men - 4v4 Backyard Sandbox Shooter</title>
+  <title>Plastic Army Men</title>
   <style>
     * {
       box-sizing: border-box;
@@ -2018,49 +2018,84 @@
       green: buildTeamSoldierTemplates("green", greenPlasticMat, greenDarkPlasticMat),
       tan: buildTeamSoldierTemplates("tan", tanPlasticMat, tanDarkPlasticMat)
     };
-    // Aligns a vertical (+Y) capsule mesh so it spans from point pA to point pB
+
+    // Pre-allocated scratch vectors for zero-GC 2-bone IK & capsule alignment
+    const _ikDir = new BABYLON.Vector3();
+    const _ikAxis = new BABYLON.Vector3();
+    const _ikToHand = new BABYLON.Vector3();
+    const _ikU = new BABYLON.Vector3();
+    const _ikV = new BABYLON.Vector3();
+    const _ikElbowOut = new BABYLON.Vector3();
+    const _rightGripSpine = new BABYLON.Vector3();
+    const _leftGripSpine = new BABYLON.Vector3();
+
+    const RIGHT_SHOULDER_POS = new BABYLON.Vector3(0.36, 0.65, -0.02);
+    const LEFT_SHOULDER_POS = new BABYLON.Vector3(-0.36, 0.65, -0.02);
+    const RIGHT_POLE_DIR = new BABYLON.Vector3(0.45, -0.75, -0.35).normalize();
+    const LEFT_POLE_DIR = new BABYLON.Vector3(-0.3, -0.85, 0.1).normalize();
+    const FALL_R_HAND = new BABYLON.Vector3(0.45, 0.22, 0.28);
+    const FALL_L_HAND = new BABYLON.Vector3(-0.42, 0.25, 0.32);
+    const FALL_R_POLE = new BABYLON.Vector3(0.5, -0.7, -0.2).normalize();
+    const FALL_L_POLE = new BABYLON.Vector3(-0.5, -0.7, -0.2).normalize();
+
+    // Aligns a vertical (+Y) capsule mesh so it spans from point pA to point pB (zero allocations)
     function orientCapsuleBetween(mesh, pA, pB) {
       mesh.position.set(
         (pA.x + pB.x) * 0.5,
         (pA.y + pB.y) * 0.5,
         (pA.z + pB.z) * 0.5
       );
-      const dir = pB.subtract(pA);
-      const len = dir.length();
+      _ikDir.set(pB.x - pA.x, pB.y - pA.y, pB.z - pA.z);
+      const len = _ikDir.length();
       if (len < 0.0001) return;
-      dir.scaleInPlace(1 / len);
+      const invLen = 1 / len;
+      const dx = _ikDir.x * invLen;
+      const dy = _ikDir.y * invLen;
+      const dz = _ikDir.z * invLen;
 
       if (!mesh.rotationQuaternion) {
         mesh.rotationQuaternion = new BABYLON.Quaternion();
       }
 
-      const up = BABYLON.Axis.Y;
-      const dot = BABYLON.Vector3.Dot(up, dir);
-      if (dot > 0.9999) {
+      if (dy > 0.9999) {
         mesh.rotationQuaternion.copyFromFloats(0, 0, 0, 1);
-      } else if (dot < -0.9999) {
+      } else if (dy < -0.9999) {
         mesh.rotationQuaternion.copyFromFloats(1, 0, 0, 0);
       } else {
-        const axis = BABYLON.Vector3.Cross(up, dir).normalize();
-        const angle = Math.acos(Math.max(-1, Math.min(1, dot)));
-        BABYLON.Quaternion.RotationAxisToRef(axis, angle, mesh.rotationQuaternion);
+        // Cross(Axis.Y=(0,1,0), dir=(dx,dy,dz)) = (dz, 0, -dx)
+        const axLen = Math.hypot(dz, dx);
+        _ikAxis.set(dz / axLen, 0, -dx / axLen);
+        const angle = Math.acos(Math.max(-1, Math.min(1, dy)));
+        BABYLON.Quaternion.RotationAxisToRef(_ikAxis, angle, mesh.rotationQuaternion);
       }
     }
 
-    // Analytic 2-bone Inverse Kinematics solver: returns exact 3D elbow position
-    function solveArmIK(shoulderPos, handPos, upperLen, foreLen, poleDir) {
-      const toHand = handPos.subtract(shoulderPos);
-      const rawDist = toHand.length();
+    // Analytic 2-bone Inverse Kinematics solver into _ikElbowOut (zero allocations)
+    function solveArmIKToRef(shoulderPos, handPos, upperLen, foreLen, poleDir, outElbow) {
+      _ikToHand.set(
+        handPos.x - shoulderPos.x,
+        handPos.y - shoulderPos.y,
+        handPos.z - shoulderPos.z
+      );
+      const rawDist = _ikToHand.length();
       const maxReach = upperLen + foreLen - 0.005;
       const dist = Math.max(0.05, Math.min(rawDist, maxReach));
 
-      const u = toHand.scale(1 / Math.max(0.0001, rawDist));
-      const proj = BABYLON.Vector3.Dot(poleDir, u);
-      let v = poleDir.subtract(u.scale(proj));
-      if (v.lengthSquared() < 0.0001) {
-        v = new BABYLON.Vector3(0, -1, 0);
+      const invRaw = 1 / Math.max(0.0001, rawDist);
+      _ikU.set(_ikToHand.x * invRaw, _ikToHand.y * invRaw, _ikToHand.z * invRaw);
+
+      const proj =
+        poleDir.x * _ikU.x + poleDir.y * _ikU.y + poleDir.z * _ikU.z;
+      _ikV.set(
+        poleDir.x - _ikU.x * proj,
+        poleDir.y - _ikU.y * proj,
+        poleDir.z - _ikU.z * proj
+      );
+      const vLen = _ikV.length();
+      if (vLen < 0.0001) {
+        _ikV.set(0, -1, 0);
       } else {
-        v.normalize();
+        _ikV.scaleInPlace(1 / vLen);
       }
 
       const cosAlpha = Math.max(
@@ -2068,10 +2103,14 @@
         Math.min(1, (upperLen * upperLen + dist * dist - foreLen * foreLen) / (2 * upperLen * dist))
       );
       const sinAlpha = Math.sqrt(Math.max(0, 1 - cosAlpha * cosAlpha));
+      const uScale = upperLen * cosAlpha;
+      const vScale = upperLen * sinAlpha;
 
-      return shoulderPos
-        .add(u.scale(upperLen * cosAlpha))
-        .add(v.scale(upperLen * sinAlpha));
+      outElbow.set(
+        shoulderPos.x + _ikU.x * uScale + _ikV.x * vScale,
+        shoulderPos.y + _ikU.y * uScale + _ikV.y * vScale,
+        shoulderPos.z + _ikU.z * uScale + _ikV.z * vScale
+      );
     }
 
     // Built facing +Z in Babylon's left-handed coordinate system using hardware-instanced meshes
@@ -2189,17 +2228,6 @@
       muzzleFlash.isPickable = false;
       muzzleFlash.parent = weaponMount;
 
-      // Lightweight hitbox cylinder for raycast bullet detection
-      const hitbox = BABYLON.MeshBuilder.CreateCylinder(
-        prefix + "hitbox",
-        { diameter: 0.92, height: 2.05, tessellation: 8 },
-        scene
-      );
-      hitbox.position.y = 1.02;
-      hitbox.visibility = 0;
-      hitbox.isPickable = true;
-      hitbox.parent = root;
-
       // Overhead floating health bar (uses shared materials; 3D name tag is created lazily only for human players)
       let overheadGroup = null;
       let overheadBarFill = null;
@@ -2244,7 +2272,6 @@
         triggerGripNode,
         forendGripNode,
         muzzleFlash,
-        hitbox,
         overheadGroup,
         overheadBarFill,
         namePlane: null,
@@ -2326,23 +2353,24 @@
 
     // Positions an IK arm (shoulder sphere, upper arm capsule, elbow sphere, forearm capsule, hand sphere)
     function applyIKArmPose(arm, shoulderPos, handTargetPos, poleDir) {
-      const elbowPos = solveArmIK(
+      solveArmIKToRef(
         shoulderPos,
         handTargetPos,
         arm.upperLen,
         arm.foreLen,
-        poleDir
+        poleDir,
+        _ikElbowOut
       );
       arm.shoulderJoint.position.copyFrom(shoulderPos);
-      arm.elbowJoint.position.copyFrom(elbowPos);
+      arm.elbowJoint.position.copyFrom(_ikElbowOut);
       arm.hand.position.copyFrom(handTargetPos);
 
-      orientCapsuleBetween(arm.upperArm, shoulderPos, elbowPos);
-      orientCapsuleBetween(arm.forearm, elbowPos, handTargetPos);
+      orientCapsuleBetween(arm.upperArm, shoulderPos, _ikElbowOut);
+      orientCapsuleBetween(arm.forearm, _ikElbowOut, handTargetPos);
     }
 
-    // Converts a local point on weaponMount into spine-local coordinates
-    function getGripPosInSpineSpace(weaponMount, gripLocalPos) {
+    // Converts a local point on weaponMount into spine-local coordinates (into targetRef)
+    function getGripPosInSpineSpaceToRef(weaponMount, gripLocalPos, targetRef) {
       const rx = weaponMount.rotation.x;
       const ry = weaponMount.rotation.y;
 
@@ -2357,7 +2385,7 @@
       const x2 = x1 * cosY + z1 * sinY;
       const z2 = -x1 * sinY + z1 * cosY;
 
-      return new BABYLON.Vector3(
+      targetRef.set(
         weaponMount.position.x + x2,
         weaponMount.position.y + y1,
         weaponMount.position.z + z2
@@ -2365,7 +2393,8 @@
     }
 
     // Updates articulated human gait, knees, hips, spine twist, 2-bone IK rifle arms, and ragdoll collapse
-    function animateSoldier(soldier, dt, isMoving, strideDir) {
+    // Includes 3-tier distance Animation LOD so 200+ bot battles run at high FPS
+    function animateSoldier(soldier, dt, isMoving, strideDir, forceFullPose) {
       const m = soldier.model;
 
       if (m.flashTimer > 0) {
@@ -2381,11 +2410,11 @@
         m.flinchTimer = Math.max(0, m.flinchTimer - dt * 6);
       }
 
-      const rightShoulderPos = new BABYLON.Vector3(0.36, 0.65, -0.02);
-      const leftShoulderPos = new BABYLON.Vector3(-0.36, 0.65, -0.02);
-
-      // ----- RAGDOLL COLLAPSE & SLOPE ALIGNMENT WHEN ELIMINATED -----
+      // ----- RAGDOLL COLLAPSE WHEN ELIMINATED -----
       if (!soldier.alive) {
+        if (soldier.fallProgress >= 1 && !forceFullPose) {
+          return; // Already collapsed on the sand — zero joint updates needed!
+        }
         soldier.fallProgress = Math.min(1, soldier.fallProgress + dt * 2.8);
         const p = soldier.fallProgress;
         const ease = 1 - Math.pow(1 - p, 3);
@@ -2394,7 +2423,6 @@
         m.pelvis.rotation.x = ease * 1.38 * soldier.fallDir;
         m.pelvis.rotation.z = ease * 0.48 * soldier.fallTwist;
 
-        // Knees bend backward (+rotation.x in Babylon left-handed space)
         m.leftLeg.hipJoint.rotation.x = -ease * 0.65;
         m.leftLeg.kneeJoint.rotation.x = ease * 1.25;
         m.rightLeg.hipJoint.rotation.x = -ease * 0.35;
@@ -2402,27 +2430,33 @@
 
         m.spine.rotation.x = ease * 0.35;
 
-        const rHandFall = new BABYLON.Vector3(0.45, 0.22, 0.28);
-        const lHandFall = new BABYLON.Vector3(-0.42, 0.25, 0.32);
-        applyIKArmPose(
-          m.rightArm,
-          rightShoulderPos,
-          rHandFall,
-          new BABYLON.Vector3(0.5, -0.7, -0.2).normalize()
-        );
-        applyIKArmPose(
-          m.leftArm,
-          leftShoulderPos,
-          lHandFall,
-          new BABYLON.Vector3(-0.5, -0.7, -0.2).normalize()
-        );
+        applyIKArmPose(m.rightArm, RIGHT_SHOULDER_POS, FALL_R_HAND, FALL_R_POLE);
+        applyIKArmPose(m.leftArm, LEFT_SHOULDER_POS, FALL_L_HAND, FALL_L_POLE);
         return;
       }
 
-      // ----- ALIVE: REALISTIC HUMAN GAIT, BREATHING & 2-BONE IK RIFLE HOLD -----
+      // Advance walk and idle clocks every frame
       soldier.idleClock += dt;
       if (isMoving) {
         soldier.walkCycle += dt * (soldier.speed * 1.35);
+      }
+
+      // Distance-based Animation LOD (throttles joint & IK updates for distant bots)
+      let updateIK = true;
+      if (!forceFullPose && !soldier.isPlayer && camera) {
+        const cdx = soldier.position.x - camera.position.x;
+        const cdz = soldier.position.z - camera.position.z;
+        const distSq = cdx * cdx + cdz * cdz;
+        const tickTag = perfTelemetry.totalFrames + soldier.slotIndex;
+
+        if (distSq > 3600) {
+          // > 60m away: update leg stride every 4th frame, skip per-frame IK
+          if (tickTag % 4 !== 0) return;
+          updateIK = false;
+        } else if (distSq > 900) {
+          // 30m–60m away: update full pose every 2nd frame
+          if (tickTag % 2 !== 0) return;
+        }
       }
 
       const phase = soldier.walkCycle;
@@ -2462,6 +2496,8 @@
       m.spine.rotation.y = -Math.sin(phase) * 0.08 * blend + 0.08;
       m.spine.rotation.z = flinchKick * 0.45;
 
+      if (!updateIK) return;
+
       // 4. Head: tracks aim pitch and tilts slightly into the rifle sight
       m.headPivot.rotation.x = soldier.pitch * 0.35 - 0.06 * blend;
       m.headPivot.rotation.y = -0.08 + Math.sin(phase) * 0.05 * blend;
@@ -2477,30 +2513,19 @@
       m.weaponMount.rotation.x = aimPitch * 0.35 - recoilKick * 0.45;
       m.weaponMount.rotation.y = -0.07;
 
-      const rightGripInSpine = getGripPosInSpineSpace(
+      getGripPosInSpineSpaceToRef(
         m.weaponMount,
-        m.triggerGripNode.position
+        m.triggerGripNode.position,
+        _rightGripSpine
       );
-      const leftGripInSpine = getGripPosInSpineSpace(
+      getGripPosInSpineSpaceToRef(
         m.weaponMount,
-        m.forendGripNode.position
+        m.forendGripNode.position,
+        _leftGripSpine
       );
 
-      // Right elbow tucks down and slightly outward to the right
-      applyIKArmPose(
-        m.rightArm,
-        rightShoulderPos,
-        rightGripInSpine,
-        new BABYLON.Vector3(0.45, -0.75, -0.35).normalize()
-      );
-
-      // Left elbow drops beneath the rifle as the left hand cradles the front handguard
-      applyIKArmPose(
-        m.leftArm,
-        leftShoulderPos,
-        leftGripInSpine,
-        new BABYLON.Vector3(-0.3, -0.85, 0.1).normalize()
-      );
+      applyIKArmPose(m.rightArm, RIGHT_SHOULDER_POS, _rightGripSpine, RIGHT_POLE_DIR);
+      applyIKArmPose(m.leftArm, LEFT_SHOULDER_POS, _leftGripSpine, LEFT_POLE_DIR);
     }
 
     // =========================================================================
@@ -2534,6 +2559,7 @@
 
     // Live Performance & Network Telemetry State
     const perfTelemetry = {
+      totalFrames: 0,
       frames: 0,
       accumTime: 0,
       fps: 60,
@@ -2785,9 +2811,8 @@
             unstickTimer: 0
           };
 
-          model.hitbox.metadata = { soldier: unit };
           updateSoldierOverheadName(unit);
-          animateSoldier(unit, 0.016, false, 0);
+          animateSoldier(unit, 0.016, false, 0, true);
           soldiers.push(unit);
           soldiersById.set(unitId, unit);
 
@@ -2811,7 +2836,7 @@
         physicsBall.velocity.set(0, 0, 0);
       }
 
-      updateHUD();
+      updateHUD(true);
     }
 
     // =========================================================================
@@ -3400,91 +3425,246 @@
       }
     }
 
+    // Fast analytical muzzle position (avoids expensive scene-graph matrix recomputation for distant bots)
     function getMuzzleWorldPosition(soldier) {
-      soldier.model.muzzleFlash.computeWorldMatrix(true);
-      return soldier.model.muzzleFlash.getAbsolutePosition().clone();
+      if (soldier.isPlayer) {
+        soldier.model.muzzleFlash.computeWorldMatrix(true);
+        return soldier.model.muzzleFlash.getAbsolutePosition().clone();
+      }
+      const sinY = Math.sin(soldier.yaw);
+      const cosY = Math.cos(soldier.yaw);
+      return new BABYLON.Vector3(
+        soldier.position.x + sinY * 1.15 + cosY * 0.18,
+        soldier.position.y + 1.54 - Math.sin(soldier.pitch) * 0.65,
+        soldier.position.z + cosY * 1.15 - sinY * 0.18
+      );
+    }
+
+    // Ultra-fast Slab Ray vs AABB intersection; returns hit distance or -1
+    function intersectRayAABB(ox, oy, oz, dx, dy, dz, minX, maxX, minY, maxY, minZ, maxZ, maxDist) {
+      let tmin = 0;
+      let tmax = maxDist;
+
+      if (Math.abs(dx) < 1e-6) {
+        if (ox < minX || ox > maxX) return -1;
+      } else {
+        let t1 = (minX - ox) / dx;
+        let t2 = (maxX - ox) / dx;
+        if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+        if (t1 > tmin) tmin = t1;
+        if (t2 < tmax) tmax = t2;
+        if (tmin > tmax) return -1;
+      }
+
+      if (Math.abs(dy) < 1e-6) {
+        if (oy < minY || oy > maxY) return -1;
+      } else {
+        let t1 = (minY - oy) / dy;
+        let t2 = (maxY - oy) / dy;
+        if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+        if (t1 > tmin) tmin = t1;
+        if (t2 < tmax) tmax = t2;
+        if (tmin > tmax) return -1;
+      }
+
+      if (Math.abs(dz) < 1e-6) {
+        if (oz < minZ || oz > maxZ) return -1;
+      } else {
+        let t1 = (minZ - oz) / dz;
+        let t2 = (maxZ - oz) / dz;
+        if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+        if (t1 > tmin) tmin = t1;
+        if (t2 < tmax) tmax = t2;
+        if (tmin > tmax) return -1;
+      }
+
+      return tmin >= 0 && tmin <= maxDist ? tmin : -1;
+    }
+
+    // Fast analytical raycast against static toys, wooden sandbox walls, and uneven sand heightfield
+    // (100x faster than scene.pickWithRay over 24,000 ground triangles & thousands of bot meshes!)
+    function castEnvironmentRay(ox, oy, oz, dx, dy, dz, maxDist, checkSand) {
+      let closestDist = maxDist;
+      let hitKind = "air";
+
+      // 1. Check static toy obstacle AABBs
+      for (let i = 0; i < obstacles.length; i++) {
+        const obs = obstacles[i];
+        const d = intersectRayAABB(
+          ox, oy, oz, dx, dy, dz,
+          obs.minX, obs.maxX, -1.5, obs.maxY, obs.minZ, obs.maxZ,
+          closestDist
+        );
+        if (d >= 0 && d < closestDist) {
+          closestDist = d;
+          hitKind = "toy";
+        }
+      }
+
+      // 2. Check outer wooden sandbox walls
+      const wallTop = 3.3;
+      if (dx > 1e-5) {
+        const t = (WORLD_LIMIT - ox) / dx;
+        if (t > 0 && t < closestDist && oy + dy * t <= wallTop) {
+          closestDist = t;
+          hitKind = "toy";
+        }
+      } else if (dx < -1e-5) {
+        const t = (-WORLD_LIMIT - ox) / dx;
+        if (t > 0 && t < closestDist && oy + dy * t <= wallTop) {
+          closestDist = t;
+          hitKind = "toy";
+        }
+      }
+      if (dz > 1e-5) {
+        const t = (WORLD_LIMIT - oz) / dz;
+        if (t > 0 && t < closestDist && oy + dy * t <= wallTop) {
+          closestDist = t;
+          hitKind = "toy";
+        }
+      } else if (dz < -1e-5) {
+        const t = (-WORLD_LIMIT - oz) / dz;
+        if (t > 0 && t < closestDist && oy + dy * t <= wallTop) {
+          closestDist = t;
+          hitKind = "toy";
+        }
+      }
+
+      // 3. Fast step-march + binary refinement against analytical uneven sand heightfield
+      if (checkSand) {
+        const step = 2.2;
+        let prevT = 0;
+        for (let t = step; t <= closestDist; t += step) {
+          const rx = ox + dx * t;
+          const ry = oy + dy * t;
+          const rz = oz + dz * t;
+          if (ry <= 3.2 && ry <= getSandHeight(rx, rz)) {
+            let lo = prevT;
+            let hi = t;
+            for (let b = 0; b < 3; b++) {
+              const mid = (lo + hi) * 0.5;
+              if (oy + dy * mid <= getSandHeight(ox + dx * mid, oz + dz * mid)) {
+                hi = mid;
+              } else {
+                lo = mid;
+              }
+            }
+            closestDist = (lo + hi) * 0.5;
+            hitKind = "sand";
+            break;
+          }
+          prevT = t;
+        }
+      }
+
+      return { dist: closestDist, hitKind };
     }
 
     function fireWeapon(shooter, aimDir, damageAmount) {
       shooter.fireCooldown = shooter.fireRate;
-      shooter.model.muzzleFlash.isVisible = true;
-      shooter.model.flashTimer = 0.055;
       shooter.model.recoilTimer = 1.0;
 
       const muzzlePos = getMuzzleWorldPosition(shooter);
-      muzzleLight.position.copyFrom(muzzlePos);
-      muzzleLight.intensity = 2.2;
 
-      // Play 3D synthesized rifle gunshot sound
+      // Only show 3D muzzle flash & dynamic light for shots within 55m of camera
+      const distToCamSq = camera
+        ? Math.pow(muzzlePos.x - camera.position.x, 2) +
+          Math.pow(muzzlePos.z - camera.position.z, 2)
+        : 0;
+      if (distToCamSq < 3025) {
+        shooter.model.muzzleFlash.isVisible = true;
+        shooter.model.flashTimer = 0.055;
+        if (distToCamSq < 900) {
+          muzzleLight.position.copyFrom(muzzlePos);
+          muzzleLight.intensity = 2.2;
+        }
+      }
+
       playGunshotSound(muzzlePos, Boolean(shooter.isPlayer));
 
       const maxRange = 135;
-      const ray = new BABYLON.Ray(muzzlePos, aimDir, maxRange);
+      const ox = muzzlePos.x, oy = muzzlePos.y, oz = muzzlePos.z;
+      const dx = aimDir.x, dy = aimDir.y, dz = aimDir.z;
 
-      const pickInfo = scene.pickWithRay(ray, (mesh) => {
-        if (!mesh.isPickable) return false;
-        if (mesh.metadata && mesh.metadata.soldier) {
-          const targetSoldier = mesh.metadata.soldier;
-          return targetSoldier.alive && targetSoldier.team !== shooter.team;
+      // 1. Check environment (toys, walls, sand heightfield) analytically
+      const envHit = castEnvironmentRay(ox, oy, oz, dx, dy, dz, maxRange, true);
+      let closestDist = envHit.dist;
+      let hitKind = envHit.hitKind;
+      let hitSoldier = null;
+
+      // 2. Check physics beach ball analytically
+      if (physicsBall) {
+        const bp = physicsBall.mesh.position;
+        const r = physicsBall.radius;
+        const dBall = intersectRayAABB(
+          ox, oy, oz, dx, dy, dz,
+          bp.x - r, bp.x + r, bp.y - r, bp.y + r, bp.z - r, bp.z + r,
+          closestDist
+        );
+        if (dBall >= 0 && dBall < closestDist) {
+          closestDist = dBall;
+          hitKind = "ball";
         }
-        return Boolean(mesh.metadata && mesh.metadata.isEnvironment);
-      });
+      }
 
-      let hitPoint = muzzlePos.add(aimDir.scale(maxRange));
-      let hitKind = "air";
-
-      if (pickInfo && pickInfo.hit && pickInfo.pickedPoint) {
-        hitPoint = pickInfo.pickedPoint;
-        const hitMesh = pickInfo.pickedMesh;
-
-        if (hitMesh && hitMesh.metadata) {
-          if (hitMesh.metadata.soldier) {
-            const target = hitMesh.metadata.soldier;
-            hitKind = target.team === "green" ? "green" : "tan";
-            target.velocity.addInPlace(aimDir.scale(4.5));
-            spawnImpactBurst(
-              hitPoint,
-              false,
-              target.team === "green" ? "#4be03e" : "#ffd584"
-            );
-            playImpactHitSound(hitPoint, true);
-
-            if (mpState.active) {
-              // In Multiplayer, server authoritatively updates health & K/D and broadcasts unit_damaged to all clients
-              target.model.flinchTimer = 1.0;
-              sendNetMessage({
-                type: "damage_unit",
-                targetUnitId: target.unitId,
-                attackerUnitId: shooter.unitId,
-                amount: damageAmount,
-                shotDir: { x: aimDir.x, y: aimDir.y, z: aimDir.z }
-              });
-            } else {
-              applyDamage(target, damageAmount, aimDir, shooter);
-            }
-          } else if (hitMesh.metadata.isPhysicsBall && physicsBall) {
-            hitKind = "ball";
-            const impulse = aimDir.scale(11);
-            physicsBall.velocity.addInPlace(impulse);
-            physicsBall.velocity.y += 4.5;
-            spawnImpactBurst(hitPoint, false, "#ffffff");
-
-            if (mpState.active) {
-              sendNetMessage({
-                type: "ball_impulse",
-                vx: impulse.x,
-                vy: impulse.y + 4.5,
-                vz: impulse.z
-              });
-            }
-          } else if (hitMesh.metadata.isSand) {
-            hitKind = "sand";
-            spawnImpactBurst(hitPoint, true, "#e6c373");
-          } else {
-            hitKind = "toy";
-            spawnImpactBurst(hitPoint, false, "#fff0a0");
-          }
+      // 3. Check opposing team soldiers analytically (bounding box test)
+      for (let i = 0; i < soldiers.length; i++) {
+        const s = soldiers[i];
+        if (!s.alive || s.team === shooter.team) continue;
+        const sx = s.position.x, sy = s.position.y, sz = s.position.z;
+        const d = intersectRayAABB(
+          ox, oy, oz, dx, dy, dz,
+          sx - 0.46, sx + 0.46, sy, sy + 2.05, sz - 0.46, sz + 0.46,
+          closestDist
+        );
+        if (d >= 0 && d < closestDist) {
+          closestDist = d;
+          hitSoldier = s;
+          hitKind = s.team === "green" ? "green" : "tan";
         }
+      }
+
+      const hitPoint = muzzlePos.add(aimDir.scale(closestDist));
+
+      if (hitSoldier) {
+        hitSoldier.velocity.addInPlace(aimDir.scale(4.5));
+        spawnImpactBurst(
+          hitPoint,
+          false,
+          hitSoldier.team === "green" ? "#4be03e" : "#ffd584"
+        );
+        playImpactHitSound(hitPoint, true);
+
+        if (mpState.active) {
+          hitSoldier.model.flinchTimer = 1.0;
+          sendNetMessage({
+            type: "damage_unit",
+            targetUnitId: hitSoldier.unitId,
+            attackerUnitId: shooter.unitId,
+            amount: damageAmount,
+            shotDir: { x: aimDir.x, y: aimDir.y, z: aimDir.z }
+          });
+        } else {
+          applyDamage(hitSoldier, damageAmount, aimDir, shooter);
+        }
+      } else if (hitKind === "ball" && physicsBall) {
+        const impulse = aimDir.scale(11);
+        physicsBall.velocity.addInPlace(impulse);
+        physicsBall.velocity.y += 4.5;
+        spawnImpactBurst(hitPoint, false, "#ffffff");
+
+        if (mpState.active) {
+          sendNetMessage({
+            type: "ball_impulse",
+            vx: impulse.x,
+            vy: impulse.y + 4.5,
+            vz: impulse.z
+          });
+        }
+      } else if (hitKind === "sand") {
+        spawnImpactBurst(hitPoint, true, "#e6c373");
+      } else if (hitKind === "toy") {
+        spawnImpactBurst(hitPoint, false, "#fff0a0");
       }
 
       const tracerColor =
@@ -3493,7 +3673,6 @@
           : new BABYLON.Color3(1.0, 0.62, 0.25);
       spawnTracer(muzzlePos, hitPoint, tracerColor);
 
-      // Broadcast shot visual to multiplayer peers
       if (mpState.active) {
         sendNetMessage({
           type: "fire_shot",
@@ -3509,25 +3688,27 @@
     function firePlayerWeapon() {
       if (!player) return;
       const camForward = camera.getDirection(BABYLON.Vector3.Forward());
-      const camRay = new BABYLON.Ray(camera.position, camForward, 110);
+      const ox = camera.position.x, oy = camera.position.y, oz = camera.position.z;
+      const dx = camForward.x, dy = camForward.y, dz = camForward.z;
 
-      const pick = scene.pickWithRay(camRay, (mesh) => {
-        if (!mesh.isPickable) return false;
-        if (mesh.metadata && mesh.metadata.soldier) {
-          return (
-            mesh.metadata.soldier.alive &&
-            mesh.metadata.soldier.team !== player.team
-          );
+      const envHit = castEnvironmentRay(ox, oy, oz, dx, dy, dz, 110, true);
+      let aimDist = envHit.dist;
+
+      for (let i = 0; i < soldiers.length; i++) {
+        const s = soldiers[i];
+        if (!s.alive || s.team === player.team) continue;
+        const sx = s.position.x, sy = s.position.y, sz = s.position.z;
+        const d = intersectRayAABB(
+          ox, oy, oz, dx, dy, dz,
+          sx - 0.48, sx + 0.48, sy, sy + 2.05, sz - 0.48, sz + 0.48,
+          aimDist
+        );
+        if (d > 3 && d < aimDist) {
+          aimDist = d;
         }
-        return Boolean(mesh.metadata && mesh.metadata.isEnvironment);
-      });
-
-      let aimDist = 95;
-      if (pick && pick.hit && pick.distance > 3) {
-        aimDist = pick.distance;
       }
 
-      const aimPoint = camera.position.add(camForward.scale(aimDist));
+      const aimPoint = camera.position.add(camForward.scale(Math.max(4, aimDist)));
       const muzzlePos = getMuzzleWorldPosition(player);
       const shotDir = aimPoint.subtract(muzzlePos).normalize();
 
@@ -3535,32 +3716,60 @@
     }
 
     function hasLineOfSight(fromSoldier, toSoldier) {
-      const start = new BABYLON.Vector3(
-        fromSoldier.position.x,
-        fromSoldier.position.y + 1.5,
-        fromSoldier.position.z
-      );
-      const end = new BABYLON.Vector3(
-        toSoldier.position.x,
-        toSoldier.position.y + 1.35,
-        toSoldier.position.z
-      );
-      const diff = end.subtract(start);
-      const dist = diff.length();
-      const dir = diff.normalize();
+      const ox = fromSoldier.position.x;
+      const oy = fromSoldier.position.y + 1.5;
+      const oz = fromSoldier.position.z;
+      const tx = toSoldier.position.x - ox;
+      const ty = toSoldier.position.y + 1.35 - oy;
+      const tz = toSoldier.position.z - oz;
+      const dist = Math.hypot(tx, ty, tz);
+      if (dist < 0.1) return true;
 
-      const ray = new BABYLON.Ray(start, dir, dist);
-      const hit = scene.pickWithRay(ray, (mesh) => {
-        return Boolean(mesh.metadata && mesh.metadata.isEnvironment);
-      });
-
-      return !(hit && hit.hit);
+      const inv = 1 / dist;
+      const envHit = castEnvironmentRay(
+        ox, oy, oz,
+        tx * inv, ty * inv, tz * inv,
+        dist,
+        true
+      );
+      return envHit.hitKind === "air";
     }
 
     // =========================================================================
-    // 10. PHYSICS, COLLISIONS & DYNAMIC BEACH BALL SIMULATION
+    // 10. O(N) SPATIAL HASH GRID, PHYSICS & DYNAMIC BEACH BALL SIMULATION
     // =========================================================================
+    const SPATIAL_CELL_SIZE = 3.2;
+    const spatialGrid = new Map();
+    const spatialCellPool = [];
+
+    function rebuildSpatialHashGrid() {
+      for (const cell of spatialGrid.values()) {
+        cell.length = 0;
+        spatialCellPool.push(cell);
+      }
+      spatialGrid.clear();
+
+      for (let i = 0; i < soldiers.length; i++) {
+        const s = soldiers[i];
+        if (!s.alive) continue;
+        const cx = Math.floor(s.position.x / SPATIAL_CELL_SIZE);
+        const cz = Math.floor(s.position.z / SPATIAL_CELL_SIZE);
+        const key = (cx << 16) ^ (cz & 0xffff);
+        let bucket = spatialGrid.get(key);
+        if (!bucket) {
+          bucket = spatialCellPool.pop() || [];
+          spatialGrid.set(key, bucket);
+        }
+        bucket.push(s);
+      }
+    }
+
     function updateSoldierPhysicsAndCollisions(soldier, dt) {
+      // Skip physics for eliminated soldiers once they have landed on the sand
+      if (!soldier.alive && soldier.isGrounded && Math.abs(soldier.velocity.x) < 0.05 && Math.abs(soldier.velocity.z) < 0.05) {
+        return;
+      }
+
       const pos = soldier.position;
       const r = soldier.radius;
 
@@ -3579,7 +3788,8 @@
       pos.z = Math.max(-WORLD_LIMIT + 1.2, Math.min(WORLD_LIMIT - 1.2, pos.z));
 
       // Push out of static sandbox toys
-      for (const obs of obstacles) {
+      for (let i = 0; i < obstacles.length; i++) {
+        const obs = obstacles[i];
         const minX = obs.minX - r;
         const maxX = obs.maxX + r;
         const minZ = obs.minZ - r;
@@ -3604,19 +3814,29 @@
         }
       }
 
-      // Separate living soldiers from each other
+      // O(1) Neighborhood Spatial Hash separation between living soldiers
       if (soldier.alive) {
-        for (const other of soldiers) {
-          if (other === soldier || !other.alive) continue;
-          const dx = pos.x - other.position.x;
-          const dz = pos.z - other.position.z;
-          const distSq = dx * dx + dz * dz;
-          const minDist = r + other.radius;
-          if (distSq > 0.0001 && distSq < minDist * minDist) {
-            const dist = Math.sqrt(distSq);
-            const push = (minDist - dist) * 0.5;
-            pos.x += (dx / dist) * push;
-            pos.z += (dz / dist) * push;
+        const cx = Math.floor(pos.x / SPATIAL_CELL_SIZE);
+        const cz = Math.floor(pos.z / SPATIAL_CELL_SIZE);
+        for (let ox = -1; ox <= 1; ox++) {
+          for (let oz = -1; oz <= 1; oz++) {
+            const key = ((cx + ox) << 16) ^ ((cz + oz) & 0xffff);
+            const bucket = spatialGrid.get(key);
+            if (!bucket) continue;
+            for (let i = 0; i < bucket.length; i++) {
+              const other = bucket[i];
+              if (other === soldier || !other.alive) continue;
+              const dx = pos.x - other.position.x;
+              const dz = pos.z - other.position.z;
+              const distSq = dx * dx + dz * dz;
+              const minDist = r + other.radius;
+              if (distSq > 0.0001 && distSq < minDist * minDist) {
+                const dist = Math.sqrt(distSq);
+                const push = (minDist - dist) * 0.5;
+                pos.x += (dx / dist) * push;
+                pos.z += (dz / dist) * push;
+              }
+            }
           }
         }
       }
@@ -4086,7 +4306,6 @@
       unit.model.pelvis.position.y = 0.96;
       unit.model.pelvis.rotation.set(0, 0, 0);
       unit.model.spine.rotation.set(0, 0, 0);
-      unit.model.hitbox.isPickable = true;
 
       if (unit.model.overheadGroup) {
         unit.model.overheadGroup.setEnabled(true);
@@ -4096,8 +4315,8 @@
       }
 
       updateSoldierOverheadName(unit);
-      animateSoldier(unit, 0.016, false, 0);
-      updateHUD();
+      animateSoldier(unit, 0.016, false, 0, true);
+      updateHUD(true);
     }
 
     // Respawns ONLY the local player at a safe location far from enemies, without freezing/resetting others
@@ -4142,7 +4361,8 @@
     function applyServerUnitStats(unitStatsObj) {
       if (!unitStatsObj || typeof unitStatsObj !== "object") return;
       if (mpState.roster) {
-        mpState.roster.unitStats = unitStatsObj;
+        if (!mpState.roster.unitStats) mpState.roster.unitStats = {};
+        Object.assign(mpState.roster.unitStats, unitStatsObj);
       }
       for (const [unitId, st] of Object.entries(unitStatsObj)) {
         const unit = soldiersById.get(unitId);
@@ -4172,7 +4392,6 @@
         if (!target.isPlayer && !target.isRemotePlayer) {
           target.respawnTimer = 3.0;
         }
-        target.model.hitbox.isPickable = false;
         if (target.model.overheadGroup) {
           target.model.overheadGroup.setEnabled(false);
         }
@@ -4348,7 +4567,25 @@
             return;
           }
           if (isMultiplayerAuthority()) return;
-          if (Array.isArray(msg.aiUnits)) {
+          if (Array.isArray(msg.aiPacked)) {
+            for (let i = 0; i < msg.aiPacked.length; i++) {
+              const p = msg.aiPacked[i];
+              const unit = soldiersById.get(p[0]);
+              if (!unit || unit.isPlayer || unit.isRemotePlayer) continue;
+              const ux = p[1] * 0.01;
+              const uy = p[2] * 0.01;
+              const uz = p[3] * 0.01;
+              const uyaw = p[4] * 0.01;
+              unit.netTargetPos.set(ux, uy, uz);
+              unit.yaw = uyaw;
+              unit.pitch = p[5] * 0.01;
+              unit.moveBlend = p[6] * 0.01;
+              unit.strideDir = p[7] * 0.01;
+              if (p[8] === 1 && !unit.alive) {
+                respawnSingleSoldier(unit, ux, uy, uz, uyaw);
+              }
+            }
+          } else if (Array.isArray(msg.aiUnits)) {
             msg.aiUnits.forEach((u) => {
               const unit = soldiersById.get(u.unitId);
               if (!unit || unit.isPlayer || unit.isRemotePlayer) return;
@@ -4614,7 +4851,6 @@
           target.respawnTimer = 3.0;
         }
 
-        target.model.hitbox.isPickable = false;
         if (target.model.overheadGroup) {
           target.model.overheadGroup.setEnabled(false);
         }
@@ -4637,8 +4873,14 @@
       updateHUD();
     }
 
-    function updateHUD() {
+    let lastHudUpdateMs = 0;
+    function updateHUD(forceImmediate) {
       if (!player) return;
+      const nowMs = performance.now();
+      if (!forceImmediate && nowMs - lastHudUpdateMs < 90 && player.alive) {
+        return;
+      }
+      lastHudUpdateMs = nowMs;
 
       const hp = Math.max(0, Math.round(player.health));
       healthValueEl.textContent = hp;
@@ -4652,20 +4894,28 @@
         matchTimerEl.textContent = formatTimeMMSS(matchTimeRemaining);
       }
 
-      const greenAll = soldiers.filter((s) => s.team === "green");
-      const tanAll = soldiers.filter((s) => s.team === "tan");
-      const greenAlive = greenAll.filter((s) => s.alive).length;
-      const tanAlive = tanAll.filter((s) => s.alive).length;
-
-      const greenKills = greenAll.reduce((acc, s) => acc + (s.kills || 0), 0);
-      const tanKills = tanAll.reduce((acc, s) => acc + (s.kills || 0), 0);
+      // Single-pass aggregation over soldiers array (zero temporary arrays allocated)
+      let greenTotal = 0, greenAlive = 0, greenKills = 0;
+      let tanTotal = 0, tanAlive = 0, tanKills = 0;
+      for (let i = 0; i < soldiers.length; i++) {
+        const s = soldiers[i];
+        if (s.team === "green") {
+          greenTotal++;
+          if (s.alive) greenAlive++;
+          greenKills += s.kills || 0;
+        } else {
+          tanTotal++;
+          if (s.alive) tanAlive++;
+          tanKills += s.kills || 0;
+        }
+      }
 
       if (greenKillsEl) greenKillsEl.textContent = greenKills;
       if (tanKillsEl) tanKillsEl.textContent = tanKills;
       greenCountEl.textContent = greenAlive;
-      greenTotalEl.textContent = greenAll.length;
+      greenTotalEl.textContent = greenTotal;
       tanCountEl.textContent = tanAlive;
-      tanTotalEl.textContent = tanAll.length;
+      tanTotalEl.textContent = tanTotal;
 
       if (mpState.active && mpState.roster && Array.isArray(mpState.roster.players)) {
         onlineRosterPanelEl.style.display = "block";
@@ -4975,6 +5225,7 @@
       lastTime = now;
 
       // Update FPS, Frame Time, WebSocket Ping & Network Bandwidth Telemetry
+      perfTelemetry.totalFrames += 1;
       perfTelemetry.frames += 1;
       perfTelemetry.accumTime += rawDt;
       if (perfTelemetry.accumTime >= 0.5) {
@@ -5042,6 +5293,9 @@
           endMatchByTimeLimit();
         }
       }
+
+      // Rebuild O(N) 2D Spatial Hash Grid once per frame before soldier physics/collision checks
+      rebuildSpatialHashGrid();
 
       // ----- PLAYER UPDATE -----
       if (player) {
@@ -5183,42 +5437,41 @@
         }
       }
 
-      // If we are the Multiplayer Room Host, broadcast AI states, Kills/Deaths, timer & beach ball at ~20 Hz
+      // If we are the Multiplayer Room Host, broadcast compact quantized AI states & beach ball
       if (mpState.active && isHost && !isSetupOpen) {
         mpState.hostSendTimer += dt;
-        if (mpState.hostSendTimer >= 0.05) {
+        const broadcastInterval = soldiers.length > 40 ? 0.08 : 0.05;
+        if (mpState.hostSendTimer >= broadcastInterval) {
           mpState.hostSendTimer = 0;
-          const aiUnits = [];
-          for (const s of soldiers) {
-            aiUnits.push({
-              unitId: s.unitId,
-              x: s.position.x,
-              y: s.position.y,
-              z: s.position.z,
-              yaw: s.yaw,
-              pitch: s.pitch,
-              moveBlend: s.moveBlend,
-              strideDir: s.strafeDir * 0.5,
-              health: s.health,
-              alive: s.alive,
-              kills: s.kills || 0,
-              deaths: s.deaths || 0
-            });
+          const aiPacked = [];
+          for (let i = 0; i < soldiers.length; i++) {
+            const s = soldiers[i];
+            if (s.isPlayer || s.isRemotePlayer) continue;
+            aiPacked.push([
+              s.unitId,
+              Math.round(s.position.x * 100),
+              Math.round(s.position.y * 100),
+              Math.round(s.position.z * 100),
+              Math.round(s.yaw * 100),
+              Math.round(s.pitch * 100),
+              Math.round(s.moveBlend * 100),
+              Math.round((s.strafeDir || 0) * 50),
+              s.alive ? 1 : 0
+            ]);
           }
           const ball = physicsBall
             ? {
-                x: physicsBall.mesh.position.x,
-                y: physicsBall.mesh.position.y,
-                z: physicsBall.mesh.position.z,
-                vx: physicsBall.velocity.x,
-                vy: physicsBall.velocity.y,
-                vz: physicsBall.velocity.z
+                x: Math.round(physicsBall.mesh.position.x * 100) / 100,
+                y: Math.round(physicsBall.mesh.position.y * 100) / 100,
+                z: Math.round(physicsBall.mesh.position.z * 100) / 100,
+                vx: Math.round(physicsBall.velocity.x * 100) / 100,
+                vy: Math.round(physicsBall.velocity.y * 100) / 100,
+                vz: Math.round(physicsBall.velocity.z * 100) / 100
               }
             : null;
           sendNetMessage({
             type: "host_world_state",
-            timeRemaining: matchTimeRemaining,
-            aiUnits,
+            aiPacked,
             ball
           });
         }
@@ -5276,19 +5529,17 @@
         }
 
         if (camLen > 0.05) {
-          const camRay = new BABYLON.Ray(headOrigin, camVec.scale(1 / camLen), camLen);
-          const camHit = scene.pickWithRay(camRay, (mesh) => {
-            return Boolean(
-              mesh.metadata &&
-                mesh.metadata.isEnvironment &&
-                !mesh.metadata.isSand &&
-                !mesh.metadata.isPhysicsBall
-            );
-          });
-          if (camHit && camHit.hit && camHit.distance < camLen) {
+          const invLen = 1 / camLen;
+          const camHit = castEnvironmentRay(
+            headOrigin.x, headOrigin.y, headOrigin.z,
+            camVec.x * invLen, camVec.y * invLen, camVec.z * invLen,
+            camLen,
+            false
+          );
+          if (camHit.hitKind !== "air" && camHit.dist < camLen) {
             safeFraction = Math.min(
               safeFraction,
-              Math.max(0.15, (camHit.distance - 0.45) / camLen)
+              Math.max(0.15, (camHit.dist - 0.45) / camLen)
             );
           }
         }

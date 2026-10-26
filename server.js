@@ -331,9 +331,10 @@ wss.on("connection", (ws) => {
         break;
       }
 
-      // Room Host broadcasts AI soldier states & dynamic beach ball state (~20 Hz)
+      // Room Host broadcasts AI soldier states & dynamic beach ball state (~12-20 Hz)
       case "host_world_state": {
         if (!currentRoom || currentRoom.hostId !== clientId) return;
+        if (currentRoom.clients.size <= 1) return; // Skip serialization if host is the only player in room
         const remainingSec = Math.max(0, (currentRoom.matchEndTime - Date.now()) / 1000);
         broadcastToRoom(
           currentRoom,
@@ -341,8 +342,8 @@ wss.on("connection", (ws) => {
             type: "world_state",
             remainingSec,
             matchEnded: currentRoom.matchEnded,
-            unitStats: serializeUnitStats(currentRoom),
-            aiUnits: msg.aiUnits || [],
+            aiPacked: msg.aiPacked || null,
+            aiUnits: msg.aiUnits || null,
             ball: msg.ball || null
           },
           clientId
@@ -391,6 +392,11 @@ wss.on("connection", (ws) => {
           }
         }
 
+        const deltaStats = { [targetUnitId]: targetStat };
+        if (attackerUnitId && attackerUnitId !== targetUnitId) {
+          deltaStats[attackerUnitId] = getUnitStat(currentRoom, attackerUnitId);
+        }
+
         // Broadcast to ALL clients (including sender) so everyone's K/D & health stay identical
         broadcastToRoom(
           currentRoom,
@@ -403,7 +409,7 @@ wss.on("connection", (ws) => {
             alive: targetStat.alive,
             killed,
             shotDir: msg.shotDir || null,
-            unitStats: serializeUnitStats(currentRoom)
+            unitStats: deltaStats
           },
           null
         );
@@ -459,7 +465,7 @@ wss.on("connection", (ws) => {
             y: Number(msg.y) || 0,
             z: Number(msg.z) || 0,
             yaw: Number(msg.yaw) || 0,
-            unitStats: serializeUnitStats(currentRoom)
+            unitStats: { [targetUnitId]: targetStat }
           },
           clientId
         );
