@@ -2810,56 +2810,81 @@
       // 1. Hips
       const hips = BABYLON.MeshBuilder.CreateCapsule(
         p + "hips",
-        { radius: 0.21, height: 0.56, orientation: BABYLON.Vector3.Right(), tessellation: 10 },
+        { radius: 0.16, height: 0.44, orientation: BABYLON.Vector3.Right(), tessellation: 10 },
         scene
       );
-      hips.scaling.set(1.0, 0.9, 0.85);
+      hips.position.set(0, 0.02, -0.02);
       const hipsTpl = finalizeTemplate(BABYLON.Mesh.MergeMeshes([prep(hips)], true, true), bodyMat);
 
-      // 2. Thigh (baked y = -0.22 offset relative to hipJoint)
-      const thigh = BABYLON.MeshBuilder.CreateCapsule(
-        p + "thigh",
-        { radius: 0.135, height: 0.62, tessellation: 10 },
+      // 2. Left & Right Thighs (relative to hipJoint at (±0.165, 0, -0.03))
+      const lThigh = BABYLON.MeshBuilder.CreateCapsule(
+        p + "lThigh",
+        { radius: 0.125, height: 0.48, tessellation: 10 },
         scene
       );
-      thigh.position.y = -0.22;
-      const thighTpl = finalizeTemplate(BABYLON.Mesh.MergeMeshes([prep(thigh)], true, true), bodyMat);
+      lThigh.position.y = -0.16;
+      const lThighTpl = finalizeTemplate(BABYLON.Mesh.MergeMeshes([prep(lThigh)], true, true), bodyMat);
 
-      // 3. Shin (baked y = -0.21 offset relative to kneeJoint)
-      const shin = BABYLON.MeshBuilder.CreateCapsule(
-        p + "shin",
-        { radius: 0.11, height: 0.58, tessellation: 10 },
+      const rThigh = BABYLON.MeshBuilder.CreateCapsule(
+        p + "rThigh",
+        { radius: 0.125, height: 0.48, tessellation: 10 },
         scene
       );
-      shin.position.y = -0.21;
-      const shinTpl = finalizeTemplate(BABYLON.Mesh.MergeMeshes([prep(shin)], true, true), bodyMat);
+      rThigh.position.y = -0.16;
+      const rThighTpl = finalizeTemplate(BABYLON.Mesh.MergeMeshes([prep(rThigh)], true, true), bodyMat);
 
-      // 4. Boot (baked offset relative to kneeJoint)
-      const boot = BABYLON.MeshBuilder.CreateCapsule(
-        p + "boot",
-        { radius: 0.11, height: 0.4, orientation: BABYLON.Vector3.Forward(), tessellation: 10 },
+      // 3. Left & Right Shins (relative to kneeJoint at (0, -0.32, 0))
+      const lShin = BABYLON.MeshBuilder.CreateCapsule(
+        p + "lShin",
+        { radius: 0.105, height: 0.50, tessellation: 10 },
         scene
       );
-      boot.scaling.set(1.05, 0.72, 1.0);
-      boot.position.set(0, -0.43, 0.06);
-      const bootTpl = finalizeTemplate(BABYLON.Mesh.MergeMeshes([prep(boot)], true, true), darkMat);
+      lShin.position.y = -0.20;
+      const lShinTpl = finalizeTemplate(BABYLON.Mesh.MergeMeshes([prep(lShin)], true, true), bodyMat);
+
+      const rShin = BABYLON.MeshBuilder.CreateCapsule(
+        p + "rShin",
+        { radius: 0.105, height: 0.50, tessellation: 10 },
+        scene
+      );
+      rShin.position.y = -0.20;
+      const rShinTpl = finalizeTemplate(BABYLON.Mesh.MergeMeshes([prep(rShin)], true, true), bodyMat);
+
+      // 4. Left & Right Boots (relative to kneeJoint at (0, -0.32, 0))
+      const lBoot = BABYLON.MeshBuilder.CreateCapsule(
+        p + "lBoot",
+        { radius: 0.105, height: 0.36, orientation: BABYLON.Vector3.Forward(), tessellation: 10 },
+        scene
+      );
+      lBoot.scaling.set(1.05, 0.72, 1.0);
+      lBoot.position.set(0, -0.54, 0.05);
+      const lBootTpl = finalizeTemplate(BABYLON.Mesh.MergeMeshes([prep(lBoot)], true, true), darkMat);
+
+      const rBoot = BABYLON.MeshBuilder.CreateCapsule(
+        p + "rBoot",
+        { radius: 0.105, height: 0.36, orientation: BABYLON.Vector3.Forward(), tessellation: 10 },
+        scene
+      );
+      rBoot.scaling.set(1.05, 0.72, 1.0);
+      rBoot.position.set(0, -0.54, 0.05);
+      const rBootTpl = finalizeTemplate(BABYLON.Mesh.MergeMeshes([prep(rBoot)], true, true), darkMat);
 
       // 5. Merged Torso (Abdomen + Chest -> 1 draw call)
       const abdomen = BABYLON.MeshBuilder.CreateCapsule(
         p + "abdomen",
-        { radius: 0.25, height: 0.68, tessellation: 10 },
+        { radius: 0.21, height: 0.58, tessellation: 10 },
         scene
       );
-      abdomen.scaling.set(1.15, 1.0, 0.78);
-      abdomen.position.y = 0.32;
+      abdomen.scaling.set(1.12, 1.0, 0.78);
+      abdomen.position.y = 0.28;
 
       const chest = BABYLON.MeshBuilder.CreateCapsule(
         p + "chest",
-        { radius: 0.24, height: 0.76, orientation: BABYLON.Vector3.Right(), tessellation: 10 },
+        { radius: 0.21, height: 0.62, orientation: BABYLON.Vector3.Right(), tessellation: 10 },
         scene
       );
-      chest.scaling.set(1.0, 1.15, 0.85);
-      chest.position.y = 0.56;
+      chest.scaling.set(1.0, 1.12, 0.82);
+      chest.position.y = 0.48;
 
       const torsoTpl = finalizeTemplate(
         BABYLON.Mesh.MergeMeshes([prep(abdomen), prep(chest)], true, true),
@@ -2869,60 +2894,60 @@
       // 6. Merged Belt + Field Pack (-> 1 draw call)
       const belt = BABYLON.MeshBuilder.CreateCylinder(
         p + "belt",
-        { diameterTop: 0.62, diameterBottom: 0.6, height: 0.13, tessellation: 10 },
+        { diameterTop: 0.48, diameterBottom: 0.46, height: 0.18, tessellation: 10 },
         scene
       );
-      belt.scaling.set(1.12, 1.0, 0.82);
-      belt.position.y = 0.05;
+      belt.scaling.set(1.08, 1.0, 0.82);
+      belt.position.y = 0.08;
 
       const pack = BABYLON.MeshBuilder.CreateBox(
         p + "pack",
-        { width: 0.46, height: 0.48, depth: 0.22 },
+        { width: 0.38, height: 0.38, depth: 0.18 },
         scene
       );
-      pack.position.set(0, 0.48, -0.27);
+      pack.position.set(0, 0.40, -0.20);
 
       const gearTpl = finalizeTemplate(
         BABYLON.Mesh.MergeMeshes([prep(belt), prep(pack)], true, true),
         darkMat
       );
 
-      // 7. Merged Neck + Head (-> 1 draw call)
+      // 7. Merged Neck + Head (relative to headPivot at (0, 0.64, 0.02))
       const neck = BABYLON.MeshBuilder.CreateCylinder(
         p + "neck",
-        { diameter: 0.22, height: 0.18, tessellation: 10 },
+        { diameter: 0.16, height: 0.16, tessellation: 10 },
         scene
       );
-      neck.position.y = 0.05;
+      neck.position.y = 0.02;
 
       const head = BABYLON.MeshBuilder.CreateCapsule(
         p + "head",
-        { radius: 0.2, height: 0.46, tessellation: 10 },
+        { radius: 0.13, height: 0.34, tessellation: 10 },
         scene
       );
-      head.position.y = 0.23;
+      head.position.set(0, 0.16, 0.03);
 
       const headTpl = finalizeTemplate(
         BABYLON.Mesh.MergeMeshes([prep(neck), prep(head)], true, true),
         bodyMat
       );
 
-      // 8. Merged M1 Helmet + Visor Rim (-> 1 draw call)
+      // 8. Merged M1 Helmet + Visor Rim (relative to headPivot at (0, 0.64, 0.02))
       const helmet = BABYLON.MeshBuilder.CreateSphere(
         p + "helmet",
-        { diameterX: 0.54, diameterY: 0.48, diameterZ: 0.58, slice: 0.58, segments: 10 },
+        { diameterX: 0.32, diameterY: 0.30, diameterZ: 0.35, slice: 0.58, segments: 10 },
         scene
       );
-      helmet.position.set(0, 0.24, -0.01);
+      helmet.position.set(0, 0.20, 0.03);
       helmet.rotation.x = -0.12;
 
       const helmetRim = BABYLON.MeshBuilder.CreateTorus(
         p + "helmetRim",
-        { diameter: 0.52, thickness: 0.045, tessellation: 12 },
+        { diameter: 0.31, thickness: 0.032, tessellation: 12 },
         scene
       );
       helmetRim.scaling.set(1.0, 1.0, 1.08);
-      helmetRim.position.set(0, 0.27, -0.01);
+      helmetRim.position.set(0, 0.22, 0.03);
       helmetRim.rotation.x = -0.12;
 
       const helmetTpl = finalizeTemplate(
@@ -2930,33 +2955,37 @@
         darkMat
       );
 
-      // 9. IK Arm Segment Templates (Joint Spheres + Upper/Forearm Capsules)
+      // 9. IK Arm Segment Templates (Joint Spheres + Upper/Forearm Meshes)
       const shoulderBallTpl = finalizeTemplate(
-        BABYLON.MeshBuilder.CreateSphere(p + "shoulder", { diameter: 0.22, segments: 8 }, scene),
+        BABYLON.MeshBuilder.CreateSphere(p + "shoulder", { diameter: 0.185, segments: 8 }, scene),
         bodyMat
       );
       const elbowAndHandTpl = finalizeTemplate(
-        BABYLON.MeshBuilder.CreateSphere(p + "joint", { diameter: 0.17, segments: 8 }, scene),
+        BABYLON.MeshBuilder.CreateSphere(p + "joint", { diameter: 0.13, segments: 8 }, scene),
+        bodyMat
+      );
+      const wristBallTpl = finalizeTemplate(
+        BABYLON.MeshBuilder.CreateSphere(p + "wrist", { diameter: 0.065, segments: 6 }, scene),
         bodyMat
       );
       const rUpperArmTpl = finalizeTemplate(
-        BABYLON.MeshBuilder.CreateCapsule(p + "rUpper", { radius: 0.095, height: 0.34 + 0.14, tessellation: 8 }, scene),
+        BABYLON.MeshBuilder.CreateCapsule(p + "rUpper", { radius: 0.082, height: 0.31 + 0.10, tessellation: 8 }, scene),
         bodyMat
       );
       const rForearmTpl = finalizeTemplate(
-        BABYLON.MeshBuilder.CreateCapsule(p + "rFore", { radius: 0.082, height: 0.34 + 0.12, tessellation: 8 }, scene),
+        BABYLON.MeshBuilder.CreateCapsule(p + "rFore", { radius: 0.072, height: 0.34 + 0.10, tessellation: 8 }, scene),
         bodyMat
       );
       const lUpperArmTpl = finalizeTemplate(
-        BABYLON.MeshBuilder.CreateCapsule(p + "lUpper", { radius: 0.095, height: 0.40 + 0.14, tessellation: 8 }, scene),
+        BABYLON.MeshBuilder.CreateCapsule(p + "lUpper", { radius: 0.082, height: 0.36 + 0.10, tessellation: 8 }, scene),
         bodyMat
       );
       const lForearmTpl = finalizeTemplate(
-        BABYLON.MeshBuilder.CreateCapsule(p + "lFore", { radius: 0.082, height: 0.40 + 0.12, tessellation: 8 }, scene),
+        BABYLON.MeshBuilder.CreateCapsule(p + "lFore", { radius: 0.072, height: 0.38 + 0.10, tessellation: 8 }, scene),
         bodyMat
       );
 
-      // 10. Merged Full M16 Rifle (6 parts -> 1 instanced draw call!)
+      // 10. Merged Full M16 Rifle (1 instanced draw call, upgraded with vintage M16 GLB)
       const stock = BABYLON.MeshBuilder.CreateBox(p + "stock", { width: 0.07, height: 0.15, depth: 0.38 }, scene);
       stock.position.set(0, -0.02, -0.14);
       const receiver = BABYLON.MeshBuilder.CreateBox(p + "receiver", { width: 0.09, height: 0.15, depth: 0.42 }, scene);
@@ -2985,15 +3014,22 @@
 
       return {
         hipsTpl,
-        thighTpl,
-        shinTpl,
-        bootTpl,
+        thighTpl: lThighTpl,
+        lThighTpl,
+        rThighTpl,
+        shinTpl: lShinTpl,
+        lShinTpl,
+        rShinTpl,
+        bootTpl: lBootTpl,
+        lBootTpl,
+        rBootTpl,
         torsoTpl,
         gearTpl,
         headTpl,
         helmetTpl,
         shoulderBallTpl,
         elbowAndHandTpl,
+        wristBallTpl,
         rUpperArmTpl,
         rForearmTpl,
         lUpperArmTpl,
@@ -3017,12 +3053,12 @@
     const _rightGripSpine = new BABYLON.Vector3();
     const _leftGripSpine = new BABYLON.Vector3();
 
-    const RIGHT_SHOULDER_POS = new BABYLON.Vector3(0.36, 0.65, -0.02);
-    const LEFT_SHOULDER_POS = new BABYLON.Vector3(-0.36, 0.65, -0.02);
+    const RIGHT_SHOULDER_POS = new BABYLON.Vector3(0.22, 0.47, -0.04);
+    const LEFT_SHOULDER_POS = new BABYLON.Vector3(-0.22, 0.47, -0.04);
     const RIGHT_POLE_DIR = new BABYLON.Vector3(0.45, -0.75, -0.35).normalize();
     const LEFT_POLE_DIR = new BABYLON.Vector3(-0.3, -0.85, 0.1).normalize();
-    const FALL_R_HAND = new BABYLON.Vector3(0.45, 0.22, 0.28);
-    const FALL_L_HAND = new BABYLON.Vector3(-0.42, 0.25, 0.32);
+    const FALL_R_HAND = new BABYLON.Vector3(0.36, 0.16, 0.22);
+    const FALL_L_HAND = new BABYLON.Vector3(-0.34, 0.18, 0.25);
     const FALL_R_POLE = new BABYLON.Vector3(0.5, -0.7, -0.2).normalize();
     const FALL_L_POLE = new BABYLON.Vector3(-0.5, -0.7, -0.2).normalize();
 
@@ -3057,6 +3093,435 @@
         BABYLON.Quaternion.RotationAxisToRef(_ikAxis, angle, mesh.rotationQuaternion);
       }
     }
+
+    // Asynchronously loads the Meshy 3D GLB soldier & vintage M16 rifle models
+    // and upgrades all instanced soldier template meshes in-place
+    async function loadUpgradedSoldierModels() {
+      function parseGlbBuffer(arrayBuffer) {
+        const view = new DataView(arrayBuffer);
+        const magic = view.getUint32(0, true);
+        if (magic !== 0x46546c67) {
+          throw new Error("Invalid GLB magic header");
+        }
+        const jsonByteLen = view.getUint32(12, true);
+        const jsonText = new TextDecoder("utf-8").decode(
+          new Uint8Array(arrayBuffer, 20, jsonByteLen)
+        );
+        const gltf = JSON.parse(jsonText);
+        const binOffset = 20 + jsonByteLen + 8;
+        return { gltf, arrayBuffer, binOffset };
+      }
+
+      function readAccessorFloat32(parsed, accIndex) {
+        const acc = parsed.gltf.accessors[accIndex];
+        const bv = parsed.gltf.bufferViews[acc.bufferView];
+        const byteOffset =
+          parsed.binOffset + (bv.byteOffset || 0) + (acc.byteOffset || 0);
+        const numComponents =
+          acc.type === "VEC4" ? 4 : acc.type === "VEC3" ? 3 : acc.type === "VEC2" ? 2 : 1;
+        return new Float32Array(
+          parsed.arrayBuffer,
+          byteOffset,
+          acc.count * numComponents
+        );
+      }
+
+      function readAccessorIndices(parsed, accIndex) {
+        const acc = parsed.gltf.accessors[accIndex];
+        const bv = parsed.gltf.bufferViews[acc.bufferView];
+        const byteOffset =
+          parsed.binOffset + (bv.byteOffset || 0) + (acc.byteOffset || 0);
+        if (acc.componentType === 5125) {
+          return new Uint32Array(parsed.arrayBuffer, byteOffset, acc.count);
+        }
+        if (acc.componentType === 5123) {
+          return new Uint16Array(parsed.arrayBuffer, byteOffset, acc.count);
+        }
+        return new Uint8Array(parsed.arrayBuffer, byteOffset, acc.count);
+      }
+
+      function quatRotateVec(qx, qy, qz, qw, vx, vy, vz) {
+        const tx = 2 * (qy * vz - qz * vy);
+        const ty = 2 * (qz * vx - qx * vz);
+        const tz = 2 * (qx * vy - qy * vx);
+        return [
+          vx + qw * tx + (qy * tz - qz * ty),
+          vy + qw * ty + (qz * tx - qx * tz),
+          vz + qw * tz + (qx * ty - qy * tx)
+        ];
+      }
+
+      function orientCapsuleQuatValues(pAx, pAy, pAz, pBx, pBy, pBz) {
+        let dx = pBx - pAx;
+        let dy = pBy - pAy;
+        let dz = pBz - pAz;
+        const len = Math.hypot(dx, dy, dz) || 1;
+        dx /= len;
+        dy /= len;
+        dz /= len;
+        const axLen = Math.hypot(dz, dx);
+        if (axLen < 1e-6) {
+          return dy > 0 ? [0, 0, 0, 1] : [1, 0, 0, 0];
+        }
+        const kx = dz / axLen;
+        const kz = -dx / axLen;
+        const half = Math.acos(Math.max(-1, Math.min(1, dy))) * 0.5;
+        const s = Math.sin(half);
+        return [kx * s, 0, kz * s, Math.cos(half)];
+      }
+
+      const SOLDIER_SCALE = 17.0;
+
+      function extractSplitPartScaled(splitParsed, partIdx) {
+        const prim = splitParsed.gltf.meshes[partIdx].primitives[0];
+        const rawPos = readAccessorFloat32(splitParsed, prim.attributes.POSITION);
+        const rawIdx = readAccessorIndices(splitParsed, prim.indices);
+        const vCount = rawPos.length / 3;
+        const positions = new Float32Array(rawPos.length);
+        for (let i = 0; i < vCount; i++) {
+          const k = i * 3;
+          positions[k] = -rawPos[k] * SOLDIER_SCALE;
+          positions[k + 1] = rawPos[k + 1] * SOLDIER_SCALE;
+          positions[k + 2] = rawPos[k + 2] * SOLDIER_SCALE;
+        }
+        const indices = new Uint32Array(rawIdx.length);
+        for (let i = 0; i < rawIdx.length; i++) {
+          indices[i] = rawIdx[i];
+        }
+        return { positions, indices };
+      }
+
+      function straightenLegPoint(x, y, z, sideSign, isBoot = false) {
+        const hx = sideSign * 0.145;
+        const hy = 0.96;
+        const angle = sideSign * 0.160;
+        const c = Math.cos(angle);
+        const s = Math.sin(angle);
+        const dx = x - hx;
+        const dy = y - hy;
+        let rx = hx + dx * c + dy * s;
+        const ry = hy - dx * s + dy * c + 0.02;
+        let rz = z;
+        if (isBoot) {
+          // Correct outward toe splay (~11 deg inward around ankle vertical axis)
+          const bx0 = sideSign * 0.135;
+          const bz0 = -0.03;
+          const yaw = -sideSign * 0.185;
+          const cy = Math.cos(yaw);
+          const sy = Math.sin(yaw);
+          const bdx = rx - bx0;
+          const bdz = rz - bz0;
+          rx = bx0 + bdx * cy + bdz * sy;
+          rz = bz0 - bdx * sy + bdz * cy;
+        }
+        return [rx, ry, rz];
+      }
+
+      function createVertexDataWithNormals(positions, indices) {
+        const normals = new Float32Array(positions.length);
+        BABYLON.VertexData.ComputeNormals(positions, indices, normals);
+        const vd = new BABYLON.VertexData();
+        vd.positions = positions;
+        vd.indices = indices;
+        vd.normals = normals;
+        return vd;
+      }
+
+      function buildTranslatedPartVD(splitParsed, partIndices, ox, oy, oz, legSideSign = 0, isBoot = false) {
+        let totalVerts = 0;
+        let totalIndices = 0;
+        const parts = partIndices.map((idx) => {
+          const p = extractSplitPartScaled(splitParsed, idx);
+          totalVerts += p.positions.length / 3;
+          totalIndices += p.indices.length;
+          return p;
+        });
+
+        const mergedPos = new Float32Array(totalVerts * 3);
+        const mergedIdx = new Uint32Array(totalIndices);
+        let vOffset = 0;
+        let iOffset = 0;
+
+        for (const p of parts) {
+          const vCount = p.positions.length / 3;
+          for (let i = 0; i < vCount; i++) {
+            const k = i * 3;
+            let px = p.positions[k];
+            let py = p.positions[k + 1];
+            let pz = p.positions[k + 2];
+            if (legSideSign !== 0) {
+              const st = straightenLegPoint(px, py, pz, legSideSign, isBoot);
+              px = st[0];
+              py = st[1];
+              pz = st[2];
+            }
+            const dst = (vOffset + i) * 3;
+            mergedPos[dst] = px - ox;
+            mergedPos[dst + 1] = py - oy;
+            mergedPos[dst + 2] = pz - oz;
+          }
+          for (let i = 0; i < p.indices.length; i++) {
+            mergedIdx[iOffset + i] = p.indices[i] + vOffset;
+          }
+          vOffset += vCount;
+          iOffset += p.indices.length;
+        }
+
+        return createVertexDataWithNormals(mergedPos, mergedIdx);
+      }
+
+      function buildThighOrHipsVD(splitParsed, mode) {
+        const p2 = extractSplitPartScaled(splitParsed, 2);
+        const pos = p2.positions;
+        const idx = p2.indices;
+        const keptIndices = [];
+
+        for (let t = 0; t < idx.length; t += 3) {
+          const i0 = idx[t], i1 = idx[t + 1], i2 = idx[t + 2];
+          const cx = (pos[i0 * 3] + pos[i1 * 3] + pos[i2 * 3]) / 3;
+          const cy = (pos[i0 * 3 + 1] + pos[i1 * 3 + 1] + pos[i2 * 3 + 1]) / 3;
+          if (mode === "left" && cx <= 0.015) {
+            keptIndices.push(i0, i1, i2);
+          } else if (mode === "right" && cx >= -0.015) {
+            keptIndices.push(i0, i1, i2);
+          } else if (mode === "hips" && Math.abs(cx) <= 0.068 && cy >= 0.80) {
+            keptIndices.push(i0, i1, i2);
+          }
+        }
+
+        const sideSign = mode === "left" ? -1 : mode === "right" ? 1 : 0;
+        const ox = sideSign * 0.140;
+        const oy = 0.96;
+        const oz = sideSign !== 0 ? -0.03 : 0;
+
+        const outPos = new Float32Array(pos.length);
+        const vCount = pos.length / 3;
+        for (let i = 0; i < vCount; i++) {
+          const k = i * 3;
+          let px = pos[k], py = pos[k + 1], pz = pos[k + 2];
+          if (sideSign !== 0) {
+            const st = straightenLegPoint(px, py, pz, sideSign, false);
+            px = st[0];
+            py = st[1];
+            pz = st[2];
+          }
+          outPos[k] = px - ox;
+          outPos[k + 1] = py - oy;
+          outPos[k + 2] = pz - oz;
+        }
+
+        const baseVD = createVertexDataWithNormals(outPos, new Uint32Array(keptIndices));
+        const tempPartMesh = new BABYLON.Mesh("tmp_part_" + mode, scene);
+        baseVD.applyToMesh(tempPartMesh);
+        tempPartMesh.computeWorldMatrix(true);
+
+        if (mode === "hips") {
+          const hipCore = BABYLON.MeshBuilder.CreateCapsule(
+            "tmp_hipCore",
+            { radius: 0.125, height: 0.34, orientation: BABYLON.Vector3.Right(), tessellation: 10 },
+            scene
+          );
+          hipCore.removeVerticesData(BABYLON.VertexBuffer.UVKind);
+          hipCore.position.set(0, 0.01, -0.03);
+          hipCore.computeWorldMatrix(true);
+          const merged = BABYLON.Mesh.MergeMeshes([tempPartMesh, hipCore], true, true);
+          const finalVD = BABYLON.VertexData.ExtractFromMesh(merged);
+          merged.dispose();
+          return finalVD;
+        } else {
+          const hipBall = BABYLON.MeshBuilder.CreateSphere(
+            "tmp_hipBall",
+            { diameter: 0.175, segments: 8 },
+            scene
+          );
+          hipBall.removeVerticesData(BABYLON.VertexBuffer.UVKind);
+          hipBall.position.set(0, 0, 0);
+          hipBall.computeWorldMatrix(true);
+
+          const kneeBall = BABYLON.MeshBuilder.CreateSphere(
+            "tmp_kneeBall",
+            { diameter: 0.16, segments: 8 },
+            scene
+          );
+          kneeBall.removeVerticesData(BABYLON.VertexBuffer.UVKind);
+          kneeBall.position.set(0, -0.32, 0);
+          kneeBall.computeWorldMatrix(true);
+
+          const merged = BABYLON.Mesh.MergeMeshes([tempPartMesh, hipBall, kneeBall], true, true);
+          const finalVD = BABYLON.VertexData.ExtractFromMesh(merged);
+          merged.dispose();
+          return finalVD;
+        }
+      }
+
+      function buildArmCapsuleVD(splitParsed, partIdx, origA, origB, targetLen) {
+        const p = extractSplitPartScaled(splitParsed, partIdx);
+        const mx = (origA[0] + origB[0]) * 0.5;
+        const my = (origA[1] + origB[1]) * 0.5;
+        const mz = (origA[2] + origB[2]) * 0.5;
+
+        const fAx = origA[0] - mx, fAy = -(origA[1] - my), fAz = -(origA[2] - mz);
+        const fBx = origB[0] - mx, fBy = -(origB[1] - my), fBz = -(origB[2] - mz);
+        const origLen = Math.hypot(fBx - fAx, fBy - fAy, fBz - fAz) || 1;
+        const q = orientCapsuleQuatValues(fAx, fAy, fAz, fBx, fBy, fBz);
+        const qInvX = -q[0], qInvY = -q[1], qInvZ = -q[2], qInvW = q[3];
+        const scaleY = targetLen / origLen;
+
+        const outPos = new Float32Array(p.positions.length);
+        const vCount = p.positions.length / 3;
+        for (let i = 0; i < vCount; i++) {
+          const k = i * 3;
+          const vx = p.positions[k] - mx;
+          const vy = -(p.positions[k + 1] - my);
+          const vz = -(p.positions[k + 2] - mz);
+          const rot = quatRotateVec(qInvX, qInvY, qInvZ, qInvW, vx, vy, vz);
+          outPos[k] = rot[0];
+          outPos[k + 1] = rot[1] * scaleY;
+          outPos[k + 2] = rot[2];
+        }
+
+        return createVertexDataWithNormals(outPos, p.indices);
+      }
+
+      function buildRifleVD(rifleParsed) {
+        const prim = rifleParsed.gltf.meshes[0].primitives[0];
+        const rawPos = readAccessorFloat32(rifleParsed, prim.attributes.POSITION);
+        const rawNrm =
+          prim.attributes.NORMAL !== undefined
+            ? readAccessorFloat32(rifleParsed, prim.attributes.NORMAL)
+            : null;
+        const rawIdx = readAccessorIndices(rifleParsed, prim.indices);
+
+        const rScale = 1.35;
+        const vCount = rawPos.length / 3;
+        const positions = new Float32Array(rawPos.length);
+        for (let i = 0; i < vCount; i++) {
+          const k = i * 3;
+          const rx = rawPos[k];
+          const ry = rawPos[k + 1];
+          const rz = rawPos[k + 2];
+          positions[k] = -rz * rScale;
+          positions[k + 1] = ry * rScale - 0.03;
+          positions[k + 2] = -rx * rScale + 0.32;
+        }
+
+        const indices = new Uint32Array(rawIdx.length);
+        for (let i = 0; i < rawIdx.length; i++) {
+          indices[i] = rawIdx[i];
+        }
+
+        const normals = new Float32Array(positions.length);
+        BABYLON.VertexData.ComputeNormals(positions, indices, normals);
+        if (rawNrm && rawNrm.length === normals.length) {
+          for (let i = 0; i < vCount; i++) {
+            const k = i * 3;
+            const gnx = -rawNrm[k + 2];
+            const gny = rawNrm[k + 1];
+            const gnz = -rawNrm[k];
+            const bx = normals[k] * 0.45 + gnx * 0.55;
+            const by = normals[k + 1] * 0.45 + gny * 0.55;
+            const bz = normals[k + 2] * 0.45 + gnz * 0.55;
+            const len = Math.hypot(bx, by, bz) || 1;
+            normals[k] = bx / len;
+            normals[k + 1] = by / len;
+            normals[k + 2] = bz / len;
+          }
+        }
+
+        const vd = new BABYLON.VertexData();
+        vd.positions = positions;
+        vd.indices = indices;
+        vd.normals = normals;
+        return vd;
+      }
+
+      try {
+        const [splitRes, rifleRes] = await Promise.all([
+          fetch("models/Meshy_AI_green_toy_soldier_split.glb"),
+          fetch("models/Meshy_AI_vintage_toy_m16_rifle.glb")
+        ]);
+        if (!splitRes.ok || !rifleRes.ok) {
+          throw new Error("Failed to fetch GLB models");
+        }
+        const [splitBuf, rifleBuf] = await Promise.all([
+          splitRes.arrayBuffer(),
+          rifleRes.arrayBuffer()
+        ]);
+
+        const splitParsed = parseGlbBuffer(splitBuf);
+        const rifleParsed = parseGlbBuffer(rifleBuf);
+
+        const upgradedVDs = {
+          hipsTpl: buildThighOrHipsVD(splitParsed, "hips"),
+          lThighTpl: buildThighOrHipsVD(splitParsed, "left"),
+          rThighTpl: buildThighOrHipsVD(splitParsed, "right"),
+          lShinTpl: buildTranslatedPartVD(splitParsed, [4], -0.140, 0.64, -0.03, -1, false),
+          rShinTpl: buildTranslatedPartVD(splitParsed, [10], 0.140, 0.64, -0.03, 1, false),
+          lBootTpl: buildTranslatedPartVD(splitParsed, [5], -0.140, 0.64, -0.03, -1, true),
+          rBootTpl: buildTranslatedPartVD(splitParsed, [0], 0.140, 0.64, -0.03, 1, true),
+          torsoTpl: buildTranslatedPartVD(splitParsed, [1], 0, 1.04, 0, 0),
+          gearTpl: buildTranslatedPartVD(splitParsed, [3], 0, 1.04, 0, 0),
+          headTpl: buildTranslatedPartVD(splitParsed, [17, 9, 12, 13, 14, 15], 0, 1.68, 0.02, 0),
+          helmetTpl: buildTranslatedPartVD(splitParsed, [16], 0, 1.68, 0.02, 0),
+          rUpperArmTpl: buildArmCapsuleVD(
+            splitParsed,
+            6,
+            [0.255, 1.595, -0.047],
+            [0.316, 1.315, -0.070],
+            0.32
+          ),
+          rForearmTpl: buildArmCapsuleVD(
+            splitParsed,
+            7,
+            [0.346, 1.290, -0.078],
+            [0.440, 0.910, -0.015],
+            0.35
+          ),
+          lUpperArmTpl: buildArmCapsuleVD(
+            splitParsed,
+            11,
+            [-0.255, 1.596, -0.054],
+            [-0.316, 1.310, -0.069],
+            0.37
+          ),
+          lForearmTpl: buildArmCapsuleVD(
+            splitParsed,
+            8,
+            [-0.348, 1.287, -0.079],
+            [-0.440, 0.910, -0.015],
+            0.40
+          ),
+          rifleTpl: buildRifleVD(rifleParsed)
+        };
+
+        for (const teamKey of ["green", "tan"]) {
+          const teamTpls = soldierTemplates[teamKey];
+          for (const [slotName, vd] of Object.entries(upgradedVDs)) {
+            const tplMesh = teamTpls[slotName];
+            if (tplMesh) {
+              tplMesh.useVertexColors = false;
+              vd.applyToMesh(tplMesh, false);
+              tplMesh.refreshBoundingInfo();
+            }
+          }
+        }
+
+        for (let i = 0; i < soldiers.length; i++) {
+          const s = soldiers[i];
+          if (s && s.model && s.model.root) {
+            const childMeshes = s.model.root.getChildMeshes(false);
+            for (let c = 0; c < childMeshes.length; c++) {
+              childMeshes[c].refreshBoundingInfo();
+            }
+            animateSoldier(s, 0.016, false, 0, true);
+          }
+        }
+      } catch (err) {
+        console.warn("Using procedural fallback soldier meshes:", err);
+      }
+    }
+
+    loadUpgradedSoldierModels();
 
     // Analytic 2-bone Inverse Kinematics solver into _ikElbowOut (zero allocations)
     function solveArmIKToRef(shoulderPos, handPos, upperLen, foreLen, poleDir, outElbow) {
@@ -3129,18 +3594,19 @@
 
       // Sculpted 2-Segment Human Leg (Instanced Thigh -> Knee -> Instanced Shin & Boot)
       function createLeg(sideSign, sideName) {
+        const isLeft = sideSign < 0;
         const hipJoint = new BABYLON.TransformNode(prefix + sideName + "Hip", scene);
-        hipJoint.position.set(sideSign * 0.19, -0.04, 0);
+        hipJoint.position.set(sideSign * 0.118, 0, -0.03);
         hipJoint.parent = pelvis;
 
-        spawnInst(tpls.thighTpl, sideName + "Thigh", hipJoint);
+        spawnInst(isLeft ? tpls.lThighTpl : tpls.rThighTpl, sideName + "Thigh", hipJoint);
 
         const kneeJoint = new BABYLON.TransformNode(prefix + sideName + "Knee", scene);
-        kneeJoint.position.y = -0.44;
+        kneeJoint.position.y = -0.32;
         kneeJoint.parent = hipJoint;
 
-        spawnInst(tpls.shinTpl, sideName + "Shin", kneeJoint);
-        spawnInst(tpls.bootTpl, sideName + "Boot", kneeJoint);
+        spawnInst(isLeft ? tpls.lShinTpl : tpls.rShinTpl, sideName + "Shin", kneeJoint);
+        spawnInst(isLeft ? tpls.lBootTpl : tpls.rBootTpl, sideName + "Boot", kneeJoint);
 
         return { hipJoint, kneeJoint };
       }
@@ -3158,7 +3624,7 @@
 
       // Neck & Head Pivot (Instanced Merged Head/Neck + Instanced Merged M1 Helmet)
       const headPivot = new BABYLON.TransformNode(prefix + "headPivot", scene);
-      headPivot.position.y = 0.82;
+      headPivot.position.set(0, 0.64, 0.02);
       headPivot.parent = spine;
 
       spawnInst(tpls.headTpl, "head", headPivot);
@@ -3172,7 +3638,7 @@
         const elbowJoint = spawnInst(tpls.elbowAndHandTpl, sideName + "Elbow", spine);
         const forearm = spawnInst(foreTpl, sideName + "Forearm", spine);
         forearm.rotationQuaternion = new BABYLON.Quaternion();
-        const hand = spawnInst(tpls.elbowAndHandTpl, sideName + "Hand", spine);
+        const hand = spawnInst(tpls.wristBallTpl, sideName + "Hand", spine);
 
         return {
           shoulderJoint,
@@ -3185,24 +3651,24 @@
         };
       }
 
-      const rightArm = createIKArm("right", 0.34, 0.34, tpls.rUpperArmTpl, tpls.rForearmTpl);
-      const leftArm = createIKArm("left", 0.40, 0.40, tpls.lUpperArmTpl, tpls.lForearmTpl);
+      const rightArm = createIKArm("right", 0.32, 0.35, tpls.rUpperArmTpl, tpls.rForearmTpl);
+      const leftArm = createIKArm("left", 0.37, 0.40, tpls.lUpperArmTpl, tpls.lForearmTpl);
 
-      // Detailed M16-style Plastic Rifle (Single instanced mesh!)
+      // Detailed Vintage M16 Plastic Rifle (Single instanced mesh!)
       const weaponMount = new BABYLON.TransformNode(prefix + "weaponMount", scene);
-      weaponMount.position.set(0.18, 0.54, 0.22);
-      weaponMount.rotation.y = -0.06;
+      weaponMount.position.set(0.16, 0.45, 0.29);
+      weaponMount.rotation.y = -0.08;
       weaponMount.parent = spine;
 
       spawnInst(tpls.rifleTpl, "rifle", weaponMount);
 
       // Exact 3D grip anchor nodes on the rifle for Right Hand (trigger) & Left Hand (forend)
       const triggerGripNode = new BABYLON.TransformNode(prefix + "triggerGrip", scene);
-      triggerGripNode.position.set(0, -0.09, 0.04);
+      triggerGripNode.position.set(0, -0.09, 0.05);
       triggerGripNode.parent = weaponMount;
 
       const forendGripNode = new BABYLON.TransformNode(prefix + "forendGrip", scene);
-      forendGripNode.position.set(0, -0.02, 0.48);
+      forendGripNode.position.set(0, -0.01, 0.42);
       forendGripNode.parent = weaponMount;
 
       const muzzleFlash = BABYLON.MeshBuilder.CreateSphere(
@@ -3210,7 +3676,7 @@
         { diameterX: 0.26, diameterY: 0.26, diameterZ: 0.42, segments: 6 },
         scene
       );
-      muzzleFlash.position.set(0, 0.045, 1.08);
+      muzzleFlash.position.set(0, 0.05, 1.02);
       muzzleFlash.material = flashMat;
       muzzleFlash.isVisible = false;
       muzzleFlash.isPickable = false;
@@ -3418,9 +3884,42 @@
 
         m.spine.rotation.x = ease * 0.35;
 
+        // Detach rifle from spine into root space so it drops onto the sand beside the soldier
+        if (m.weaponMount.parent !== m.root) {
+          m.weaponMount.parent = m.root;
+        }
+        const hEase = 1 - Math.pow(1 - p, 2);
+        const dropSide = soldier.fallTwist >= 0 ? 1 : -1;
+        const gunEndX = 0.54 * dropSide + soldier.fallTwist * 0.14;
+        const gunEndZ = 0.34 + soldier.fallDir * 0.28;
+        let gunY;
+        if (p < 0.72) {
+          const gt = p / 0.72;
+          gunY = 1.45 - (1.45 - 0.055) * (gt * gt);
+        } else {
+          const gb = (p - 0.72) / 0.28;
+          gunY = 0.055 + Math.sin(gb * Math.PI) * 0.085;
+        }
+        m.weaponMount.position.set(
+          0.16 + (gunEndX - 0.16) * hEase,
+          gunY,
+          0.29 + (gunEndZ - 0.29) * hEase
+        );
+        m.weaponMount.rotation.set(
+          0.06 * hEase,
+          -0.08 + (0.52 * soldier.fallDir + soldier.fallTwist * 0.65) * hEase,
+          Math.PI * 0.48 * dropSide * hEase
+        );
+
         applyIKArmPose(m.rightArm, RIGHT_SHOULDER_POS, FALL_R_HAND, FALL_R_POLE);
         applyIKArmPose(m.leftArm, LEFT_SHOULDER_POS, FALL_L_HAND, FALL_L_POLE);
         return;
+      }
+
+      if (m.weaponMount.parent !== m.spine) {
+        m.weaponMount.parent = m.spine;
+        m.weaponMount.position.set(0.16, 0.45, 0.29);
+        m.weaponMount.rotation.set(0, -0.08, 0);
       }
 
       // Advance walk and idle clocks every frame
@@ -3450,56 +3949,104 @@
       const phase = soldier.walkCycle;
       const blend = soldier.moveBlend;
 
-      // 1. Legs: human stride with anatomical backward knee flexion (+rotation.x)
-      const leftSwing = Math.sin(phase) * 0.74 * blend;
-      const rightSwing = Math.sin(phase + Math.PI) * 0.74 * blend;
+      // 1. Legs: Biomechanical 2-bone sagittal foot-trajectory IK (Winter/Perry gait cycle)
+      // Swing phase (0..PI): foot lifts vertically FIRST at toe-off, carries forward through wide stride, then extends to heel-strike.
+      // Stance phase (PI..2PI): foot sweeps from front to rear along natural pendulum arc with athletic knee flexion.
+      const LEG_L1 = 0.32;
+      const LEG_L2 = 0.52;
+      const TWO_PI = Math.PI * 2;
 
-      const leftKneeBend =
-        0.12 + Math.max(0, Math.sin(phase + 1.35)) * 1.18 * blend;
-      const rightKneeBend =
-        0.12 + Math.max(0, Math.sin(phase + Math.PI + 1.35)) * 1.18 * blend;
+      function applyLegGaitIK(leg, legPhase, idleHipBias) {
+        const u = ((legPhase % TWO_PI) + TWO_PI) % TWO_PI;
+        let tz;
+        let lift;
+        let extR;
+        if (u < Math.PI) {
+          const s = u / Math.PI;
+          tz = -0.03 - Math.cos(s * Math.PI) * 0.45;
+          extR = 0.818 - 0.032 * Math.sin(s * Math.PI);
+          lift = 2.65 * Math.pow(s, 0.50) * Math.pow(1 - s, 1.35) * 0.24;
+        } else {
+          const st = (u - Math.PI) / Math.PI;
+          tz = -0.03 + Math.cos(st * Math.PI) * 0.45;
+          extR = 0.818 - 0.032 * Math.sin(st * Math.PI);
+          lift = 0;
+        }
 
-      m.leftLeg.hipJoint.rotation.x = leftSwing - 0.06 * (1 - blend);
-      m.leftLeg.kneeJoint.rotation.x = leftKneeBend;
+        const baseTy = -Math.sqrt(Math.max(0.32, extR * extR - tz * tz));
+        let ty = baseTy + lift;
 
-      m.rightLeg.hipJoint.rotation.x = rightSwing + 0.08 * (1 - blend);
-      m.rightLeg.kneeJoint.rotation.x = rightKneeBend;
+        let d2 = tz * tz + ty * ty;
+        let d = Math.sqrt(d2);
+        const maxD = LEG_L1 + LEG_L2 - 0.006;
+        if (d > maxD) {
+          const scale = maxD / d;
+          tz *= scale;
+          ty *= scale;
+          d = maxD;
+          d2 = d * d;
+        }
 
-      // 2. Pelvis vertical bounce (twice per stride) & hip roll
-      const bob = Math.abs(Math.cos(phase)) * 0.085 * blend;
+        const cosKnee = Math.max(
+          -1,
+          Math.min(1, (d2 - LEG_L1 * LEG_L1 - LEG_L2 * LEG_L2) / (2 * LEG_L1 * LEG_L2))
+        );
+        const kneeRx = Math.acos(cosKnee);
+
+        const cosAlpha = Math.max(
+          -1,
+          Math.min(1, (d2 + LEG_L1 * LEG_L1 - LEG_L2 * LEG_L2) / (2 * LEG_L1 * d))
+        );
+        const alpha = Math.acos(cosAlpha);
+        const thetaLeg = -Math.atan2(tz, -ty);
+        const hipRx = thetaLeg - alpha;
+
+        leg.hipJoint.rotation.x = hipRx * blend + idleHipBias * (1 - blend);
+        leg.kneeJoint.rotation.x = kneeRx * blend + 0.08 * (1 - blend);
+      }
+
+      applyLegGaitIK(m.leftLeg, phase, -0.04);
+      applyLegGaitIK(m.rightLeg, phase + Math.PI, 0.05);
+
+      // 2. Pelvis vertical bounce (lowest at double-support, highest at mid-stance), hip roll & axial twist
+      const bob = (1 - Math.cos(phase * 2)) * 0.038 * blend;
       const sway = Math.sin(phase) * 0.055 * blend;
-      m.pelvis.position.y = 0.94 - 0.04 * blend + bob;
+      m.pelvis.position.y = 0.94 - 0.055 * blend + bob;
       m.pelvis.rotation.z = sway - strideDir * 0.08 * blend;
-      m.pelvis.rotation.y = Math.sin(phase) * 0.08 * blend;
-      m.pelvis.rotation.x = 0;
+      m.pelvis.rotation.y = -Math.cos(phase) * 0.12 * blend;
+      m.pelvis.rotation.x = (0.04 + Math.sin(phase * 2) * 0.025) * blend;
 
-      // 3. Spine / Torso: breathing + forward run lean + vertical aim + recoil + flinch
+      // 3. Spine / Torso: breathing + forward run lean + counter-twist + counter-roll + vertical aim + recoil + flinch
       const breath = Math.sin(soldier.idleClock * 2.6) * 0.025;
       const aimPitch = soldier.pitch * 0.65;
       const recoilKick = m.recoilTimer * 0.18;
       const flinchKick = m.flinchTimer * 0.26;
 
       m.spine.rotation.x =
-        0.12 * blend + aimPitch - recoilKick - flinchKick + breath;
-      m.spine.rotation.y = -Math.sin(phase) * 0.08 * blend + 0.08;
-      m.spine.rotation.z = flinchKick * 0.45;
+        (0.15 + Math.sin(phase * 2) * 0.035) * blend + aimPitch - recoilKick - flinchKick + breath;
+      m.spine.rotation.y = Math.cos(phase) * 0.13 * blend + 0.08;
+      m.spine.rotation.z = -sway * 0.65 + flinchKick * 0.45;
 
       if (!updateIK) return;
 
-      // 4. Head: tracks aim pitch and tilts slightly into the rifle sight
-      m.headPivot.rotation.x = soldier.pitch * 0.35 - 0.06 * blend;
-      m.headPivot.rotation.y = -0.08 + Math.sin(phase) * 0.05 * blend;
-      m.headPivot.rotation.z = 0.06;
+      // 4. Head: tracks aim pitch and stabilizes against torso twist
+      m.headPivot.rotation.x = soldier.pitch * 0.35 - 0.08 * blend;
+      m.headPivot.rotation.y = -0.08 - Math.cos(phase) * 0.08 * blend;
+      m.headPivot.rotation.z = 0.06 + sway * 0.35;
 
       // 5. Rifle position & 2-Bone IK Arms locked onto Pistol Grip and Front Handguard
-      const armBob = Math.sin(phase * 2) * 0.022 * blend;
+      const armBob = Math.sin(phase * 2) * 0.034 * blend;
+      const armSwayX = Math.cos(phase) * 0.026 * blend;
+      const armSurgeZ = Math.sin(phase * 2) * 0.018 * blend;
       m.weaponMount.position.set(
-        0.18,
-        0.54 + armBob,
-        0.22 - m.recoilTimer * 0.08
+        0.16 + armSwayX,
+        0.45 + armBob,
+        0.29 + armSurgeZ - m.recoilTimer * 0.08
       );
-      m.weaponMount.rotation.x = aimPitch * 0.35 - recoilKick * 0.45;
-      m.weaponMount.rotation.y = -0.07;
+      m.weaponMount.rotation.x =
+        aimPitch * 0.35 - recoilKick * 0.45 + Math.cos(phase * 2) * 0.04 * blend;
+      m.weaponMount.rotation.y = -0.08 - Math.cos(phase) * 0.07 * blend;
+      m.weaponMount.rotation.z = 0;
 
       getGripPosInSpineSpaceToRef(
         m.weaponMount,
@@ -5738,6 +6285,11 @@
       unit.model.pelvis.position.y = 0.96;
       unit.model.pelvis.rotation.set(0, 0, 0);
       unit.model.spine.rotation.set(0, 0, 0);
+      if (unit.model.weaponMount.parent !== unit.model.spine) {
+        unit.model.weaponMount.parent = unit.model.spine;
+      }
+      unit.model.weaponMount.position.set(0.16, 0.45, 0.29);
+      unit.model.weaponMount.rotation.set(0, -0.08, 0);
 
       if (unit.model.overheadGroup) {
         unit.model.overheadGroup.setEnabled(true);

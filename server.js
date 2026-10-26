@@ -6,12 +6,14 @@ const { WebSocketServer, WebSocket } = require("ws");
 const PORT = process.env.PORT || 3000;
 const INDEX_PATH = path.join(__dirname, "index.html");
 const FAVICON_DIR = path.join(__dirname, "favicon");
+const MODELS_DIR = path.join(__dirname, "models");
 
 const FAVICON_MIME_TYPES = {
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
-  ".webmanifest": "application/manifest+json"
+  ".webmanifest": "application/manifest+json",
+  ".glb": "model/gltf-binary"
 };
 
 const FAVICON_FILES = new Set([
@@ -22,6 +24,11 @@ const FAVICON_FILES = new Set([
   "site.webmanifest",
   "web-app-manifest-192x192.png",
   "web-app-manifest-512x512.png"
+]);
+
+const MODEL_FILES = new Set([
+  "Meshy_AI_green_toy_soldier_split.glb",
+  "Meshy_AI_vintage_toy_m16_rifle.glb"
 ]);
 
 // ============================================================================
@@ -872,6 +879,27 @@ const server = http.createServer((req, res) => {
       }
       res.writeHead(200, {
         "Content-Type": contentType,
+        "Cache-Control": "public, max-age=86400"
+      });
+      res.end(content);
+    });
+    return;
+  }
+
+  // Serve 3D GLB model assets at both /models/<file> and root /<file>
+  const modelAssetName = strippedPath.startsWith("models/")
+    ? strippedPath.slice("models/".length)
+    : strippedPath;
+  if (MODEL_FILES.has(modelAssetName)) {
+    const modelPath = path.join(MODELS_DIR, modelAssetName);
+    fs.readFile(modelPath, (err, content) => {
+      if (err) {
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end("Not Found");
+        return;
+      }
+      res.writeHead(200, {
+        "Content-Type": "model/gltf-binary",
         "Cache-Control": "public, max-age=86400"
       });
       res.end(content);
