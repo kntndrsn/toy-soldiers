@@ -38,7 +38,7 @@ const WS_URL = (
 const SCALE = Math.max(0.05, Number(__ENV.SCALE) || 1.0);
 const QUICK = Boolean(__ENV.QUICK);
 const PLAYERS_PER_ROOM = Math.max(2, Math.min(24, Number(__ENV.PLAYERS_PER_ROOM) || 8));
-const BOTS_PER_TEAM = Math.max(2, Math.min(40, Number(__ENV.BOTS_PER_TEAM) || 8));
+const BOTS_PER_TEAM = Math.max(2, Math.min(64, Number(__ENV.BOTS_PER_TEAM) || 8));
 
 // Custom k6 Metrics for Pinpointing the Breaking Point
 const wsConnectSuccess = new Rate("ws_connect_success");
@@ -327,6 +327,26 @@ export function runPlayerSession() {
           })
         );
         wsMessagesSent.add(1);
+      } else if (msg.type === "room_tick" && Array.isArray(msg.damages)) {
+        for (let i = 0; i < msg.damages.length; i++) {
+          const d = msg.damages[i];
+          if (d.targetUnitId === myUnitId && d.killed) {
+            socket.send(
+              JSON.stringify({
+                type: "respawn_unit",
+                unitId: myUnitId,
+                team,
+                isAI: false,
+                x: 0,
+                y: 0,
+                z: team === "green" ? -20 : 20,
+                yaw: 0
+              })
+            );
+            wsMessagesSent.add(1);
+            break;
+          }
+        }
       }
     });
   });

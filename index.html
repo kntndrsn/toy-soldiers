@@ -67,24 +67,6 @@
       -webkit-user-select: auto;
     }
 
-    /* Instructions Banner (Top Left) */
-    #instructions {
-      position: absolute;
-      top: 16px;
-      left: 16px;
-      background: rgba(20, 25, 18, 0.65);
-      padding: 12px 16px;
-      border-radius: 8px;
-      border-left: 4px solid #4be03e;
-      font-size: 13.5px;
-      line-height: 1.55;
-      backdrop-filter: blur(3px);
-    }
-
-    #instructions strong {
-      color: #98ff8c;
-    }
-
     /* Team Scoreboard (Top Center) */
     #scoreboard {
       position: absolute;
@@ -92,14 +74,17 @@
       left: 50%;
       transform: translateX(-50%);
       display: flex;
-      gap: 18px;
+      align-items: center;
+      gap: 14px;
       background: rgba(20, 20, 20, 0.68);
-      padding: 10px 22px;
+      padding: 8px 18px;
       border-radius: 999px;
       border: 1px solid rgba(255, 255, 255, 0.25);
-      font-size: 15px;
+      font-size: 14.5px;
       font-weight: bold;
-      letter-spacing: 0.4px;
+      letter-spacing: 0.3px;
+      white-space: nowrap;
+      backdrop-filter: blur(3px);
     }
 
     .team-badge-green {
@@ -110,30 +95,34 @@
       color: #ffd584;
     }
 
-    /* Health Status (Bottom Left) */
+    /* Health Status Pill (Top Left on both large and small screens) */
     #status-panel {
       position: absolute;
-      bottom: 20px;
-      left: 20px;
+      top: 16px;
+      left: 16px;
       background: rgba(20, 25, 18, 0.72);
-      padding: 10px 14px;
-      border-radius: 8px;
-      min-width: 190px;
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      backdrop-filter: blur(3px);
     }
 
     #health-label {
-      font-size: 14px;
+      font-size: 13.5px;
       font-weight: bold;
-      margin-bottom: 5px;
+      margin-bottom: 0;
+      white-space: nowrap;
     }
 
     #health-bar-bg {
-      width: 100%;
-      height: 13px;
+      width: 86px;
+      height: 11px;
       background: rgba(255, 255, 255, 0.2);
       border: 1px solid rgba(255, 255, 255, 0.5);
-      border-radius: 4px;
+      border-radius: 999px;
       overflow: hidden;
     }
 
@@ -366,14 +355,26 @@
       border-radius: 6px;
     }
 
-    /* Top-Right Action Bar (Teams & Mobile HUD Toggle) */
+    /* Top-Right Action Bar (Teams & Mobile HUD Toggle; collapses to menu on smaller screens) */
     #top-right-bar {
       position: absolute;
       top: 16px;
       right: 16px;
       display: flex;
+      align-items: center;
       gap: 8px;
       pointer-events: auto;
+      z-index: 25;
+    }
+
+    #hud-menu-toggle-btn {
+      display: none;
+    }
+
+    #top-right-menu-items {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
     /* Live Performance & Server Telemetry HUD (Top Right below buttons) */
@@ -572,35 +573,8 @@
       background: rgba(65, 145, 55, 0.88);
     }
 
-    /* When touch controls are active (or on mobile screens), make Health Bar a tiny top pill
-       and hide the verbose squad/roster lists so the 3D screen is never blocked */
-    body.touch-enabled #status-panel {
-      bottom: auto;
-      top: 10px;
-      left: 10px;
-      min-width: 0;
-      width: auto;
-      padding: 6px 12px;
-      border-radius: 999px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: rgba(20, 25, 18, 0.72);
-    }
-
-    body.touch-enabled #health-label {
-      font-size: 12.5px;
-      margin-bottom: 0;
-      white-space: nowrap;
-    }
-
-    body.touch-enabled #health-bar-bg {
-      width: 72px;
-      height: 10px;
-    }
-
-    body.touch-enabled #online-roster-panel,
-    body.touch-enabled #instructions {
+    /* Hide verbose online roster list when touch controls are enabled */
+    body.touch-enabled #online-roster-panel {
       display: none !important;
     }
 
@@ -631,11 +605,16 @@
     }
 
     #online-roster-panel {
-      margin-top: 8px;
-      padding-top: 8px;
-      border-top: 1px solid rgba(255, 255, 255, 0.18);
+      position: absolute;
+      top: 56px;
+      left: 16px;
+      background: rgba(20, 25, 18, 0.72);
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
       font-size: 12px;
       display: none;
+      backdrop-filter: blur(3px);
     }
 
     #online-roster-title {
@@ -704,30 +683,21 @@
       background: #2980f2;
     }
 
-    /* Responsive Layout for Mobile Portrait & Mobile Landscape */
-    @media (max-width: 900px), (max-height: 540px) {
-      #instructions,
+    /* Responsive Layout for Smaller Screens, Mobile Portrait & Mobile Landscape */
+    @media (max-width: 980px), (max-height: 540px) {
       #online-roster-panel {
         display: none !important;
       }
 
       #status-panel {
-        bottom: auto;
         top: 10px;
         left: 10px;
-        min-width: 0;
-        width: auto;
         padding: 6px 11px;
-        border-radius: 999px;
-        display: flex;
-        align-items: center;
         gap: 7px;
       }
 
       #health-label {
         font-size: 12px;
-        margin-bottom: 0;
-        white-space: nowrap;
       }
 
       #health-bar-bg {
@@ -738,20 +708,51 @@
       #top-right-bar {
         top: 10px;
         right: 10px;
-        gap: 5px;
+      }
+
+      #hud-menu-toggle-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 6px 12px;
+        font-size: 13px;
+      }
+
+      #top-right-menu-items {
+        display: none;
+        position: absolute;
+        top: 38px;
+        right: 0;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+        background: rgba(16, 22, 16, 0.94);
+        padding: 8px;
+        border-radius: 10px;
+        border: 1px solid rgba(152, 255, 140, 0.4);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+        min-width: 150px;
+        z-index: 26;
+      }
+
+      #top-right-bar.menu-open #top-right-menu-items {
+        display: flex;
+      }
+
+      #top-right-menu-items .hud-chip-btn {
+        width: 100%;
+        text-align: center;
+        border-radius: 7px;
+        padding: 7px 10px;
+        font-size: 12px;
       }
 
       #perf-hud {
-        top: 42px;
+        top: 44px;
         right: 10px;
         padding: 4px 8px;
         font-size: 10px;
         line-height: 1.3;
-      }
-
-      .hud-chip-btn {
-        padding: 6px 10px;
-        font-size: 11.5px;
       }
 
       #scoreboard {
@@ -759,17 +760,21 @@
         padding: 6px 12px;
         font-size: 12px;
         gap: 8px;
-        white-space: nowrap;
+        max-width: calc(100vw - 230px);
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
     }
 
-    /* Mobile Portrait: stack Scoreboard cleanly below the top-left HP pill & top-right buttons,
-       and stack Jump button above Fire button so thumbs have plenty of room */
-    @media (orientation: portrait) and (max-width: 680px) {
+    /* Mobile Portrait: stack Scoreboard cleanly below the top-left HP pill & top-right menu button
+       so it never collides on narrow phone screens */
+    @media (max-width: 580px) {
       #scoreboard {
         top: 44px;
+        max-width: calc(100vw - 20px);
         padding: 4px 12px;
         font-size: 11.5px;
+        gap: 6px;
       }
 
       #perf-hud {
@@ -874,17 +879,26 @@
 
   <!-- On-Screen HUD -->
   <div id="hud">
-    <div id="instructions">
-      <strong id="instructions-title">SANDBOX</strong><br />
-      <strong>WASD / Left Stick</strong> : Move &nbsp;|&nbsp; <strong>Space / Jump</strong> : Jump<br />
-      <strong>Mouse / Right Thumb</strong> : Aim &nbsp;|&nbsp; <strong>Left-Click / Fire</strong> : Shoot
+    <div id="status-panel">
+      <div id="health-label">HP <span id="health-value">100</span>%</div>
+      <div id="health-bar-bg">
+        <div id="health-bar-fill"></div>
+      </div>
+    </div>
+
+    <div id="online-roster-panel">
+      <div id="online-roster-title">ONLINE PLAYERS IN ROOM</div>
+      <div id="online-roster-list"></div>
     </div>
 
     <div id="top-right-bar">
-      <span id="mp-status-badge" class="hud-chip-btn" style="pointer-events: none; border-color: rgba(152, 255, 140, 0.45); color: #b8ffb0;">Online: 0</span>
-      <button id="toggle-sound-btn" class="hud-chip-btn" type="button">🔊 Sound</button>
-      <button id="toggle-touch-btn" class="hud-chip-btn" type="button">Touch UI</button>
-      <button id="open-teams-btn" class="hud-chip-btn" type="button">Menu (M)</button>
+      <button id="hud-menu-toggle-btn" class="hud-chip-btn" type="button" aria-expanded="false" title="Toggle Menu">☰ Menu</button>
+      <div id="top-right-menu-items">
+        <span id="mp-status-badge" class="hud-chip-btn" style="pointer-events: none; border-color: rgba(152, 255, 140, 0.45); color: #b8ffb0;">Online: 0</span>
+        <button id="toggle-sound-btn" class="hud-chip-btn" type="button">🔊 Sound</button>
+        <button id="toggle-touch-btn" class="hud-chip-btn" type="button">Touch UI</button>
+        <button id="open-teams-btn" class="hud-chip-btn" type="button">Match Setup (M)</button>
+      </div>
     </div>
 
     <div id="perf-hud">
@@ -907,17 +921,6 @@
 
     <div id="crosshair"></div>
 
-    <div id="status-panel">
-      <div id="health-label">HP <span id="health-value">100</span>%</div>
-      <div id="health-bar-bg">
-        <div id="health-bar-fill"></div>
-      </div>
-      <div id="online-roster-panel">
-        <div id="online-roster-title">ONLINE PLAYERS IN ROOM</div>
-        <div id="online-roster-list"></div>
-      </div>
-    </div>
-
     <!-- Streamlined New Match & Multiplayer Modal -->
     <div id="setup-modal">
       <h2>NEW MATCH</h2>
@@ -934,13 +937,13 @@
         </div>
       </div>
 
-      <!-- Row 2: Green Bots & Tan Bots (No upper limit for stress testing!) -->
+      <!-- Row 2: Green Bots & Tan Bots (Max 64 per team) -->
       <div class="setup-grid">
         <div class="setup-field">
           <span class="setup-field-label" style="color: #84ff78;">Green Bots</span>
           <div class="stepper">
             <button class="step-btn" id="friendly-minus" type="button">&minus;</button>
-            <input class="count-input" id="friendly-input" type="number" min="0" value="3" />
+            <input class="count-input" id="friendly-input" type="number" min="0" max="64" value="3" />
             <button class="step-btn" id="friendly-plus" type="button">+</button>
           </div>
         </div>
@@ -949,7 +952,7 @@
           <span class="setup-field-label" style="color: #ffd584;">Tan Bots</span>
           <div class="stepper">
             <button class="step-btn" id="enemy-minus" type="button">&minus;</button>
-            <input class="count-input" id="enemy-input" type="number" min="1" value="4" />
+            <input class="count-input" id="enemy-input" type="number" min="1" max="64" value="4" />
             <button class="step-btn" id="enemy-plus" type="button">+</button>
           </div>
         </div>
@@ -1065,6 +1068,7 @@
       preserveDrawingBuffer: true,
       stencil: true
     });
+    engine.maxFPS = 60;
 
     const scene = new BABYLON.Scene(engine);
     scene.clearColor = new BABYLON.Color4(0.51, 0.78, 0.96, 1.0);
@@ -3515,11 +3519,12 @@
     // =========================================================================
     // 7. CONFIGURABLE SQUAD & ONLINE MULTIPLAYER STATE
     // =========================================================================
+    const MAX_BOTS_PER_TEAM = 64;
     const soldiers = [];
     const soldiersById = new Map();
     let player = null;
-    let configuredFriendlyCount = 3; // Default: 3 Friendly AI + You = 4 Green Total
-    let configuredEnemyCount = 4;    // Default: 4 Enemy Tan Soldiers
+    let configuredFriendlyCount = 3; // Default: 3 Friendly AI + You = 4 Green Total (Max 64 bots)
+    let configuredEnemyCount = 4;    // Default: 4 Enemy Tan Soldiers (Max 64 bots)
     let configuredMapType = "sandbox"; // "sandbox" | "shoebox"
     let configuredMapLimit = 80;     // Default: Large (80 -> 160x160)
     let configuredHardcoreMode = false; // 1-Shot Kill Hardcore Mode
@@ -3765,11 +3770,10 @@
       let x = Math.max(-boundX, Math.min(boundX, baseX));
       let z = Math.max(-boundZ, Math.min(boundZ, baseZ));
 
-      const pad = builtMapType === "shoebox" ? 1.1 : 1.4;
-      const stepX = builtMapType === "shoebox" ? 2.6 : 3.6;
-      const stepZ = builtMapType === "shoebox" ? 2.1 : 2.8;
+      const pad = builtMapType === "shoebox" ? 1.15 : 1.45;
+      const stepDist = builtMapType === "shoebox" ? 2.8 : 4.2;
 
-      for (let attempt = 0; attempt < 24; attempt++) {
+      for (let attempt = 0; attempt < 28; attempt++) {
         let blocked = false;
         for (const obs of obstacles) {
           if (
@@ -3783,10 +3787,10 @@
           }
         }
         if (!blocked) break;
-        x += (attempt % 2 === 0 ? 1 : -1) * stepX;
-        z += (attempt > 6 ? -stepZ : stepZ);
-        x = Math.max(-boundX, Math.min(boundX, x));
-        z = Math.max(-boundZ, Math.min(boundZ, z));
+        const randAngle = Math.random() * Math.PI * 2;
+        const radius = stepDist * (1 + Math.floor(attempt / 6) * 0.55);
+        x = Math.max(-boundX, Math.min(boundX, baseX + Math.cos(randAngle) * radius));
+        z = Math.max(-boundZ, Math.min(boundZ, baseZ + Math.sin(randAngle) * radius));
       }
 
       return { x, z };
@@ -3794,91 +3798,111 @@
 
     function getFormationPoint(team, index, totalOnTeam) {
       const isShoebox = builtMapType === "shoebox";
-      const baseZ = isShoebox
-        ? WORLD_LIMIT_Z - 4.2
-        : Math.max(28, WORLD_LIMIT_Z - 14);
-      const cols = isShoebox
-        ? Math.max(3, Math.min(10, Math.ceil(Math.sqrt(totalOnTeam * 2.0))))
-        : Math.max(4, Math.min(20, Math.ceil(Math.sqrt(totalOnTeam * 2.2))));
-      const spanWidth = isShoebox
-        ? Math.min(WORLD_LIMIT_X * 1.65, Math.max(15, cols * 3.8))
-        : Math.min(WORLD_LIMIT_X * 1.65, Math.max(28, cols * 5.2));
-      const rowStep = isShoebox ? 2.6 : 4.4;
+      const marginX = WORLD_LIMIT_X - (isShoebox ? 2.8 : 4.5);
+      const marginZ = WORLD_LIMIT_Z - (isShoebox ? 3.2 : 5.0);
+      // Keep opposing teams far apart on initial spawn while placing every soldier at a random spot in their zone
+      const minCenterBuffer = isShoebox
+        ? Math.max(8.5, WORLD_LIMIT_Z * 0.34)
+        : Math.max(20, WORLD_LIMIT_Z * 0.38);
 
-      if (team === "green") {
-        if (index === 0) return findSafeSpawnPoint(0, -baseZ);
-        const i = index - 1;
-        const row = Math.floor(i / cols);
-        const col = i % cols;
-        const colsInRow = Math.min(cols, Math.max(1, totalOnTeam - 1 - row * cols));
-        const frac = colsInRow <= 1 ? 0 : col / (colsInRow - 1) - 0.5;
-        const offsetX = frac * spanWidth + (row % 2 === 0 ? 1.2 : -1.2);
-        // Step rows inward toward the center if there are many rows of bots
-        const rowOffsetZ = (row % 6) * rowStep;
-        const offsetZ = -(baseZ - (isShoebox ? 1.2 : 2)) + rowOffsetZ;
-        return findSafeSpawnPoint(offsetX, offsetZ);
-      } else {
-        const row = Math.floor(index / cols);
-        const col = index % cols;
-        const colsInRow = Math.min(cols, Math.max(1, totalOnTeam - row * cols));
-        const frac = colsInRow <= 1 ? 0 : col / (colsInRow - 1) - 0.5;
-        const offsetX = frac * spanWidth + (row % 2 === 0 ? -1.2 : 1.2);
-        const rowOffsetZ = (row % 6) * rowStep;
-        const offsetZ = (baseZ - (isShoebox ? 1.2 : 2)) - rowOffsetZ;
-        return findSafeSpawnPoint(offsetX, offsetZ);
+      let bestPt = null;
+      let bestMinAllyDist = -1;
+
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const rx = (Math.random() * 2 - 1) * marginX;
+        const zSpan = Math.max(4, marginZ - minCenterBuffer);
+        const rz =
+          team === "green"
+            ? -(minCenterBuffer + Math.random() * zSpan)
+            : minCenterBuffer + Math.random() * zSpan;
+        const candidate = findSafeSpawnPoint(rx, rz);
+
+        let minAllyDist = Infinity;
+        for (let i = 0; i < soldiers.length; i++) {
+          const s = soldiers[i];
+          const d = Math.hypot(candidate.x - s.position.x, candidate.z - s.position.z);
+          if (d < minAllyDist) minAllyDist = d;
+        }
+
+        if (minAllyDist >= 2.3) {
+          return candidate;
+        }
+        if (minAllyDist > bestMinAllyDist) {
+          bestMinAllyDist = minAllyDist;
+          bestPt = candidate;
+        }
       }
+
+      return bestPt || findSafeSpawnPoint(0, team === "green" ? -marginZ : marginZ);
     }
 
-    // Picks a safe respawn point as far away from living enemies as possible
+    // Picks a random safe respawn point that is far enough away from living enemies (never a fixed spot)
     function findFarthestSafeSpawnPoint(team) {
-      const marginX = WORLD_LIMIT_X - (builtMapType === "shoebox" ? 3.5 : 6);
-      const marginZ = WORLD_LIMIT_Z - (builtMapType === "shoebox" ? 3.8 : 6);
+      const isShoebox = builtMapType === "shoebox";
+      const marginX = WORLD_LIMIT_X - (isShoebox ? 3.0 : 5.5);
+      const marginZ = WORLD_LIMIT_Z - (isShoebox ? 3.2 : 5.5);
       const candidates = [];
 
-      for (let i = 0; i < 28; i++) {
-        const angle = (i / 28) * Math.PI * 2;
-        const scale = i % 2 === 0 ? 1.0 : 0.68;
-        candidates.push(
-          findSafeSpawnPoint(
-            Math.sin(angle) * marginX * scale,
-            Math.cos(angle) * marginZ * scale
-          )
-        );
+      // Sample 40 random safe candidate locations across the arena
+      for (let i = 0; i < 40; i++) {
+        const rx = (Math.random() * 2 - 1) * marginX;
+        const rz = (Math.random() * 2 - 1) * marginZ;
+        candidates.push(findSafeSpawnPoint(rx, rz));
       }
 
       const livingEnemies = soldiers.filter((s) => s.alive && s.team !== team);
       const livingAllies = soldiers.filter((s) => s.alive && s.team === team);
 
-      let bestPt = candidates[0] || { x: 0, z: team === "green" ? -marginZ : marginZ };
-      let bestScore = -Infinity;
+      // Safe distance threshold from any living enemy to prevent spawn killing
+      const safeEnemyThreshold = isShoebox
+        ? Math.min(20, WORLD_LIMIT_Z * 0.62)
+        : Math.min(40, WORLD_LIMIT_Z * 0.58);
 
-      for (const pt of candidates) {
-        let minEnemyDist = WORLD_LIMIT_Z * 2;
-        for (const en of livingEnemies) {
+      const safePool = [];
+      const scoredPool = [];
+
+      for (let i = 0; i < candidates.length; i++) {
+        const pt = candidates[i];
+        let minEnemyDist = Infinity;
+        for (let e = 0; e < livingEnemies.length; e++) {
+          const en = livingEnemies[e];
           const d = Math.hypot(pt.x - en.position.x, pt.z - en.position.z);
           if (d < minEnemyDist) minEnemyDist = d;
         }
 
-        let minAllyDist = WORLD_LIMIT_Z * 2;
-        for (const al of livingAllies) {
+        let minAllyDist = Infinity;
+        for (let a = 0; a < livingAllies.length; a++) {
+          const al = livingAllies[a];
           const d = Math.hypot(pt.x - al.position.x, pt.z - al.position.z);
           if (d < minAllyDist) minAllyDist = d;
         }
 
-        let score = minEnemyDist;
-        if (minAllyDist < 2.2) score -= 40;
-        if ((team === "green" && pt.z < 0) || (team === "tan" && pt.z > 0)) {
-          score += 4;
-        }
+        const allyClear = minAllyDist >= 2.2;
+        const score =
+          (Number.isFinite(minEnemyDist) ? minEnemyDist : WORLD_LIMIT_Z * 2) -
+          (allyClear ? 0 : 40) +
+          (Math.random() - 0.5) * 4.0;
 
-        if (score > bestScore) {
-          bestScore = score;
-          bestPt = pt;
+        scoredPool.push({ pt, score });
+        if (minEnemyDist >= safeEnemyThreshold && allyClear) {
+          safePool.push(pt);
         }
       }
 
-      const yaw = Math.atan2(-bestPt.x, -bestPt.z);
-      return { x: bestPt.x, z: bestPt.z, yaw };
+      let chosenPt;
+      if (safePool.length > 0) {
+        // Pick uniformly at random from all candidate locations that are far enough from enemies
+        chosenPt = safePool[Math.floor(Math.random() * safePool.length)];
+      } else {
+        // If enemies are spread everywhere, pick randomly among the top 6 safest candidate locations
+        scoredPool.sort((a, b) => b.score - a.score);
+        const topK = Math.min(6, scoredPool.length);
+        chosenPt = scoredPool[Math.floor(Math.random() * topK)].pt;
+      }
+
+      const yaw =
+        Math.atan2(-chosenPt.x, -chosenPt.z) + (Math.random() - 0.5) * 0.55;
+      return { x: chosenPt.x, z: chosenPt.z, yaw };
     }
 
     function spawnAllSoldiers() {
@@ -3895,12 +3919,18 @@
       soldiers.length = 0;
       soldiersById.clear();
 
-      const greenTotal = mpState.active && mpState.roster
-        ? mpState.roster.greenTotal
-        : configuredFriendlyCount + 1;
-      const tanTotal = mpState.active && mpState.roster
-        ? mpState.roster.tanTotal
-        : configuredEnemyCount;
+      const greenTotal = Math.min(
+        MAX_BOTS_PER_TEAM + 1,
+        mpState.active && mpState.roster
+          ? mpState.roster.greenTotal
+          : configuredFriendlyCount + 1
+      );
+      const tanTotal = Math.min(
+        MAX_BOTS_PER_TEAM,
+        mpState.active && mpState.roster
+          ? mpState.roster.tanTotal
+          : configuredEnemyCount
+      );
 
       const myUnitId = mpState.active ? mpState.myUnitId : "green_0";
 
@@ -4061,6 +4091,36 @@
     const mobileJumpBtnEl = document.getElementById("mobile-jump-btn");
     const toggleTouchBtnEl = document.getElementById("toggle-touch-btn");
     const openTeamsBtnEl = document.getElementById("open-teams-btn");
+    const topRightBarEl = document.getElementById("top-right-bar");
+    const hudMenuToggleBtnEl = document.getElementById("hud-menu-toggle-btn");
+
+    function closeTopRightMenu() {
+      if (topRightBarEl) topRightBarEl.classList.remove("menu-open");
+      if (hudMenuToggleBtnEl) hudMenuToggleBtnEl.setAttribute("aria-expanded", "false");
+    }
+
+    if (hudMenuToggleBtnEl && topRightBarEl) {
+      hudMenuToggleBtnEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const isOpen = topRightBarEl.classList.toggle("menu-open");
+        hudMenuToggleBtnEl.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      });
+    }
+
+    window.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (
+          topRightBarEl &&
+          topRightBarEl.classList.contains("menu-open") &&
+          typeof topRightBarEl.contains === "function" &&
+          !topRightBarEl.contains(e.target)
+        ) {
+          closeTopRightMenu();
+        }
+      },
+      { passive: true }
+    );
 
     function enableTouchUI(enable) {
       if (enable) {
@@ -4088,9 +4148,11 @@
 
     toggleTouchBtnEl.addEventListener("click", () => {
       enableTouchUI(!document.body.classList.contains("touch-enabled"));
+      closeTopRightMenu();
     });
 
     openTeamsBtnEl.addEventListener("click", () => {
+      closeTopRightMenu();
       openSetupModal();
     });
 
@@ -5188,7 +5250,6 @@
     const mapSizeSelectEl = document.getElementById("map-size-select");
     const timeLimitSelectEl = document.getElementById("time-limit-select");
     const hardcoreCheckboxEl = document.getElementById("hardcore-checkbox");
-    const instructionsTitleEl = document.getElementById("instructions-title");
     const startMatchBtn = document.getElementById("start-match-btn");
     const hostMpBtn = document.getElementById("host-mp-btn");
     const joinMpBtn = document.getElementById("join-mp-btn");
@@ -5252,17 +5313,25 @@
       }
     }
 
-    // Initialize with a random unique historically themed soldier name & preferred team
+    // Restore user's custom saved name if they previously renamed themselves;
+    // otherwise assign a random unique historically themed soldier name
     const NAME_STORAGE_KEY = "toy_soldiers_player_name";
+    const CUSTOM_NAME_FLAG_KEY = "toy_soldiers_custom_name_set";
     const TEAM_STORAGE_KEY = "toy_soldiers_player_team";
     try {
       const savedTeam = localStorage.getItem(TEAM_STORAGE_KEY);
       if (savedTeam === "green" || savedTeam === "tan") {
         mpTeamSelectEl.value = savedTeam;
       }
+      const savedCustomName = (localStorage.getItem(NAME_STORAGE_KEY) || "").trim();
+      const wasCustomRenamed = localStorage.getItem(CUSTOM_NAME_FLAG_KEY) === "1";
+      if (savedCustomName && savedCustomName !== "Soldier" && wasCustomRenamed && mpNameInputEl) {
+        mpNameInputEl.value = savedCustomName.slice(0, 18);
+        userCustomizedPlayerName = true;
+      }
     } catch (err) {}
 
-    if (mpNameInputEl) {
+    if (mpNameInputEl && !userCustomizedPlayerName) {
       mpNameInputEl.value = pickUniqueHistoricalSoldierName();
     }
 
@@ -5291,21 +5360,34 @@
     function savePlayerProfileToStorage() {
       try {
         const cleanName = (mpNameInputEl.value || "").trim().slice(0, 18);
-        if (cleanName) {
+        if (userCustomizedPlayerName && cleanName) {
           localStorage.setItem(NAME_STORAGE_KEY, cleanName);
+          localStorage.setItem(CUSTOM_NAME_FLAG_KEY, "1");
         }
         localStorage.setItem(TEAM_STORAGE_KEY, mpTeamSelectEl.value);
       } catch (err) {}
     }
 
-    mpNameInputEl.addEventListener("input", () => {
-      userCustomizedPlayerName = true;
-      savePlayerProfileToStorage();
-    });
-    mpNameInputEl.addEventListener("change", () => {
-      userCustomizedPlayerName = true;
-      savePlayerProfileToStorage();
-    });
+    function handleUserRenamedSelf() {
+      const cleanName = (mpNameInputEl.value || "").trim().slice(0, 18);
+      if (cleanName) {
+        userCustomizedPlayerName = true;
+        savePlayerProfileToStorage();
+        if (player) {
+          player.rawPlayerName = cleanName;
+          player.name = `${cleanName} (You)`;
+        }
+      } else {
+        userCustomizedPlayerName = false;
+        try {
+          localStorage.removeItem(NAME_STORAGE_KEY);
+          localStorage.removeItem(CUSTOM_NAME_FLAG_KEY);
+        } catch (err) {}
+      }
+    }
+
+    mpNameInputEl.addEventListener("input", handleUserRenamedSelf);
+    mpNameInputEl.addEventListener("change", handleUserRenamedSelf);
     mpTeamSelectEl.addEventListener("change", savePlayerProfileToStorage);
     if (mpRoomInputEl) {
       mpRoomInputEl.addEventListener("input", () => {
@@ -5514,8 +5596,8 @@
 
     function readHostSetupInputs() {
       const prevMapType = configuredMapType;
-      configuredFriendlyCount = clampInt(friendlyInputEl.value, 0, 999999, 3);
-      configuredEnemyCount = clampInt(enemyInputEl.value, 1, 999999, 4);
+      configuredFriendlyCount = clampInt(friendlyInputEl.value, 0, MAX_BOTS_PER_TEAM, 3);
+      configuredEnemyCount = clampInt(enemyInputEl.value, 1, MAX_BOTS_PER_TEAM, 4);
       friendlyInputEl.value = configuredFriendlyCount;
       enemyInputEl.value = configuredEnemyCount;
       configuredMapType =
@@ -6004,6 +6086,18 @@
               });
             }
           }
+          if (Array.isArray(msg.damages)) {
+            for (let i = 0; i < msg.damages.length; i++) {
+              handleNetworkMessage(msg.damages[i]);
+            }
+          }
+          if (Array.isArray(msg.respawns)) {
+            for (let i = 0; i < msg.respawns.length; i++) {
+              const r = msg.respawns[i];
+              if (r.senderClientId === mpState.clientId) continue;
+              handleNetworkMessage(r);
+            }
+          }
           if (msg.world) {
             handleNetworkMessage({
               type: "world_state",
@@ -6209,19 +6303,19 @@
     }
 
     document.getElementById("friendly-minus").addEventListener("click", () => {
-      friendlyInputEl.value = clampInt(friendlyInputEl.value, 0, 999999, 3) - 1;
+      friendlyInputEl.value = clampInt(friendlyInputEl.value, 0, MAX_BOTS_PER_TEAM, 3) - 1;
       readHostSetupInputs();
     });
     document.getElementById("friendly-plus").addEventListener("click", () => {
-      friendlyInputEl.value = clampInt(friendlyInputEl.value, 0, 999999, 3) + 1;
+      friendlyInputEl.value = clampInt(friendlyInputEl.value, 0, MAX_BOTS_PER_TEAM, 3) + 1;
       readHostSetupInputs();
     });
     document.getElementById("enemy-minus").addEventListener("click", () => {
-      enemyInputEl.value = clampInt(enemyInputEl.value, 1, 999999, 4) - 1;
+      enemyInputEl.value = clampInt(enemyInputEl.value, 1, MAX_BOTS_PER_TEAM, 4) - 1;
       readHostSetupInputs();
     });
     document.getElementById("enemy-plus").addEventListener("click", () => {
-      enemyInputEl.value = clampInt(enemyInputEl.value, 1, 999999, 4) + 1;
+      enemyInputEl.value = clampInt(enemyInputEl.value, 1, MAX_BOTS_PER_TEAM, 4) + 1;
       readHostSetupInputs();
     });
     friendlyInputEl.addEventListener("change", readHostSetupInputs);
@@ -6393,13 +6487,6 @@
 
       if (matchTimerEl) {
         matchTimerEl.textContent = formatTimeMMSS(matchTimeRemaining);
-      }
-
-      if (instructionsTitleEl) {
-        const mapTitle = builtMapType === "shoebox" ? "SHOEBOX" : "SANDBOX";
-        instructionsTitleEl.textContent = isHardcoreActive()
-          ? `${mapTitle} [HARDCORE]`
-          : mapTitle;
       }
 
       // Single-pass aggregation over soldiers array (zero temporary arrays allocated)
@@ -6732,13 +6819,13 @@
       const dt = Math.min(rawDt, 0.1);
       lastTime = now;
 
-      // Update FPS, Frame Time, Subsystem Breakdown, WebSocket Ping & Network Bandwidth Telemetry
+      // Update FPS (capped at 60 FPS), Frame Time, Subsystem Breakdown, WebSocket Ping & Network Bandwidth Telemetry
       perfTelemetry.totalFrames += 1;
       perfTelemetry.frames += 1;
       perfTelemetry.accumTime += rawDt;
       if (perfTelemetry.accumTime >= 0.5) {
         const fCount = Math.max(1, perfTelemetry.frames);
-        perfTelemetry.fps = fCount / perfTelemetry.accumTime;
+        perfTelemetry.fps = Math.min(60, fCount / perfTelemetry.accumTime);
         perfTelemetry.frameMs = (perfTelemetry.accumTime / fCount) * 1000;
         perfTelemetry.physicsMs = perfTelemetry._physAccum / fCount;
         perfTelemetry.aiMs = perfTelemetry._aiAccum / fCount;
@@ -7111,7 +7198,23 @@
       }
     });
 
+    // Enforce a hard 60 FPS cap across all clients (including 90Hz/120Hz/144Hz/240Hz displays)
+    // to minimize CPU, GPU, battery, and network resource utilization
+    const MAX_CLIENT_FPS = 60;
+    const MIN_FRAME_INTERVAL_MS = 1000 / MAX_CLIENT_FPS;
+    let lastAllowedRenderMs = 0;
+
     engine.runRenderLoop(() => {
+      const now = performance.now();
+      const elapsed = now - lastAllowedRenderMs;
+      if (lastAllowedRenderMs > 0 && elapsed < MIN_FRAME_INTERVAL_MS - 0.5) {
+        return;
+      }
+      lastAllowedRenderMs =
+        elapsed > MIN_FRAME_INTERVAL_MS * 2
+          ? now
+          : now - ((elapsed - MIN_FRAME_INTERVAL_MS) % MIN_FRAME_INTERVAL_MS);
+
       const rStart = performance.now();
       scene.render();
       perfTelemetry._renderAccum += performance.now() - rStart;

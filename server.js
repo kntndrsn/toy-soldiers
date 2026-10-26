@@ -28,9 +28,10 @@ const FAVICON_FILES = new Set([
 // 1. DDoS PROTECTION, RATE LIMITING & PERFORMANCE PROFILER STATE
 // ============================================================================
 const MAX_WS_PAYLOAD_BYTES = 16 * 1024; // 16 KB max frame size
+const MAX_BOTS_PER_TEAM = 64;           // Practical max bot cap per team (64v64)
 const MAX_CONN_PER_IP = Number(process.env.MAX_CONN_PER_IP) || 128;
-const MAX_WS_MSGS_PER_SEC = Number(process.env.MAX_WS_MSGS_PER_SEC) || 100;
-const MAX_WS_BYTES_PER_SEC = Number(process.env.MAX_WS_BYTES_PER_SEC) || 96 * 1024;
+const MAX_WS_MSGS_PER_SEC = Number(process.env.MAX_WS_MSGS_PER_SEC) || 180;
+const MAX_WS_BYTES_PER_SEC = Number(process.env.MAX_WS_BYTES_PER_SEC) || 128 * 1024;
 const MAX_ROOM_ACTIONS_PER_10S = 10;
 const MAX_HTTP_REQ_PER_10S = 120;
 const IP_BAN_DURATION_MS = 30 * 1000;
@@ -1008,12 +1009,12 @@ function getOrCreateRoom(
       : Math.max(50, Math.min(130, Number(worldLimit) || 80));
     room = {
       code: roomCode,
-      syncSlot: nextRoomSyncSlot++ & 3, // Stagger 1s timer_sync across 4 x 250ms ticks
+      syncSlot: nextRoomSyncSlot++ & 7, // Stagger timer_sync across 8 x 250ms ticks (2.0s cycle)
       hostId: null,
       hostName: hostName || "Host",
       password: String(password || "").trim().slice(0, 32),
-      greenTotal: Math.max(1, Math.floor(Number(greenTotal) || 4)),
-      tanTotal: Math.max(1, Math.floor(Number(tanTotal) || 4)),
+      greenTotal: Math.max(1, Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(Number(greenTotal) || 4))),
+      tanTotal: Math.max(1, Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(Number(tanTotal) || 4))),
       mapType: resolvedMap,
       worldLimit: lim,
       hardcoreMode: Boolean(hardcoreMode),
@@ -1026,6 +1027,8 @@ function getOrCreateRoom(
       cachedUnitStats: null,
       dirtyPlayers: new Map(), // Map<clientId, PlayerStateDelta> coalesced at 25 Hz
       pendingShots: [],        // Array<ShotEvent> coalesced at 25 Hz
+      pendingDamages: [],      // Array<DamageEvent> coalesced at 25 Hz
+      pendingRespawns: [],     // Array<RespawnEvent> coalesced at 25 Hz
       pendingWorldState: null, // Latest host_world_state coalesced at 25 Hz
       clients: new Map(), // Map<clientId, ClientInfo>
       matchId: 1
@@ -1159,7 +1162,7 @@ wss.on("connection", (ws, req) => {
         ipRec.violations++;
       }
       // Disconnect & temporarily ban extreme flooders
-      if (rateState.msgCount > MAX_WS_MSGS_PER_SEC * 2 || rateState.violations >= 5) {
+      if (rateState.msgCount > MAX_WS_MSGS_PER_SEC * 2 || rateState.violations >= 8) {
         ipRec.bannedUntil = now + IP_BAN_DURATION_MS;
         ddosTelemetry.blockedConnections++;
         try {
@@ -1258,8 +1261,8 @@ wss.on("connection", (ws, req) => {
           if (isHosting) {
             room.password = suppliedPassword;
           }
-          room.greenTotal = Math.max(1, Math.floor(requestedGreen));
-          room.tanTotal = Math.max(1, Math.floor(requestedTan));
+          room.greenTotal = Math.max(1, Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(requestedGreen)));
+          room.tanTotal = Math.max(1, Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(requestedTan)));
           room.mapType = requestedMapType;
           room.worldLimit =
             requestedMapType === "shoebox"
@@ -1271,16 +1274,21 @@ wss.on("connection", (ws, req) => {
         }
 
         const slotIndex = assignSlotForPlayer(room, team);
-        // Expand team total only if more humans join than current total
+        // Expand team total only if more humans join than current total (capped at MAX_BOTS_PER_TEAM + 1)
         if (team === "green" && slotIndex + 1 > room.greenTotal) {
-          room.greenTotal = slotIndex + 1;
+          room.greenTotal = Math.min(MAX_BOTS_PER_TEAM + 1, slotIndex + 1);
         } else if (team === "tan" && slotIndex + 1 > room.tanTotal) {
-          room.tanTotal = slotIndex + 1;
+          room.tanTotal = Math.min(MAX_BOTS_PER_TEAM + 1, slotIndex + 1);
         }
 
         const unitId = `${team}_${slotIndex}`;
         getUnitStat(room, unitId);
-        const spawnZ = room.mapType === "shoebox" ? 24 : 30;
+        const spawnMaxX = room.mapType === "shoebox" ? 18 : Math.max(30, room.worldLimit - 10);
+        const spawnMinZ = room.mapType === "shoebox" ? 10 : Math.max(18, room.worldLimit * 0.35);
+        const spawnMaxZ = room.mapType === "shoebox" ? 25 : Math.max(28, room.worldLimit - 8);
+        const randX = Math.round((Math.random() * 2 - 1) * spawnMaxX * 100) / 100;
+        const randZMag =
+          Math.round((spawnMinZ + Math.random() * (spawnMaxZ - spawnMinZ)) * 100) / 100;
         const clientInfo = {
           id: clientId,
           ws,
@@ -1288,9 +1296,9 @@ wss.on("connection", (ws, req) => {
           team,
           slotIndex,
           unitId,
-          x: 0,
+          x: randX,
           y: 0,
-          z: team === "green" ? -spawnZ : spawnZ - 2,
+          z: team === "green" ? -randZMag : randZMag,
           yaw: team === "green" ? 0 : Math.PI,
           pitch: 0,
           health: 100,
@@ -1367,11 +1375,12 @@ wss.on("connection", (ws, req) => {
         if (currentRoom.clients.size <= 1) break; // Skip if host is the only player in room
         const remainingSec =
           Math.round(Math.max(0, (currentRoom.matchEndTime - now) / 1000) * 10) / 10;
+        const maxAiCount = MAX_BOTS_PER_TEAM * 2;
         currentRoom.pendingWorldState = {
           remainingSec,
           matchEnded: currentRoom.matchEnded,
-          aiPacked: msg.aiPacked || null,
-          aiUnits: msg.aiUnits || null,
+          aiPacked: Array.isArray(msg.aiPacked) ? msg.aiPacked.slice(0, maxAiCount) : null,
+          aiUnits: Array.isArray(msg.aiUnits) ? msg.aiUnits.slice(0, maxAiCount) : null,
           ball: msg.ball || null
         };
         break;
@@ -1419,27 +1428,42 @@ wss.on("connection", (ws, req) => {
         currentRoom.statsDirty = true;
         currentRoom.statsDirtyForSync = true;
 
-        const deltaStats = { [targetUnitId]: targetStat };
+        const deltaStats = {
+          [targetUnitId]: {
+            kills: targetStat.kills,
+            deaths: targetStat.deaths,
+            health: targetStat.health,
+            alive: targetStat.alive
+          }
+        };
         if (attackerUnitId && attackerUnitId !== targetUnitId) {
-          deltaStats[attackerUnitId] = getUnitStat(currentRoom, attackerUnitId);
+          const att = getUnitStat(currentRoom, attackerUnitId);
+          deltaStats[attackerUnitId] = {
+            kills: att.kills,
+            deaths: att.deaths,
+            health: att.health,
+            alive: att.alive
+          };
         }
 
-        // Broadcast to ALL clients (including sender) so everyone's K/D & health stay identical
-        broadcastToRoom(
-          currentRoom,
-          {
-            type: "unit_damaged",
-            targetUnitId,
-            attackerUnitId,
-            amount,
-            health: targetStat.health,
-            alive: targetStat.alive,
-            killed,
-            shotDir: msg.shotDir || null,
-            unitStats: deltaStats
-          },
-          null
-        );
+        const dmgEvent = {
+          type: "unit_damaged",
+          targetUnitId,
+          attackerUnitId,
+          amount,
+          health: targetStat.health,
+          alive: targetStat.alive,
+          killed,
+          shotDir: msg.shotDir || null,
+          unitStats: deltaStats
+        };
+
+        // For 1-player rooms, reply immediately; for multi-player rooms, coalesce into 25 Hz room_tick
+        if (currentRoom.clients.size <= 1) {
+          safeSend(ws, dmgEvent);
+        } else if (currentRoom.pendingDamages.length < 32) {
+          currentRoom.pendingDamages.push(dmgEvent);
+        }
         break;
       }
 
@@ -1482,23 +1506,27 @@ wss.on("connection", (ws, req) => {
           c.yaw = Number(msg.yaw) || 0;
         }
 
-        if (currentRoom.clients.size > 1) {
-          broadcastToRoom(
-            currentRoom,
-            {
-              type: "unit_respawned",
-              unitId: targetUnitId,
-              playerName: isSelf ? c.name : null,
-              team: msg.team || c.team,
-              isAI: Boolean(msg.isAI),
-              x: Number(msg.x) || 0,
-              y: Number(msg.y) || 0,
-              z: Number(msg.z) || 0,
-              yaw: Number(msg.yaw) || 0,
-              unitStats: { [targetUnitId]: targetStat }
-            },
-            clientId
-          );
+        if (currentRoom.clients.size > 1 && currentRoom.pendingRespawns.length < 32) {
+          currentRoom.pendingRespawns.push({
+            type: "unit_respawned",
+            senderClientId: clientId,
+            unitId: targetUnitId,
+            playerName: isSelf ? c.name : null,
+            team: msg.team || c.team,
+            isAI: Boolean(msg.isAI),
+            x: Number(msg.x) || 0,
+            y: Number(msg.y) || 0,
+            z: Number(msg.z) || 0,
+            yaw: Number(msg.yaw) || 0,
+            unitStats: {
+              [targetUnitId]: {
+                kills: targetStat.kills,
+                deaths: targetStat.deaths,
+                health: targetStat.health,
+                alive: targetStat.alive
+              }
+            }
+          });
         }
         break;
       }
@@ -1540,10 +1568,10 @@ wss.on("connection", (ws, req) => {
 
         if (isRoomHost) {
           if (msg.greenTotal) {
-            currentRoom.greenTotal = Math.max(1, Math.floor(Number(msg.greenTotal)));
+            currentRoom.greenTotal = Math.max(1, Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(Number(msg.greenTotal))));
           }
           if (msg.tanTotal) {
-            currentRoom.tanTotal = Math.max(1, Math.floor(Number(msg.tanTotal)));
+            currentRoom.tanTotal = Math.max(1, Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(Number(msg.tanTotal))));
           }
           if (msg.mapType === "shoebox" || msg.mapType === "sandbox") {
             currentRoom.mapType = msg.mapType;
@@ -1621,25 +1649,29 @@ function removeClientFromRoom(room, clientId) {
   });
 }
 
-// 25 Hz (40ms) Unified Room Broadcast Flush (Coalesces player_state, fire_shot & host_world_state)
+// 25 Hz (40ms) Unified Room Broadcast Flush (Coalesces player_state, fire_shot, damage_unit, respawn_unit & host_world_state)
 // Eliminates O(N^2) per-packet JSON.stringify & ws.send storms across all active rooms!
 setInterval(() => {
   for (const room of rooms.values()) {
     const hasPlayers = room.dirtyPlayers && room.dirtyPlayers.size > 0;
     const hasShots = room.pendingShots && room.pendingShots.length > 0;
+    const hasDamages = room.pendingDamages && room.pendingDamages.length > 0;
+    const hasRespawns = room.pendingRespawns && room.pendingRespawns.length > 0;
     const hasWorld = room.pendingWorldState !== null;
 
-    if (!hasPlayers && !hasShots && !hasWorld) continue;
+    if (!hasPlayers && !hasShots && !hasDamages && !hasRespawns && !hasWorld) continue;
 
     if (room.clients.size <= 1) {
       if (hasPlayers) room.dirtyPlayers.clear();
       if (hasShots) room.pendingShots.length = 0;
+      if (hasDamages) room.pendingDamages.length = 0;
+      if (hasRespawns) room.pendingRespawns.length = 0;
       room.pendingWorldState = null;
       continue;
     }
 
     // Fast path: only 1 player moved and nothing else happened
-    if (hasPlayers && room.dirtyPlayers.size === 1 && !hasShots && !hasWorld) {
+    if (hasPlayers && room.dirtyPlayers.size === 1 && !hasShots && !hasDamages && !hasRespawns && !hasWorld) {
       const single = room.dirtyPlayers.values().next().value;
       room.dirtyPlayers.clear();
       broadcastToRoom(
@@ -1661,54 +1693,20 @@ setInterval(() => {
       continue;
     }
 
-    // Fast path: only 1 shot fired and nothing else happened
-    if (!hasPlayers && hasShots && room.pendingShots.length === 1 && !hasWorld) {
-      const s = room.pendingShots[0];
-      room.pendingShots.length = 0;
-      broadcastToRoom(
-        room,
-        {
-          type: "remote_shot",
-          shooterUnitId: s.shooterUnitId,
-          team: s.team,
-          muzzlePos: s.muzzlePos,
-          hitPoint: s.hitPoint,
-          hitKind: s.hitKind
-        },
-        s.shooterClientId
-      );
-      continue;
-    }
-
-    // Fast path: only host_world_state updated
-    if (!hasPlayers && !hasShots && hasWorld) {
-      const wsData = room.pendingWorldState;
-      room.pendingWorldState = null;
-      broadcastToRoom(
-        room,
-        {
-          type: "world_state",
-          remainingSec: wsData.remainingSec,
-          matchEnded: wsData.matchEnded,
-          aiPacked: wsData.aiPacked,
-          aiUnits: wsData.aiUnits,
-          ball: wsData.ball
-        },
-        room.hostId
-      );
-      continue;
-    }
-
     // Unified room_tick or remote_players_batch packet (1 JSON.stringify + 1 ws.send per client!)
     const playersArr = hasPlayers ? Array.from(room.dirtyPlayers.values()) : null;
     const shotsArr = hasShots ? room.pendingShots.slice() : null;
+    const damagesArr = hasDamages ? room.pendingDamages.slice() : null;
+    const respawnsArr = hasRespawns ? room.pendingRespawns.slice() : null;
     const worldObj = room.pendingWorldState;
 
     if (hasPlayers) room.dirtyPlayers.clear();
     if (hasShots) room.pendingShots.length = 0;
+    if (hasDamages) room.pendingDamages.length = 0;
+    if (hasRespawns) room.pendingRespawns.length = 0;
     room.pendingWorldState = null;
 
-    if (playersArr && !shotsArr && !worldObj) {
+    if (playersArr && !shotsArr && !damagesArr && !respawnsArr && !worldObj) {
       broadcastToRoom(
         room,
         {
@@ -1724,6 +1722,8 @@ setInterval(() => {
           type: "room_tick",
           players: playersArr,
           shots: shotsArr,
+          damages: damagesArr,
+          respawns: respawnsArr,
           world: worldObj
         },
         null
@@ -1742,7 +1742,7 @@ setInterval(() => {
   const tickStart = process.hrtime.bigint();
   tickCounter++;
   const now = Date.now();
-  const currentSyncSlot = tickCounter & 3;
+  const currentSyncSlot = tickCounter & 7;
 
   for (const room of rooms.values()) {
     if (room.clients.size === 0) continue;
@@ -1765,19 +1765,17 @@ setInterval(() => {
       continue;
     }
 
-    // Staggered 1-second authoritative clock sync (only 25% of rooms broadcast on each 250ms tick,
-    // and full unitStats is only attached if stats changed since the last sync!)
+    // Staggered 2-second lightweight clock sync (only 12.5% of rooms per 250ms tick)
     if (!room.matchEnded && room.syncSlot === currentSyncSlot) {
-      const syncPayload = {
-        type: "timer_sync",
-        remainingSec: Math.round(remainingSec * 10) / 10,
-        matchEnded: room.matchEnded
-      };
-      if (room.statsDirtyForSync) {
-        syncPayload.unitStats = serializeUnitStats(room);
-        room.statsDirtyForSync = false;
-      }
-      broadcastToRoom(room, syncPayload, null);
+      broadcastToRoom(
+        room,
+        {
+          type: "timer_sync",
+          remainingSec: Math.round(remainingSec * 10) / 10,
+          matchEnded: room.matchEnded
+        },
+        null
+      );
     }
   }
 
