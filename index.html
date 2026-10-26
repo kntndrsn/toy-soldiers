@@ -202,19 +202,123 @@
       color: #e0e0e0;
     }
 
-    #restart-btn {
-      padding: 11px 26px;
+    #restart-btn, .primary-btn {
+      padding: 11px 24px;
       font-size: 15px;
       font-weight: bold;
       color: #ffffff;
       background: #2e8b24;
       border: none;
-      border-radius: 5px;
+      border-radius: 6px;
       cursor: pointer;
+      transition: background 0.15s ease;
     }
 
-    #restart-btn:hover {
+    #restart-btn:hover, .primary-btn:hover {
       background: #3ca830;
+    }
+
+    .secondary-btn {
+      padding: 11px 20px;
+      font-size: 15px;
+      font-weight: bold;
+      color: #e8e8e8;
+      background: #444b44;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 6px;
+      cursor: pointer;
+      margin-left: 8px;
+    }
+
+    .secondary-btn:hover {
+      background: #586158;
+    }
+
+    /* Match Setup Modal (Start of Match) */
+    #setup-modal {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(16, 22, 16, 0.92);
+      padding: 28px 36px;
+      border-radius: 12px;
+      text-align: center;
+      pointer-events: auto;
+      border: 2px solid #58d64d;
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.7);
+      min-width: 370px;
+      backdrop-filter: blur(6px);
+    }
+
+    #setup-modal h2 {
+      margin: 0 0 6px 0;
+      font-size: 26px;
+      color: #98ff8c;
+      letter-spacing: 0.5px;
+    }
+
+    #setup-modal p {
+      margin: 0 0 20px 0;
+      font-size: 14px;
+      color: #cccccc;
+    }
+
+    .setup-field {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.07);
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 14px;
+      text-align: left;
+    }
+
+    .setup-field-label {
+      font-size: 14.5px;
+      font-weight: bold;
+    }
+
+    .setup-field-sub {
+      font-size: 12px;
+      color: #bbbbbb;
+      margin-top: 2px;
+    }
+
+    .stepper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .step-btn {
+      width: 32px;
+      height: 32px;
+      font-size: 18px;
+      font-weight: bold;
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.16);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 6px;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+
+    .step-btn:hover {
+      background: rgba(255, 255, 255, 0.28);
+    }
+
+    .count-input {
+      width: 52px;
+      height: 32px;
+      text-align: center;
+      font-size: 16px;
+      font-weight: bold;
+      color: #ffffff;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 6px;
     }
   </style>
 </head>
@@ -224,17 +328,16 @@
   <!-- On-Screen HUD -->
   <div id="hud">
     <div id="instructions">
-      <strong>BACKYARD SANDBOX: 4 vs 4 (Babylon.js)</strong><br />
+      <strong>BACKYARD SANDBOX BATTLE</strong><br />
       <strong>WASD</strong> : Move Green Soldier &nbsp;|&nbsp; <strong>Shift</strong> : Hop<br />
       <strong>Mouse</strong> : Aim / Look (Click canvas to lock cursor)<br />
-      <strong>Left-Click / Space</strong> : Fire Rifle<br />
-      <strong>Goal</strong> : Lead your 4-man Green Squad to defeat the 4 Tan Soldiers
+      <strong>Left-Click / Space</strong> : Fire Rifle &nbsp;|&nbsp; <strong>M</strong> : Team Setup
     </div>
 
     <div id="scoreboard">
-      <span class="team-badge-green">GREEN TEAM: <span id="green-count">4</span> / 4</span>
+      <span class="team-badge-green">GREEN TEAM: <span id="green-count">4</span> / <span id="green-total">4</span></span>
       <span>vs</span>
-      <span class="team-badge-tan">TAN TEAM: <span id="tan-count">4</span> / 4</span>
+      <span class="team-badge-tan">TAN TEAM: <span id="tan-count">4</span> / <span id="tan-total">4</span></span>
     </div>
 
     <div id="crosshair"></div>
@@ -247,10 +350,47 @@
       <div id="squad-list"></div>
     </div>
 
+    <!-- Start-of-Match Team Configuration Modal -->
+    <div id="setup-modal">
+      <h2>SANDBOX DEPLOYMENT</h2>
+      <p>Choose your squad sizes before entering the sandbox</p>
+
+      <div class="setup-field">
+        <div>
+          <div class="setup-field-label" style="color: #84ff78;">Friendly AI Teammates</div>
+          <div class="setup-field-sub" id="friendly-summary">You + 3 Friendly = 4 Green Total</div>
+        </div>
+        <div class="stepper">
+          <button class="step-btn" id="friendly-minus" type="button">&minus;</button>
+          <input class="count-input" id="friendly-input" type="number" min="0" max="12" value="3" />
+          <button class="step-btn" id="friendly-plus" type="button">+</button>
+        </div>
+      </div>
+
+      <div class="setup-field">
+        <div>
+          <div class="setup-field-label" style="color: #ffd584;">Enemy Tan Soldiers</div>
+          <div class="setup-field-sub" id="enemy-summary">4 Bad Guys to eliminate</div>
+        </div>
+        <div class="stepper">
+          <button class="step-btn" id="enemy-minus" type="button">&minus;</button>
+          <input class="count-input" id="enemy-input" type="number" min="1" max="16" value="4" />
+          <button class="step-btn" id="enemy-plus" type="button">+</button>
+        </div>
+      </div>
+
+      <button class="primary-btn" id="start-match-btn" type="button" style="width: 100%; margin-top: 6px; font-size: 16px;">
+        Start Battle
+      </button>
+    </div>
+
     <div id="end-message">
       <div id="end-title">VICTORY!</div>
       <div id="end-subtitle">All tan soldiers have been eliminated.</div>
-      <button id="restart-btn">Play Again (R)</button>
+      <div>
+        <button id="restart-btn" type="button">Play Again (R)</button>
+        <button id="setup-again-btn" class="secondary-btn" type="button">Change Teams (M)</button>
+      </div>
     </div>
   </div>
 
@@ -444,9 +584,47 @@
       return mat;
     }
 
+    // Dedicated wet/molded sand material for the Sandcastle & Dump Truck load
+    // (Avoids StandardMaterial.clone() creating an un-updated blank DynamicTexture)
+    function createMoldedSandMaterial() {
+      const dynTex = new BABYLON.DynamicTexture("moldedSandTex", 256, scene, true);
+      const ctx = dynTex.getContext();
+
+      ctx.fillStyle = "#c99f55";
+      ctx.fillRect(0, 0, 256, 256);
+
+      // Subtle horizontal molded bucket-ring bands
+      for (let y = 0; y < 256; y += 32) {
+        ctx.fillStyle = "rgba(95, 65, 25, 0.16)";
+        ctx.fillRect(0, y, 256, 5);
+      }
+
+      // Fine wet-sand grain speckles
+      const palette = ["#b88d44", "#dfb76c", "#a87e38", "#d4ac62"];
+      for (let i = 0; i < 4000; i++) {
+        ctx.fillStyle = palette[i % palette.length];
+        ctx.fillRect(
+          Math.floor(Math.random() * 256),
+          Math.floor(Math.random() * 256),
+          2,
+          2
+        );
+      }
+      dynTex.update();
+      dynTex.wrapU = BABYLON.Texture.WRAP_ADDRESSMODE;
+      dynTex.wrapV = BABYLON.Texture.WRAP_ADDRESSMODE;
+      dynTex.uScale = 4;
+      dynTex.vScale = 4;
+
+      const mat = new BABYLON.StandardMaterial("sandCastleMat", scene);
+      mat.diffuseTexture = dynTex;
+      mat.specularColor = new BABYLON.Color3(0.18, 0.14, 0.08);
+      mat.specularPower = 18;
+      return mat;
+    }
+
     const sandMat = createSandMaterial();
-    const sandCastleMat = sandMat.clone("sandCastleMat");
-    sandCastleMat.diffuseColor = new BABYLON.Color3(0.92, 0.8, 0.56);
+    const sandCastleMat = createMoldedSandMaterial();
 
     // Create high-density ground mesh and displace vertices with getSandHeight
     const sandMesh = BABYLON.MeshBuilder.CreateGround(
@@ -934,8 +1112,64 @@
     populateSandboxWithToys();
 
     // =========================================================================
-    // 6. CAPSULE-SCULPTED HUMAN-LIKE SOLDIER BUILDER & ANIMATOR
+    // 6. CAPSULE-SCULPTED SOLDIER WITH 2-BONE IK RIFLE ARMS
     // =========================================================================
+    // Aligns a vertical (+Y) capsule mesh so it spans from point pA to point pB
+    function orientCapsuleBetween(mesh, pA, pB) {
+      mesh.position.set(
+        (pA.x + pB.x) * 0.5,
+        (pA.y + pB.y) * 0.5,
+        (pA.z + pB.z) * 0.5
+      );
+      const dir = pB.subtract(pA);
+      const len = dir.length();
+      if (len < 0.0001) return;
+      dir.scaleInPlace(1 / len);
+
+      if (!mesh.rotationQuaternion) {
+        mesh.rotationQuaternion = new BABYLON.Quaternion();
+      }
+
+      const up = BABYLON.Axis.Y;
+      const dot = BABYLON.Vector3.Dot(up, dir);
+      if (dot > 0.9999) {
+        mesh.rotationQuaternion.copyFromFloats(0, 0, 0, 1);
+      } else if (dot < -0.9999) {
+        mesh.rotationQuaternion.copyFromFloats(1, 0, 0, 0);
+      } else {
+        const axis = BABYLON.Vector3.Cross(up, dir).normalize();
+        const angle = Math.acos(Math.max(-1, Math.min(1, dot)));
+        BABYLON.Quaternion.RotationAxisToRef(axis, angle, mesh.rotationQuaternion);
+      }
+    }
+
+    // Analytic 2-bone Inverse Kinematics solver: returns exact 3D elbow position
+    function solveArmIK(shoulderPos, handPos, upperLen, foreLen, poleDir) {
+      const toHand = handPos.subtract(shoulderPos);
+      const rawDist = toHand.length();
+      const maxReach = upperLen + foreLen - 0.005;
+      const dist = Math.max(0.05, Math.min(rawDist, maxReach));
+
+      const u = toHand.scale(1 / Math.max(0.0001, rawDist));
+      const proj = BABYLON.Vector3.Dot(poleDir, u);
+      let v = poleDir.subtract(u.scale(proj));
+      if (v.lengthSquared() < 0.0001) {
+        v = new BABYLON.Vector3(0, -1, 0);
+      } else {
+        v.normalize();
+      }
+
+      const cosAlpha = Math.max(
+        -1,
+        Math.min(1, (upperLen * upperLen + dist * dist - foreLen * foreLen) / (2 * upperLen * dist))
+      );
+      const sinAlpha = Math.sqrt(Math.max(0, 1 - cosAlpha * cosAlpha));
+
+      return shoulderPos
+        .add(u.scale(upperLen * cosAlpha))
+        .add(v.scale(upperLen * sinAlpha));
+    }
+
     // Built facing +Z in Babylon's left-handed coordinate system
     function createPlasticSoldier(team, soldierIndex, showOverheadBar) {
       const isGreen = team === "green";
@@ -1033,7 +1267,7 @@
 
       const chest = BABYLON.MeshBuilder.CreateCapsule(
         prefix + "chest",
-        { radius: 0.24, height: 0.78, orientation: BABYLON.Vector3.Right(), tessellation: 14 },
+        { radius: 0.24, height: 0.76, orientation: BABYLON.Vector3.Right(), tessellation: 14 },
         scene
       );
       chest.scaling.set(1.0, 1.15, 0.85);
@@ -1096,101 +1330,142 @@
       helmetRim.material = darkMat;
       helmetRim.parent = headPivot;
 
-      // Sculpted 2-Segment Arms (Shoulder -> Upper Arm Capsule -> Elbow -> Forearm Capsule -> Hand)
-      function createArm(sideSign, sideName) {
-        const shoulder = new BABYLON.TransformNode(prefix + sideName + "Shoulder", scene);
-        shoulder.position.set(sideSign * 0.42, 0.67, 0);
-        shoulder.parent = spine;
+      // IK-driven 2-Segment Arms (parented directly to spine so capsules connect Shoulder -> Elbow -> Rifle Grip)
+      function createIKArm(sideName, upperLen, foreLen) {
+        const shoulderJoint = BABYLON.MeshBuilder.CreateSphere(
+          prefix + sideName + "Shoulder",
+          { diameter: 0.22, segments: 10 },
+          scene
+        );
+        shoulderJoint.material = bodyMat;
+        shoulderJoint.parent = spine;
 
         const upperArm = BABYLON.MeshBuilder.CreateCapsule(
           prefix + sideName + "UpperArm",
-          { radius: 0.105, height: 0.52, tessellation: 12 },
+          { radius: 0.095, height: upperLen + 0.14, tessellation: 12 },
           scene
         );
-        upperArm.position.y = -0.18;
+        upperArm.rotationQuaternion = new BABYLON.Quaternion();
         upperArm.material = bodyMat;
-        upperArm.parent = shoulder;
+        upperArm.parent = spine;
 
-        const elbow = new BABYLON.TransformNode(prefix + sideName + "Elbow", scene);
-        elbow.position.y = -0.35;
-        elbow.parent = shoulder;
+        const elbowJoint = BABYLON.MeshBuilder.CreateSphere(
+          prefix + sideName + "Elbow",
+          { diameter: 0.17, segments: 10 },
+          scene
+        );
+        elbowJoint.material = bodyMat;
+        elbowJoint.parent = spine;
 
         const forearm = BABYLON.MeshBuilder.CreateCapsule(
           prefix + sideName + "Forearm",
-          { radius: 0.09, height: 0.48, tessellation: 12 },
+          { radius: 0.082, height: foreLen + 0.12, tessellation: 12 },
           scene
         );
-        forearm.position.y = -0.17;
+        forearm.rotationQuaternion = new BABYLON.Quaternion();
         forearm.material = bodyMat;
-        forearm.parent = elbow;
+        forearm.parent = spine;
 
         const hand = BABYLON.MeshBuilder.CreateSphere(
           prefix + sideName + "Hand",
-          { diameter: 0.18, segments: 8 },
+          { diameter: 0.17, segments: 10 },
           scene
         );
-        hand.position.y = -0.35;
         hand.material = bodyMat;
-        hand.parent = elbow;
+        hand.parent = spine;
 
-        return { shoulder, elbow };
+        return {
+          shoulderJoint,
+          upperArm,
+          elbowJoint,
+          forearm,
+          hand,
+          upperLen,
+          foreLen
+        };
       }
 
-      const leftArm = createArm(-1, "left");
-      const rightArm = createArm(1, "right");
+      const rightArm = createIKArm("right", 0.34, 0.34);
+      const leftArm = createIKArm("left", 0.40, 0.40);
 
-      // Detailed M16-style Plastic Rifle aiming forward (+Z)
+      // Detailed M16-style Plastic Rifle tucked into the right shoulder pocket
       const weaponMount = new BABYLON.TransformNode(prefix + "weaponMount", scene);
-      weaponMount.position.set(0.22, 0.56, 0.26);
+      weaponMount.position.set(0.18, 0.54, 0.22);
+      weaponMount.rotation.y = -0.06;
       weaponMount.parent = spine;
 
+      // Buttstock resting against right shoulder pocket
       const stock = BABYLON.MeshBuilder.CreateBox(
         prefix + "stock",
-        { width: 0.075, height: 0.15, depth: 0.42 },
+        { width: 0.07, height: 0.15, depth: 0.38 },
         scene
       );
       stock.position.set(0, -0.02, -0.14);
       stock.material = darkMat;
       stock.parent = weaponMount;
 
+      // Upper & Lower Receiver
       const receiver = BABYLON.MeshBuilder.CreateBox(
         prefix + "receiver",
-        { width: 0.095, height: 0.16, depth: 0.44 },
+        { width: 0.09, height: 0.15, depth: 0.42 },
         scene
       );
       receiver.position.set(0, 0.02, 0.18);
       receiver.material = darkMat;
       receiver.parent = weaponMount;
 
-      const magazine = BABYLON.MeshBuilder.CreateBox(
-        prefix + "mag",
-        { width: 0.068, height: 0.25, depth: 0.12 },
+      // Angled Pistol Grip (where Right Hand locks)
+      const pistolGrip = BABYLON.MeshBuilder.CreateBox(
+        prefix + "pistolGrip",
+        { width: 0.065, height: 0.18, depth: 0.09 },
         scene
       );
-      magazine.position.set(0, -0.13, 0.22);
-      magazine.rotation.x = -0.25;
+      pistolGrip.position.set(0, -0.1, 0.04);
+      pistolGrip.rotation.x = 0.32;
+      pistolGrip.material = darkMat;
+      pistolGrip.parent = weaponMount;
+
+      // Curved Magazine
+      const magazine = BABYLON.MeshBuilder.CreateBox(
+        prefix + "mag",
+        { width: 0.065, height: 0.24, depth: 0.11 },
+        scene
+      );
+      magazine.position.set(0, -0.13, 0.24);
+      magazine.rotation.x = -0.22;
       magazine.material = darkMat;
       magazine.parent = weaponMount;
 
+      // Barrel Handguard (where Left Hand cradles from underneath)
       const handguard = BABYLON.MeshBuilder.CreateCylinder(
         prefix + "handguard",
-        { diameter: 0.095, height: 0.36, tessellation: 10 },
+        { diameter: 0.095, height: 0.38, tessellation: 10 },
         scene
       );
       handguard.rotation.x = Math.PI / 2;
-      handguard.position.set(0, 0.04, 0.52);
+      handguard.position.set(0, 0.035, 0.54);
       handguard.material = darkMat;
       handguard.parent = weaponMount;
 
+      // Rifle Barrel & Front Sight
       const barrel = BABYLON.MeshBuilder.CreateCylinder(
         prefix + "barrel",
-        { diameter: 0.05, height: 0.48, tessellation: 10 },
+        { diameter: 0.048, height: 0.46, tessellation: 10 },
         scene
       );
       barrel.rotation.x = Math.PI / 2;
-      barrel.position.set(0, 0.045, 0.78);
+      barrel.position.set(0, 0.045, 0.8);
       barrel.material = darkMat;
       barrel.parent = weaponMount;
+
+      // Exact 3D grip anchor nodes on the rifle for Right Hand (trigger) & Left Hand (forend)
+      const triggerGripNode = new BABYLON.TransformNode(prefix + "triggerGrip", scene);
+      triggerGripNode.position.set(0, -0.09, 0.04);
+      triggerGripNode.parent = weaponMount;
+
+      const forendGripNode = new BABYLON.TransformNode(prefix + "forendGrip", scene);
+      forendGripNode.position.set(0, -0.02, 0.48);
+      forendGripNode.parent = weaponMount;
 
       const muzzleFlash = BABYLON.MeshBuilder.CreateSphere(
         prefix + "muzzleFlash",
@@ -1270,6 +1545,8 @@
         leftArm,
         rightArm,
         weaponMount,
+        triggerGripNode,
+        forendGripNode,
         muzzleFlash,
         hitbox,
         overheadGroup,
@@ -1280,7 +1557,47 @@
       };
     }
 
-    // Updates articulated human gait, knees, hips, spine twist, breathing, recoil, and ragdoll collapse
+    // Positions an IK arm (shoulder sphere, upper arm capsule, elbow sphere, forearm capsule, hand sphere)
+    function applyIKArmPose(arm, shoulderPos, handTargetPos, poleDir) {
+      const elbowPos = solveArmIK(
+        shoulderPos,
+        handTargetPos,
+        arm.upperLen,
+        arm.foreLen,
+        poleDir
+      );
+      arm.shoulderJoint.position.copyFrom(shoulderPos);
+      arm.elbowJoint.position.copyFrom(elbowPos);
+      arm.hand.position.copyFrom(handTargetPos);
+
+      orientCapsuleBetween(arm.upperArm, shoulderPos, elbowPos);
+      orientCapsuleBetween(arm.forearm, elbowPos, handTargetPos);
+    }
+
+    // Converts a local point on weaponMount into spine-local coordinates
+    function getGripPosInSpineSpace(weaponMount, gripLocalPos) {
+      const rx = weaponMount.rotation.x;
+      const ry = weaponMount.rotation.y;
+
+      const cosX = Math.cos(rx);
+      const sinX = Math.sin(rx);
+      const y1 = gripLocalPos.y * cosX - gripLocalPos.z * sinX;
+      const z1 = gripLocalPos.y * sinX + gripLocalPos.z * cosX;
+      const x1 = gripLocalPos.x;
+
+      const cosY = Math.cos(ry);
+      const sinY = Math.sin(ry);
+      const x2 = x1 * cosY + z1 * sinY;
+      const z2 = -x1 * sinY + z1 * cosY;
+
+      return new BABYLON.Vector3(
+        weaponMount.position.x + x2,
+        weaponMount.position.y + y1,
+        weaponMount.position.z + z2
+      );
+    }
+
+    // Updates articulated human gait, knees, hips, spine twist, 2-bone IK rifle arms, and ragdoll collapse
     function animateSoldier(soldier, dt, isMoving, strideDir) {
       const m = soldier.model;
 
@@ -1301,6 +1618,9 @@
         m.overheadGroup.lookAt(camera.position);
       }
 
+      const rightShoulderPos = new BABYLON.Vector3(0.36, 0.65, -0.02);
+      const leftShoulderPos = new BABYLON.Vector3(-0.36, 0.65, -0.02);
+
       // ----- RAGDOLL COLLAPSE & SLOPE ALIGNMENT WHEN ELIMINATED -----
       if (!soldier.alive) {
         soldier.fallProgress = Math.min(1, soldier.fallProgress + dt * 2.8);
@@ -1318,12 +1638,25 @@
         m.rightLeg.kneeJoint.rotation.x = ease * 0.9;
 
         m.spine.rotation.x = ease * 0.35;
-        m.leftArm.shoulder.rotation.x = -0.35 - ease * 0.6;
-        m.rightArm.shoulder.rotation.x = -0.35 - ease * 0.5;
+
+        const rHandFall = new BABYLON.Vector3(0.45, 0.22, 0.28);
+        const lHandFall = new BABYLON.Vector3(-0.42, 0.25, 0.32);
+        applyIKArmPose(
+          m.rightArm,
+          rightShoulderPos,
+          rHandFall,
+          new BABYLON.Vector3(0.5, -0.7, -0.2).normalize()
+        );
+        applyIKArmPose(
+          m.leftArm,
+          leftShoulderPos,
+          lHandFall,
+          new BABYLON.Vector3(-0.5, -0.7, -0.2).normalize()
+        );
         return;
       }
 
-      // ----- ALIVE: REALISTIC HUMAN GAIT, BREATHING & AIMING -----
+      // ----- ALIVE: REALISTIC HUMAN GAIT, BREATHING & 2-BONE IK RIFLE HOLD -----
       soldier.idleClock += dt;
       if (isMoving) {
         soldier.walkCycle += dt * (soldier.speed * 1.35);
@@ -1358,81 +1691,167 @@
       // 3. Spine / Torso: breathing + forward run lean + vertical aim + recoil + flinch
       const breath = Math.sin(soldier.idleClock * 2.6) * 0.025;
       const aimPitch = soldier.pitch * 0.65;
-      const recoilKick = m.recoilTimer * 0.22;
-      const flinchKick = m.flinchTimer * 0.28;
+      const recoilKick = m.recoilTimer * 0.18;
+      const flinchKick = m.flinchTimer * 0.26;
 
       m.spine.rotation.x =
-        0.14 * blend + aimPitch - recoilKick - flinchKick + breath;
-      m.spine.rotation.y = -Math.sin(phase) * 0.1 * blend + 0.14;
+        0.12 * blend + aimPitch - recoilKick - flinchKick + breath;
+      m.spine.rotation.y = -Math.sin(phase) * 0.08 * blend + 0.08;
       m.spine.rotation.z = flinchKick * 0.45;
 
-      // 4. Head: tracks aim pitch and stabilizes against torso twist
-      m.headPivot.rotation.x = soldier.pitch * 0.35 - 0.08 * blend;
-      m.headPivot.rotation.y = -0.14 + Math.sin(phase) * 0.06 * blend;
+      // 4. Head: tracks aim pitch and tilts slightly into the rifle sight
+      m.headPivot.rotation.x = soldier.pitch * 0.35 - 0.06 * blend;
+      m.headPivot.rotation.y = -0.08 + Math.sin(phase) * 0.05 * blend;
+      m.headPivot.rotation.z = 0.06;
 
-      // 5. Arms & Rifle: raised forward (-rotation.x in left-handed space) holding rifle
-      const armBob = Math.sin(phase * 2) * 0.04 * blend;
+      // 5. Rifle position & 2-Bone IK Arms locked onto Pistol Grip and Front Handguard
+      const armBob = Math.sin(phase * 2) * 0.022 * blend;
+      m.weaponMount.position.set(
+        0.18,
+        0.54 + armBob,
+        0.22 - m.recoilTimer * 0.08
+      );
+      m.weaponMount.rotation.x = aimPitch * 0.35 - recoilKick * 0.45;
+      m.weaponMount.rotation.y = -0.07;
 
-      m.rightArm.shoulder.rotation.x = -0.88 + aimPitch * 0.5 + armBob + recoilKick;
-      m.rightArm.shoulder.rotation.z = 0.15;
-      m.rightArm.elbow.rotation.x = -1.05 - recoilKick * 0.5;
+      const rightGripInSpine = getGripPosInSpineSpace(
+        m.weaponMount,
+        m.triggerGripNode.position
+      );
+      const leftGripInSpine = getGripPosInSpineSpace(
+        m.weaponMount,
+        m.forendGripNode.position
+      );
 
-      m.leftArm.shoulder.rotation.x = -1.1 + aimPitch * 0.5 - armBob + recoilKick;
-      m.leftArm.shoulder.rotation.y = -0.52;
-      m.leftArm.shoulder.rotation.z = -0.18;
-      m.leftArm.elbow.rotation.x = -0.82;
+      // Right elbow tucks down and slightly outward to the right
+      applyIKArmPose(
+        m.rightArm,
+        rightShoulderPos,
+        rightGripInSpine,
+        new BABYLON.Vector3(0.45, -0.75, -0.35).normalize()
+      );
 
-      m.weaponMount.position.z = 0.26 - m.recoilTimer * 0.09;
-      m.weaponMount.rotation.x = aimPitch * 0.35 - recoilKick * 0.55;
+      // Left elbow drops beneath the rifle as the left hand cradles the front handguard
+      applyIKArmPose(
+        m.leftArm,
+        leftShoulderPos,
+        leftGripInSpine,
+        new BABYLON.Vector3(-0.3, -0.85, 0.1).normalize()
+      );
     }
 
     // =========================================================================
-    // 7. SQUAD CREATION (4 GREEN SOLDIERS VS 4 TAN SOLDIERS)
+    // 7. CONFIGURABLE SQUAD CREATION (FRIENDLY TEAMMATES & TAN BAD GUYS)
     // =========================================================================
     const soldiers = [];
     let player = null;
+    let configuredFriendlyCount = 3; // Default: 3 Friendly AI + You = 4 Green Total
+    let configuredEnemyCount = 4;    // Default: 4 Enemy Tan Soldiers
+    let isSetupOpen = true;
 
-    const GREEN_SPAWNS = [
-      { x: 0, z: -30, name: "You (Squad Leader)", isPlayer: true },
-      { x: -12, z: -28, name: "Green Alpha", isPlayer: false },
-      { x: 12, z: -28, name: "Green Bravo", isPlayer: false },
-      { x: -4, z: -35, name: "Green Charlie", isPlayer: false }
+    const CALLSIGNS = [
+      "Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot",
+      "Golf", "Hotel", "India", "Juliet", "Kilo", "Lima"
     ];
 
-    const TAN_SPAWNS = [
-      { x: -16, z: 28, name: "Tan 1" },
-      { x: -5, z: 32, name: "Tan 2" },
-      { x: 8, z: 31, name: "Tan 3" },
-      { x: 20, z: 27, name: "Tan 4" }
-    ];
+    function findSafeSpawnPoint(baseX, baseZ) {
+      let x = Math.max(-WORLD_LIMIT + 3, Math.min(WORLD_LIMIT - 3, baseX));
+      let z = Math.max(-WORLD_LIMIT + 3, Math.min(WORLD_LIMIT - 3, baseZ));
+
+      for (let attempt = 0; attempt < 16; attempt++) {
+        let blocked = false;
+        for (const obs of obstacles) {
+          if (
+            x > obs.minX - 1.2 &&
+            x < obs.maxX + 1.2 &&
+            z > obs.minZ - 1.2 &&
+            z < obs.maxZ + 1.2
+          ) {
+            blocked = true;
+            break;
+          }
+        }
+        if (!blocked) break;
+        x += (attempt % 2 === 0 ? 1 : -1) * 3.2;
+        z += (attempt > 6 ? -2.5 : 2.5);
+        x = Math.max(-WORLD_LIMIT + 3, Math.min(WORLD_LIMIT - 3, x));
+        z = Math.max(-WORLD_LIMIT + 3, Math.min(WORLD_LIMIT - 3, z));
+      }
+
+      return { x, z };
+    }
 
     function spawnAllSoldiers() {
       soldiers.forEach((s) => s.model.root.dispose());
       soldiers.length = 0;
 
-      // Spawn Green Squad (faces +Z toward center)
-      GREEN_SPAWNS.forEach((sp, idx) => {
-        const model = createPlasticSoldier("green", idx, !sp.isPlayer);
-        const y = getSandHeight(sp.x, sp.z);
-        model.root.position.set(sp.x, y, sp.z);
+      // 1. Spawn Player (Green Squad Leader)
+      const playerPt = findSafeSpawnPoint(0, -30);
+      const playerModel = createPlasticSoldier("green", 0, false);
+      playerModel.root.position.set(
+        playerPt.x,
+        getSandHeight(playerPt.x, playerPt.z),
+        playerPt.z
+      );
+
+      player = {
+        name: "You (Squad Leader)",
+        team: "green",
+        isPlayer: true,
+        model: playerModel,
+        position: playerModel.root.position,
+        velocity: new BABYLON.Vector3(0, 0, 0),
+        isGrounded: true,
+        yaw: 0,
+        pitch: 0.04,
+        speed: 9.6,
+        radius: 0.72,
+        health: 100,
+        maxHealth: 100,
+        alive: true,
+        fireCooldown: 0,
+        fireRate: 0.2,
+        walkCycle: 0,
+        idleClock: 0,
+        moveBlend: 0,
+        fallProgress: 0,
+        fallDir: 1,
+        fallTwist: 0.3,
+        strafeDir: 1,
+        strafeTimer: 1.5
+      };
+      playerModel.hitbox.metadata = { soldier: player };
+      animateSoldier(player, 0.016, false, 0);
+      soldiers.push(player);
+
+      // 2. Spawn Friendly AI Green Teammates
+      for (let i = 0; i < configuredFriendlyCount; i++) {
+        const row = Math.floor(i / 4);
+        const col = i % 4;
+        const offsetX = (col - 1.5) * 8.5 + (row % 2 === 0 ? 2 : -2);
+        const offsetZ = -28 - row * 5.2;
+        const pt = findSafeSpawnPoint(offsetX, offsetZ);
+
+        const model = createPlasticSoldier("green", i + 1, true);
+        model.root.position.set(pt.x, getSandHeight(pt.x, pt.z), pt.z);
 
         const unit = {
-          name: sp.name,
+          name: "Green " + (CALLSIGNS[i] || "#" + (i + 1)),
           team: "green",
-          isPlayer: sp.isPlayer,
+          isPlayer: false,
           model,
           position: model.root.position,
           velocity: new BABYLON.Vector3(0, 0, 0),
           isGrounded: true,
           yaw: 0,
           pitch: 0.04,
-          speed: sp.isPlayer ? 9.6 : 5.5 + Math.random() * 0.6,
+          speed: 5.5 + Math.random() * 0.6,
           radius: 0.72,
           health: 100,
           maxHealth: 100,
           alive: true,
-          fireCooldown: 0,
-          fireRate: sp.isPlayer ? 0.2 : 0.72 + Math.random() * 0.35,
+          fireCooldown: 0.3 + Math.random() * 0.6,
+          fireRate: 0.72 + Math.random() * 0.35,
           walkCycle: Math.random() * 6,
           idleClock: Math.random() * 6,
           moveBlend: 0,
@@ -1443,20 +1862,27 @@
           strafeTimer: 1.5 + Math.random() * 2.0
         };
         model.hitbox.metadata = { soldier: unit };
-
+        animateSoldier(unit, 0.016, false, 0);
         soldiers.push(unit);
-        if (sp.isPlayer) player = unit;
-      });
+      }
 
-      // Spawn Tan Squad (faces -Z toward Green Squad)
-      TAN_SPAWNS.forEach((sp, idx) => {
-        const model = createPlasticSoldier("tan", idx, true);
-        const y = getSandHeight(sp.x, sp.z);
-        model.root.position.set(sp.x, y, sp.z);
+      // 3. Spawn Enemy Tan Soldiers
+      for (let i = 0; i < configuredEnemyCount; i++) {
+        const row = Math.floor(i / 4);
+        const colsInRow = Math.min(4, configuredEnemyCount - row * 4);
+        const col = i % 4;
+        const spread = Math.max(1, colsInRow - 1);
+        const offsetX =
+          colsInRow === 1 ? 0 : ((col / spread) - 0.5) * 32 + (row % 2) * 3;
+        const offsetZ = 27 + row * 5.2;
+        const pt = findSafeSpawnPoint(offsetX, offsetZ);
+
+        const model = createPlasticSoldier("tan", i, true);
+        model.root.position.set(pt.x, getSandHeight(pt.x, pt.z), pt.z);
         model.root.rotation.y = Math.PI;
 
         const unit = {
-          name: sp.name,
+          name: "Tan " + (i + 1),
           team: "tan",
           isPlayer: false,
           model,
@@ -1482,11 +1908,10 @@
           strafeTimer: 1.5 + Math.random() * 2.0
         };
         model.hitbox.metadata = { soldier: unit };
-
+        animateSoldier(unit, 0.016, false, 0);
         soldiers.push(unit);
-      });
+      }
 
-      // Reset beach ball to its starting spot
       if (physicsBall) {
         const bx = 13;
         const bz = -5;
@@ -1518,7 +1943,8 @@
 
     window.addEventListener("keydown", (e) => {
       if (e.code in keys) keys[e.code] = true;
-      if (e.code === "KeyR" && gameEnded) resetGame();
+      if (e.code === "KeyR" && gameEnded && !isSetupOpen) resetGame();
+      if (e.code === "KeyM") openSetupModal();
     });
 
     window.addEventListener("keyup", (e) => {
@@ -1526,13 +1952,13 @@
     });
 
     canvas.addEventListener("click", () => {
-      if (!gameEnded && document.pointerLockElement !== canvas) {
+      if (!gameEnded && !isSetupOpen && document.pointerLockElement !== canvas) {
         canvas.requestPointerLock();
       }
     });
 
     window.addEventListener("mousedown", (e) => {
-      if (e.button === 0 && !gameEnded) isMouseDown = true;
+      if (e.button === 0 && !gameEnded && !isSetupOpen) isMouseDown = true;
     });
 
     window.addEventListener("mouseup", (e) => {
@@ -1540,7 +1966,7 @@
     });
 
     window.addEventListener("mousemove", (e) => {
-      if (gameEnded || !player) return;
+      if (gameEnded || isSetupOpen || !player) return;
       const sensitivity = 0.0026;
       player.yaw += e.movementX * sensitivity;
       player.pitch = Math.max(
@@ -1886,22 +2312,101 @@
     }
 
     // =========================================================================
-    // 11. HEALTH, SCOREBOARD HUD, AND WIN / GAME OVER LOGIC
+    // 11. HEALTH, SCOREBOARD HUD, TEAM SETUP MODAL & WIN / GAME OVER LOGIC
     // =========================================================================
     const healthValueEl = document.getElementById("health-value");
     const healthBarFillEl = document.getElementById("health-bar-fill");
     const greenCountEl = document.getElementById("green-count");
+    const greenTotalEl = document.getElementById("green-total");
     const tanCountEl = document.getElementById("tan-count");
+    const tanTotalEl = document.getElementById("tan-total");
     const squadListEl = document.getElementById("squad-list");
     const endMessageEl = document.getElementById("end-message");
     const endTitleEl = document.getElementById("end-title");
     const endSubtitleEl = document.getElementById("end-subtitle");
     const restartBtn = document.getElementById("restart-btn");
+    const setupAgainBtn = document.getElementById("setup-again-btn");
 
-    restartBtn.addEventListener("click", resetGame);
+    // Setup modal elements
+    const setupModalEl = document.getElementById("setup-modal");
+    const friendlyInputEl = document.getElementById("friendly-input");
+    const enemyInputEl = document.getElementById("enemy-input");
+    const friendlySummaryEl = document.getElementById("friendly-summary");
+    const enemySummaryEl = document.getElementById("enemy-summary");
+    const startMatchBtn = document.getElementById("start-match-btn");
+
+    function clampInt(val, min, max, fallback) {
+      const n = parseInt(val, 10);
+      if (Number.isNaN(n)) return fallback;
+      return Math.max(min, Math.min(max, n));
+    }
+
+    function refreshSetupSummaries() {
+      const fCount = clampInt(friendlyInputEl.value, 0, 12, 3);
+      const eCount = clampInt(enemyInputEl.value, 1, 16, 4);
+      friendlyInputEl.value = fCount;
+      enemyInputEl.value = eCount;
+      friendlySummaryEl.textContent =
+        fCount === 0
+          ? "Solo mission (Just You)"
+          : `You + ${fCount} Friendly = ${fCount + 1} Green Total`;
+      enemySummaryEl.textContent =
+        eCount === 1
+          ? "1 Bad Guy to eliminate"
+          : `${eCount} Bad Guys to eliminate`;
+    }
+
+    document.getElementById("friendly-minus").addEventListener("click", () => {
+      friendlyInputEl.value = clampInt(friendlyInputEl.value, 0, 12, 3) - 1;
+      refreshSetupSummaries();
+    });
+    document.getElementById("friendly-plus").addEventListener("click", () => {
+      friendlyInputEl.value = clampInt(friendlyInputEl.value, 0, 12, 3) + 1;
+      refreshSetupSummaries();
+    });
+    document.getElementById("enemy-minus").addEventListener("click", () => {
+      enemyInputEl.value = clampInt(enemyInputEl.value, 1, 16, 4) - 1;
+      refreshSetupSummaries();
+    });
+    document.getElementById("enemy-plus").addEventListener("click", () => {
+      enemyInputEl.value = clampInt(enemyInputEl.value, 1, 16, 4) + 1;
+      refreshSetupSummaries();
+    });
+    friendlyInputEl.addEventListener("change", refreshSetupSummaries);
+    enemyInputEl.addEventListener("change", refreshSetupSummaries);
+
+    function openSetupModal() {
+      isSetupOpen = true;
+      isMouseDown = false;
+      endMessageEl.style.display = "none";
+      setupModalEl.style.display = "block";
+      refreshSetupSummaries();
+      if (document.pointerLockElement) {
+        document.exitPointerLock();
+      }
+    }
+
+    startMatchBtn.addEventListener("click", () => {
+      refreshSetupSummaries();
+      configuredFriendlyCount = clampInt(friendlyInputEl.value, 0, 12, 3);
+      configuredEnemyCount = clampInt(enemyInputEl.value, 1, 16, 4);
+      setupModalEl.style.display = "none";
+      isSetupOpen = false;
+      resetGame();
+      canvas.requestPointerLock();
+    });
+
+    restartBtn.addEventListener("click", () => {
+      isSetupOpen = false;
+      setupModalEl.style.display = "none";
+      resetGame();
+      canvas.requestPointerLock();
+    });
+
+    setupAgainBtn.addEventListener("click", openSetupModal);
 
     function applyDamage(target, amount, shotDir) {
-      if (!target.alive || gameEnded) return;
+      if (!target.alive || gameEnded || isSetupOpen) return;
 
       target.health = Math.max(0, target.health - amount);
       target.model.flinchTimer = 1.0;
@@ -1944,10 +2449,15 @@
       else if (hp > 25) healthBarFillEl.style.backgroundColor = "#f0ad4e";
       else healthBarFillEl.style.backgroundColor = "#d9534f";
 
-      const greenAlive = soldiers.filter((s) => s.team === "green" && s.alive).length;
-      const tanAlive = soldiers.filter((s) => s.team === "tan" && s.alive).length;
+      const greenAll = soldiers.filter((s) => s.team === "green");
+      const tanAll = soldiers.filter((s) => s.team === "tan");
+      const greenAlive = greenAll.filter((s) => s.alive).length;
+      const tanAlive = tanAll.filter((s) => s.alive).length;
+
       greenCountEl.textContent = greenAlive;
+      greenTotalEl.textContent = greenAll.length;
       tanCountEl.textContent = tanAlive;
+      tanTotalEl.textContent = tanAll.length;
 
       const teammates = soldiers.filter((s) => s.team === "green" && !s.isPlayer);
       squadListEl.innerHTML = teammates
@@ -1992,7 +2502,7 @@
         endTitleEl.textContent = "VICTORY!";
         endTitleEl.style.color = "#8df57e";
         endSubtitleEl.textContent =
-          "Your Green Squad eliminated all 4 Tan Soldiers in the sandbox!";
+          `Your Green Squad eliminated all ${configuredEnemyCount} Tan Soldier${configuredEnemyCount === 1 ? "" : "s"}!`;
       } else {
         endTitleEl.textContent = "GAME OVER";
         endTitleEl.style.color = "#ff6b6b";
@@ -2145,7 +2655,7 @@
 
       // ----- PLAYER UPDATE -----
       if (player) {
-        if (player.alive && !gameEnded) {
+        if (player.alive && !gameEnded && !isSetupOpen) {
           player.model.root.rotation.y = player.yaw;
 
           const forward = new BABYLON.Vector3(
@@ -2200,10 +2710,10 @@
         }
       }
 
-      // ----- AI SQUADS UPDATE (3 GREEN TEAMMATES + 4 TAN ENEMIES) -----
+      // ----- AI SQUADS UPDATE (FRIENDLY GREEN TEAMMATES + TAN ENEMIES) -----
       for (const s of soldiers) {
         if (s.isPlayer) continue;
-        if (gameEnded && s.alive) {
+        if ((gameEnded || isSetupOpen) && s.alive) {
           s.moveBlend = Math.max(0, s.moveBlend - dt * 4);
           updateSoldierPhysicsAndCollisions(s, dt);
           animateSoldier(s, dt, false, 0);
