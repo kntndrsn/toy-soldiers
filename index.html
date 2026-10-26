@@ -21,7 +21,10 @@
     }
 
     canvas {
+      width: 100%;
+      height: 100%;
       display: block;
+      outline: none;
     }
 
     /* HUD Overlay */
@@ -216,12 +219,14 @@
   </style>
 </head>
 <body>
+  <canvas id="renderCanvas"></canvas>
+
   <!-- On-Screen HUD -->
   <div id="hud">
     <div id="instructions">
-      <strong>BACKYARD SANDBOX: 4 vs 4</strong><br />
-      <strong>WASD</strong> : Move Green Soldier<br />
-      <strong>Mouse</strong> : Aim / Look (Click to lock cursor)<br />
+      <strong>BACKYARD SANDBOX: 4 vs 4 (Babylon.js)</strong><br />
+      <strong>WASD</strong> : Move Green Soldier &nbsp;|&nbsp; <strong>Shift</strong> : Hop<br />
+      <strong>Mouse</strong> : Aim / Look (Click canvas to lock cursor)<br />
       <strong>Left-Click / Space</strong> : Fire Rifle<br />
       <strong>Goal</strong> : Lead your 4-man Green Squad to defeat the 4 Tan Soldiers
     </div>
@@ -249,119 +254,146 @@
     </div>
   </div>
 
-  <!-- Three.js from CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Babylon.js from CDN -->
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
 
   <script>
     // =========================================================================
-    // 1. SCENE, CAMERA, AND RENDERER SETUP
+    // 1. BABYLON ENGINE, SCENE, CAMERA & TONE MAPPING
     // =========================================================================
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x82c8f5);
-    scene.fog = new THREE.Fog(0x82c8f5, 60, 165);
+    const canvas = document.getElementById("renderCanvas");
+    const engine = new BABYLON.Engine(canvas, true, {
+      preserveDrawingBuffer: true,
+      stencil: true
+    });
 
-    const camera = new THREE.PerspectiveCamera(
-      60,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      250
+    const scene = new BABYLON.Scene(engine);
+    scene.clearColor = new BABYLON.Color4(0.51, 0.78, 0.96, 1.0);
+    scene.ambientColor = new BABYLON.Color3(0.35, 0.35, 0.32);
+
+    // Atmospheric distance fog
+    scene.fogMode = BABYLON.Scene.FOGMODE_LINEAR;
+    scene.fogColor = new BABYLON.Color3(0.56, 0.81, 0.96);
+    scene.fogStart = 65;
+    scene.fogEnd = 175;
+
+    // ACES Filmic Tone Mapping for realistic glossy plastic highlights
+    scene.imageProcessingConfiguration.toneMappingEnabled = true;
+    scene.imageProcessingConfiguration.toneMappingType =
+      BABYLON.ImageProcessingConfiguration.TONEMAPPING_ACES;
+    scene.imageProcessingConfiguration.exposure = 1.1;
+    scene.imageProcessingConfiguration.contrast = 1.16;
+
+    const camera = new BABYLON.FreeCamera(
+      "thirdPersonCamera",
+      new BABYLON.Vector3(0, 4, -36),
+      scene
     );
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    document.body.appendChild(renderer.domElement);
+    camera.fov = 1.02;
+    camera.minZ = 0.1;
+    camera.maxZ = 260;
 
     // =========================================================================
-    // 2. LIGHTING
+    // 2. LIGHTING & SOFT PCF SHADOWS
     // =========================================================================
-    const hemiLight = new THREE.HemisphereLight(0xebf8ff, 0xc7a66b, 0.65);
-    scene.add(hemiLight);
+    const hemiLight = new BABYLON.HemisphericLight(
+      "hemiLight",
+      new BABYLON.Vector3(0, 1, 0),
+      scene
+    );
+    hemiLight.diffuse = new BABYLON.Color3(0.95, 0.98, 1.0);
+    hemiLight.groundColor = new BABYLON.Color3(0.75, 0.62, 0.4);
+    hemiLight.intensity = 0.75;
 
-    const sunLight = new THREE.DirectionalLight(0xfff4d6, 0.95);
-    sunLight.position.set(42, 65, 34);
-    sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 2048;
-    sunLight.shadow.mapSize.height = 2048;
-    sunLight.shadow.camera.near = 5;
-    sunLight.shadow.camera.far = 160;
-    const shadowExtent = 56;
-    sunLight.shadow.camera.left = -shadowExtent;
-    sunLight.shadow.camera.right = shadowExtent;
-    sunLight.shadow.camera.top = shadowExtent;
-    sunLight.shadow.camera.bottom = -shadowExtent;
-    scene.add(sunLight);
+    const sunLight = new BABYLON.DirectionalLight(
+      "sunLight",
+      new BABYLON.Vector3(-0.55, -0.85, -0.45).normalize(),
+      scene
+    );
+    sunLight.position = new BABYLON.Vector3(46, 72, 42);
+    sunLight.diffuse = new BABYLON.Color3(1.0, 0.96, 0.86);
+    sunLight.specular = new BABYLON.Color3(1.0, 0.95, 0.85);
+    sunLight.intensity = 1.45;
 
-    // =========================================================================
-    // 3. MATERIALS (PLASTIC SOLDIERS, SAND, WOOD, AND SANDBOX TOYS)
-    // =========================================================================
-    const greenPlasticMat = new THREE.MeshPhongMaterial({
-      color: 0x2a7a22,
-      specular: 0x88bb80,
-      shininess: 75
-    });
+    const shadowGen = new BABYLON.ShadowGenerator(2048, sunLight);
+    shadowGen.usePercentageCloserFiltering = true;
+    shadowGen.filteringQuality = BABYLON.ShadowGenerator.QUALITY_MEDIUM;
+    shadowGen.bias = 0.0007;
 
-    const greenDarkPlasticMat = new THREE.MeshPhongMaterial({
-      color: 0x1b4f15,
-      specular: 0x669960,
-      shininess: 85
-    });
-
-    const tanPlasticMat = new THREE.MeshPhongMaterial({
-      color: 0xd0a864,
-      specular: 0xffe8bd,
-      shininess: 75
-    });
-
-    const tanDarkPlasticMat = new THREE.MeshPhongMaterial({
-      color: 0x99763c,
-      specular: 0xffe0b0,
-      shininess: 85
-    });
-
-    // Toy materials
-    const redToyMat = new THREE.MeshPhongMaterial({ color: 0xe0352b, specular: 0xffaaaa, shininess: 90 });
-    const blueToyMat = new THREE.MeshPhongMaterial({ color: 0x2469d9, specular: 0xaaccff, shininess: 90 });
-    const yellowToyMat = new THREE.MeshPhongMaterial({ color: 0xf2bf18, specular: 0xfff0aa, shininess: 90 });
-    const tealToyMat = new THREE.MeshPhongMaterial({ color: 0x19a89d, specular: 0xaaf5ef, shininess: 90 });
-    const whiteToyMat = new THREE.MeshPhongMaterial({ color: 0xf4f4f4, specular: 0xffffff, shininess: 95 });
-    const tireMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+    // Dynamic muzzle flash point light
+    const muzzleLight = new BABYLON.PointLight(
+      "muzzleLight",
+      new BABYLON.Vector3(0, -10, 0),
+      scene
+    );
+    muzzleLight.diffuse = new BABYLON.Color3(1.0, 0.85, 0.35);
+    muzzleLight.intensity = 0;
+    muzzleLight.range = 9;
 
     // =========================================================================
-    // 4. UNEVEN SANDBOX TERRAIN & WOODEN BORDER
+    // 3. PBR CLEARCOAT PLASTIC & SANDBOX MATERIALS
+    // =========================================================================
+    function createPlasticPBR(name, hexColor, roughness = 0.25) {
+      const mat = new BABYLON.PBRMaterial(name, scene);
+      mat.albedoColor = BABYLON.Color3.FromHexString(hexColor);
+      mat.metallic = 0.04;
+      mat.roughness = roughness;
+      mat.clearCoat.isEnabled = true;
+      mat.clearCoat.intensity = 0.92;
+      mat.clearCoat.roughness = 0.12;
+      return mat;
+    }
+
+    // Soldier glossy injection-molded plastic materials
+    const greenPlasticMat = createPlasticPBR("greenPlastic", "#287c22", 0.24);
+    const greenDarkPlasticMat = createPlasticPBR("greenDarkPlastic", "#195214", 0.2);
+    const tanPlasticMat = createPlasticPBR("tanPlastic", "#d2a862", 0.24);
+    const tanDarkPlasticMat = createPlasticPBR("tanDarkPlastic", "#9c7638", 0.2);
+
+    // Colorful Sandbox Toy PBR materials
+    const redToyMat = createPlasticPBR("redToy", "#e5342b", 0.18);
+    const blueToyMat = createPlasticPBR("blueToy", "#2268dc", 0.18);
+    const yellowToyMat = createPlasticPBR("yellowToy", "#f5c218", 0.18);
+    const tealToyMat = createPlasticPBR("tealToy", "#17a89c", 0.18);
+    const whiteToyMat = createPlasticPBR("whiteToy", "#f4f4f4", 0.15);
+
+    const tireMat = new BABYLON.StandardMaterial("tireMat", scene);
+    tireMat.diffuseColor = new BABYLON.Color3(0.14, 0.14, 0.15);
+    tireMat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+
+    const flashMat = new BABYLON.StandardMaterial("flashMat", scene);
+    flashMat.emissiveColor = new BABYLON.Color3(1.0, 0.92, 0.38);
+    flashMat.disableLighting = true;
+
+    // =========================================================================
+    // 4. UNEVEN SANDBOX TERRAIN, NORMAL CALCULATION & WOODEN FRAME
     // =========================================================================
     const WORLD_LIMIT = 44; // Inner sandbox half-size
-    const obstacles = [];   // Bounding boxes for movement collision
-    const shootableMeshes = []; // Meshes that block bullets (terrain + toys)
+    const obstacles = [];   // Static toy bounding boxes for movement collision
 
-    // Analytical height function for uneven sand dunes, hollows, and mounds
+    // Analytical height function for sculpted sand dunes, hills, and hollows
     function getSandHeight(x, z) {
-      // Clamp within sandbox when sampling
       const cx = Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, x));
       const cz = Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, z));
 
-      // Rolling sand dunes
       let h =
-        Math.sin(cx * 0.085) * Math.cos(cz * 0.08) * 1.15 +
-        Math.sin((cx + cz) * 0.055) * 0.75 +
-        Math.cos(cx * 0.17 - cz * 0.14) * 0.32 +
-        Math.sin(cx * 0.35) * Math.sin(cz * 0.35) * 0.08;
+        Math.sin(cx * 0.085) * Math.cos(cz * 0.08) * 1.18 +
+        Math.sin((cx + cz) * 0.055) * 0.78 +
+        Math.cos(cx * 0.17 - cz * 0.14) * 0.34 +
+        Math.sin(cx * 0.34) * Math.sin(cz * 0.34) * 0.09;
 
-      // Central sculpted sandcastle hill
-      const distCenter = Math.hypot(cx - 0, cz + 2);
+      // Central sandcastle hill
+      const distCenter = Math.hypot(cx - 0, cz - 2);
       h += Math.exp(-(distCenter * distCenter) / 95) * 1.65;
 
-      // Northwest sand mound (near dump truck)
-      const distNW = Math.hypot(cx + 18, cz + 15);
+      // Northwest dump truck sand mound
+      const distNW = Math.hypot(cx + 18, cz - 14);
       h += Math.exp(-(distNW * distNW) / 70) * 1.45;
 
-      // Southeast scooped hollow (dug out with shovel)
-      const distSE = Math.hypot(cx - 16, cz - 14);
+      // Southeast dug-out shovel hollow
+      const distSE = Math.hypot(cx - 16, cz + 14);
       h -= Math.exp(-(distSE * distSE) / 60) * 1.1;
 
-      // Taper slightly near wooden sandbox walls
       const edgeFade = Math.min(
         1,
         Math.min(WORLD_LIMIT - Math.abs(cx), WORLD_LIMIT - Math.abs(cz)) / 4
@@ -370,18 +402,26 @@
       return Math.max(-0.9, h * Math.max(0.2, edgeFade));
     }
 
-    // Generate procedural sand grain texture
-    function createSandTexture() {
-      const canvas = document.createElement("canvas");
-      canvas.width = 256;
-      canvas.height = 256;
-      const ctx = canvas.getContext("2d");
+    // Surface normal of the sand at (x, z) for physics rolling & ragdoll tilt
+    function getSandNormal(x, z) {
+      const eps = 0.25;
+      const hL = getSandHeight(x - eps, z);
+      const hR = getSandHeight(x + eps, z);
+      const hD = getSandHeight(x, z - eps);
+      const hU = getSandHeight(x, z + eps);
+      return new BABYLON.Vector3(hL - hR, 2 * eps, hD - hU).normalize();
+    }
 
-      ctx.fillStyle = "#e2c178";
+    // Procedural sand grain texture using Babylon DynamicTexture
+    function createSandMaterial() {
+      const dynTex = new BABYLON.DynamicTexture("sandTex", 256, scene, true);
+      const ctx = dynTex.getContext();
+
+      ctx.fillStyle = "#e3c27a";
       ctx.fillRect(0, 0, 256, 256);
 
       const palette = ["#d4b066", "#edd08a", "#c8a258", "#f2d899", "#bfa05a"];
-      for (let i = 0; i < 4500; i++) {
+      for (let i = 0; i < 5000; i++) {
         ctx.fillStyle = palette[i % palette.length];
         const sz = (i % 3) + 1;
         ctx.fillRect(
@@ -391,80 +431,69 @@
           sz
         );
       }
+      dynTex.update();
+      dynTex.wrapU = BABYLON.Texture.WRAP_ADDRESSMODE;
+      dynTex.wrapV = BABYLON.Texture.WRAP_ADDRESSMODE;
+      dynTex.uScale = 18;
+      dynTex.vScale = 18;
 
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.wrapS = THREE.RepeatWrapping;
-      texture.wrapT = THREE.RepeatWrapping;
-      texture.repeat.set(18, 18);
-      return texture;
+      const mat = new BABYLON.StandardMaterial("sandMat", scene);
+      mat.diffuseTexture = dynTex;
+      mat.specularColor = new BABYLON.Color3(0.22, 0.18, 0.11);
+      mat.specularPower = 24;
+      return mat;
     }
 
-    // Generate procedural wood plank texture for sandbox frame
-    function createWoodTexture() {
-      const canvas = document.createElement("canvas");
-      canvas.width = 256;
-      canvas.height = 64;
-      const ctx = canvas.getContext("2d");
+    const sandMat = createSandMaterial();
+    const sandCastleMat = sandMat.clone("sandCastleMat");
+    sandCastleMat.diffuseColor = new BABYLON.Color3(0.92, 0.8, 0.56);
 
+    // Create high-density ground mesh and displace vertices with getSandHeight
+    const sandMesh = BABYLON.MeshBuilder.CreateGround(
+      "sandGround",
+      {
+        width: WORLD_LIMIT * 2,
+        height: WORLD_LIMIT * 2,
+        subdivisions: 100,
+        updatable: true
+      },
+      scene
+    );
+
+    const sandPositions = sandMesh.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+    const sandNormals = sandMesh.getVerticesData(BABYLON.VertexBuffer.NormalKind);
+    const sandIndices = sandMesh.getIndices();
+
+    for (let i = 0; i < sandPositions.length; i += 3) {
+      sandPositions[i + 1] = getSandHeight(sandPositions[i], sandPositions[i + 2]);
+    }
+    BABYLON.VertexData.ComputeNormals(sandPositions, sandIndices, sandNormals);
+    sandMesh.updateVerticesData(BABYLON.VertexBuffer.PositionKind, sandPositions);
+    sandMesh.updateVerticesData(BABYLON.VertexBuffer.NormalKind, sandNormals);
+    sandMesh.refreshBoundingInfo();
+    sandMesh.material = sandMat;
+    sandMesh.receiveShadows = true;
+    sandMesh.metadata = { isEnvironment: true, isSand: true };
+
+    // Wooden Sandbox Border Walls & Backyard Lawn
+    function buildSandboxFrame() {
+      const woodTex = new BABYLON.DynamicTexture("woodTex", { width: 256, height: 64 }, scene, true);
+      const ctx = woodTex.getContext();
       ctx.fillStyle = "#8c5828";
       ctx.fillRect(0, 0, 256, 64);
-
-      for (let i = 0; i < 90; i++) {
-        ctx.fillStyle = i % 2 === 0 ? "rgba(60, 32, 10, 0.25)" : "rgba(180, 120, 65, 0.2)";
+      for (let i = 0; i < 95; i++) {
+        ctx.fillStyle = i % 2 === 0 ? "rgba(60, 32, 10, 0.26)" : "rgba(185, 125, 68, 0.22)";
         ctx.fillRect(0, Math.floor(Math.random() * 64), 256, 2);
       }
+      woodTex.update();
+      woodTex.uScale = 5;
 
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.wrapS = THREE.RepeatWrapping;
-      texture.wrapT = THREE.RepeatWrapping;
-      texture.repeat.set(6, 1);
-      return texture;
-    }
+      const woodMat = new BABYLON.StandardMaterial("woodMat", scene);
+      woodMat.diffuseTexture = woodTex;
+      woodMat.specularColor = new BABYLON.Color3(0.18, 0.12, 0.08);
 
-    const sandMat = new THREE.MeshPhongMaterial({
-      map: createSandTexture(),
-      specular: 0x3a301e,
-      shininess: 12
-    });
-
-    const sandCastleMat = new THREE.MeshPhongMaterial({
-      map: sandMat.map,
-      color: 0xdab66b,
-      specular: 0x2e2414,
-      shininess: 8
-    });
-
-    // Build high-res uneven sand mesh
-    const sandGeo = new THREE.PlaneGeometry(WORLD_LIMIT * 2, WORLD_LIMIT * 2, 96, 96);
-    sandGeo.rotateX(-Math.PI / 2);
-    const posAttr = sandGeo.attributes.position;
-    for (let i = 0; i < posAttr.count; i++) {
-      const vx = posAttr.getX(i);
-      const vz = posAttr.getZ(i);
-      posAttr.setY(i, getSandHeight(vx, vz));
-    }
-    sandGeo.computeVertexNormals();
-
-    const sandMesh = new THREE.Mesh(sandGeo, sandMat);
-    sandMesh.receiveShadow = true;
-    scene.add(sandMesh);
-    shootableMeshes.push(sandMesh);
-
-    // Outer backyard lawn surrounding the wooden sandbox
-    const lawnGeo = new THREE.RingGeometry(WORLD_LIMIT * 1.38, 180, 32);
-    lawnGeo.rotateX(-Math.PI / 2);
-    lawnGeo.rotateY(Math.PI / 4);
-    const lawnMat = new THREE.MeshLambertMaterial({ color: 0x487a32 });
-    const lawnMesh = new THREE.Mesh(lawnGeo, lawnMat);
-    lawnMesh.position.y = -0.5;
-    lawnMesh.receiveShadow = true;
-    scene.add(lawnMesh);
-
-    // Wooden Sandbox Border Walls & Corner Seats
-    function buildSandboxFrame() {
-      const woodMat = new THREE.MeshLambertMaterial({ map: createWoodTexture() });
       const wallThickness = 2.4;
-      const wallHeight = 3.4;
+      const wallHeight = 3.5;
       const fullSpan = WORLD_LIMIT * 2 + wallThickness * 2;
 
       const sides = [
@@ -474,235 +503,301 @@
         { x: WORLD_LIMIT + wallThickness / 2, z: 0, w: wallThickness, d: WORLD_LIMIT * 2 }
       ];
 
-      sides.forEach((s) => {
-        const wall = new THREE.Mesh(
-          new THREE.BoxGeometry(s.w, wallHeight, s.d),
-          woodMat
+      sides.forEach((s, idx) => {
+        const wall = BABYLON.MeshBuilder.CreateBox(
+          "sandboxWall_" + idx,
+          { width: s.w, height: wallHeight, depth: s.d },
+          scene
         );
         wall.position.set(s.x, wallHeight / 2 - 0.5, s.z);
-        wall.castShadow = true;
-        wall.receiveShadow = true;
-        scene.add(wall);
+        wall.material = woodMat;
+        wall.receiveShadows = true;
+        shadowGen.addShadowCaster(wall);
+        wall.metadata = { isEnvironment: true };
       });
 
-      // Corner bench triangles/seats
-      const cornerCoords = [
+      // Corner bench seats on the sandbox frame
+      const corners = [
         [-WORLD_LIMIT, -WORLD_LIMIT],
         [WORLD_LIMIT, -WORLD_LIMIT],
         [-WORLD_LIMIT, WORLD_LIMIT],
         [WORLD_LIMIT, WORLD_LIMIT]
       ];
-      cornerCoords.forEach(([cx, cz]) => {
-        const seat = new THREE.Mesh(new THREE.BoxGeometry(6, 0.5, 6), woodMat);
+      corners.forEach(([cx, cz], idx) => {
+        const seat = BABYLON.MeshBuilder.CreateBox(
+          "cornerSeat_" + idx,
+          { width: 6.2, height: 0.5, depth: 6.2 },
+          scene
+        );
         seat.position.set(
           cx + (cx < 0 ? 1.2 : -1.2),
           wallHeight - 0.35,
           cz + (cz < 0 ? 1.2 : -1.2)
         );
-        seat.castShadow = true;
-        seat.receiveShadow = true;
-        scene.add(seat);
+        seat.material = woodMat;
+        seat.receiveShadows = true;
+        shadowGen.addShadowCaster(seat);
+        seat.metadata = { isEnvironment: true };
+      });
+
+      // Surrounding backyard grass outside the sandbox
+      const lawnMat = new BABYLON.StandardMaterial("lawnMat", scene);
+      lawnMat.diffuseColor = new BABYLON.Color3(0.28, 0.48, 0.2);
+      lawnMat.specularColor = BABYLON.Color3.Black();
+
+      const lawnPatches = [
+        { x: 0, z: -115, w: 320, d: 140 },
+        { x: 0, z: 115, w: 320, d: 140 },
+        { x: -115, z: 0, w: 140, d: 100 },
+        { x: 115, z: 0, w: 140, d: 100 }
+      ];
+      lawnPatches.forEach((lp, idx) => {
+        const g = BABYLON.MeshBuilder.CreateGround(
+          "lawn_" + idx,
+          { width: lp.w, height: lp.d },
+          scene
+        );
+        g.position.set(lp.x, -0.45, lp.z);
+        g.material = lawnMat;
+        g.isPickable = false;
       });
     }
 
     buildSandboxFrame();
 
     // =========================================================================
-    // 5. SANDBOX TOYS (SANDCASTLES, BUCKETS, TOY BRICKS, DUMP TRUCK, BALL)
+    // 5. SANDBOX TOYS (SANDCASTLE, DUMP TRUCK, BUCKETS, LEGO BRICKS, PHYSICS BALL)
     // =========================================================================
-    function registerObstacleObject(obj3D, centerX, centerZ, width, depth, height) {
-      obj3D.traverse((child) => {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-          shootableMeshes.push(child);
-        }
+    function registerToyObstacle(rootNode, centerX, centerZ, width, depth, height) {
+      rootNode.getChildMeshes().forEach((m) => {
+        m.receiveShadows = true;
+        shadowGen.addShadowCaster(m);
+        m.metadata = { isEnvironment: true, isToy: true };
       });
-      scene.add(obj3D);
 
       const baseH = getSandHeight(centerX, centerZ);
-      const box = new THREE.Box3(
-        new THREE.Vector3(centerX - width / 2, baseH - 1, centerZ - depth / 2),
-        new THREE.Vector3(centerX + width / 2, baseH + height, centerZ + depth / 2)
-      );
-      obstacles.push({ box });
+      obstacles.push({
+        minX: centerX - width / 2,
+        maxX: centerX + width / 2,
+        minZ: centerZ - depth / 2,
+        maxZ: centerZ + depth / 2,
+        maxY: baseH + height
+      });
     }
 
-    // Toy 1: Sculpted Sandcastle with Turrets & Flag
+    // Toy 1: Sculpted Sandcastle with Molded Towers & Flag
     function createSandcastle(x, z) {
-      const group = new THREE.Group();
+      const root = new BABYLON.TransformNode("sandcastle", scene);
       const groundY = getSandHeight(x, z);
-      group.position.set(x, groundY - 0.15, z);
+      root.position.set(x, groundY - 0.15, z);
 
-      // Main keep
-      const keep = new THREE.Mesh(new THREE.BoxGeometry(4.4, 2.5, 4.4), sandCastleMat);
+      const keep = BABYLON.MeshBuilder.CreateBox(
+        "keep",
+        { width: 4.4, height: 2.5, depth: 4.4 },
+        scene
+      );
       keep.position.y = 1.25;
-      group.add(keep);
+      keep.material = sandCastleMat;
+      keep.parent = root;
 
-      // 4 Corner molded bucket towers
       const towerOffsets = [
         [-2.1, -2.1],
         [2.1, -2.1],
         [-2.1, 2.1],
         [2.1, 2.1]
       ];
-      towerOffsets.forEach(([tx, tz]) => {
-        const tower = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.95, 1.15, 3.3, 12),
-          sandCastleMat
+      towerOffsets.forEach(([tx, tz], idx) => {
+        const tower = BABYLON.MeshBuilder.CreateCylinder(
+          "tower_" + idx,
+          { diameterTop: 1.9, diameterBottom: 2.3, height: 3.3, tessellation: 16 },
+          scene
         );
         tower.position.set(tx, 1.65, tz);
-        group.add(tower);
+        tower.material = sandCastleMat;
+        tower.parent = root;
 
-        // Crenellations on top
         for (let i = 0; i < 4; i++) {
           const angle = (i * Math.PI) / 2;
-          const merlon = new THREE.Mesh(
-            new THREE.BoxGeometry(0.4, 0.35, 0.4),
-            sandCastleMat
+          const merlon = BABYLON.MeshBuilder.CreateBox(
+            "merlon_" + idx + "_" + i,
+            { width: 0.42, height: 0.36, depth: 0.42 },
+            scene
           );
           merlon.position.set(
             tx + Math.cos(angle) * 0.65,
             3.45,
             tz + Math.sin(angle) * 0.65
           );
-          group.add(merlon);
+          merlon.material = sandCastleMat;
+          merlon.parent = root;
         }
       });
 
-      // Center spire with a little plastic flag
-      const spire = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.8, 1.1, 3.8, 12),
-        sandCastleMat
+      const spire = BABYLON.MeshBuilder.CreateCylinder(
+        "spire",
+        { diameterTop: 1.5, diameterBottom: 2.2, height: 3.9, tessellation: 16 },
+        scene
       );
-      spire.position.set(0, 1.9, 0);
-      group.add(spire);
+      spire.position.set(0, 1.95, 0);
+      spire.material = sandCastleMat;
+      spire.parent = root;
 
-      const pole = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.05, 0.05, 1.5, 6),
-        whiteToyMat
+      const pole = BABYLON.MeshBuilder.CreateCylinder(
+        "flagPole",
+        { diameter: 0.1, height: 1.6, tessellation: 8 },
+        scene
       );
-      pole.position.set(0, 4.4, 0);
-      group.add(pole);
+      pole.position.set(0, 4.45, 0);
+      pole.material = whiteToyMat;
+      pole.parent = root;
 
-      const flag = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.45, 0.06), redToyMat);
-      flag.position.set(0.4, 4.9, 0);
-      group.add(flag);
+      const flag = BABYLON.MeshBuilder.CreateBox(
+        "flag",
+        { width: 0.85, height: 0.48, depth: 0.07 },
+        scene
+      );
+      flag.position.set(0.42, 4.95, 0);
+      flag.material = redToyMat;
+      flag.parent = root;
 
-      registerObstacleObject(group, x, z, 6.2, 6.2, 4.2);
+      registerToyObstacle(root, x, z, 6.2, 6.2, 4.2);
     }
 
-    // Toy 2: Oversized LEGO-style Plastic Building Brick
+    // Toy 2: Oversized Glossy Plastic LEGO-Style Building Brick
     function createToyBrick(x, z, width, height, depth, studsX, studsZ, mat, rotY) {
-      const group = new THREE.Group();
+      const root = new BABYLON.TransformNode("toyBrick", scene);
       const groundY = getSandHeight(x, z);
-      group.position.set(x, groundY, z);
-      group.rotation.y = rotY || 0;
+      root.position.set(x, groundY, z);
+      root.rotation.y = rotY || 0;
 
-      const body = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), mat);
+      const body = BABYLON.MeshBuilder.CreateBox(
+        "brickBody",
+        { width, height, depth },
+        scene
+      );
       body.position.y = height / 2;
-      group.add(body);
+      body.material = mat;
+      body.parent = root;
 
-      const studRadius = Math.min(width / studsX, depth / studsZ) * 0.28;
-      const studGeo = new THREE.CylinderGeometry(studRadius, studRadius, 0.28, 12);
-
+      const studDiam = Math.min(width / studsX, depth / studsZ) * 0.56;
       for (let ix = 0; ix < studsX; ix++) {
         for (let iz = 0; iz < studsZ; iz++) {
-          const stud = new THREE.Mesh(studGeo, mat);
+          const stud = BABYLON.MeshBuilder.CreateCylinder(
+            "stud",
+            { diameter: studDiam, height: 0.3, tessellation: 14 },
+            scene
+          );
           const sx = -width / 2 + (width / studsX) * (ix + 0.5);
           const sz = -depth / 2 + (depth / studsZ) * (iz + 0.5);
-          stud.position.set(sx, height + 0.14, sz);
-          group.add(stud);
+          stud.position.set(sx, height + 0.15, sz);
+          stud.material = mat;
+          stud.parent = root;
         }
       }
 
       const spanX = Math.abs(width * Math.cos(rotY)) + Math.abs(depth * Math.sin(rotY));
       const spanZ = Math.abs(width * Math.sin(rotY)) + Math.abs(depth * Math.cos(rotY));
-      registerObstacleObject(group, x, z, spanX, spanZ, height + 0.3);
+      registerToyObstacle(root, x, z, spanX, spanZ, height + 0.3);
     }
 
-    // Toy 3: Plastic Beach Bucket (Upright or Tipped Over)
+    // Toy 3: Plastic Beach Bucket / Pail
     function createBeachBucket(x, z, mat, tipped, rotY) {
-      const group = new THREE.Group();
+      const root = new BABYLON.TransformNode("beachBucket", scene);
       const groundY = getSandHeight(x, z);
-      group.position.set(x, groundY, z);
-      group.rotation.y = rotY || 0;
+      root.position.set(x, groundY, z);
+      root.rotation.y = rotY || 0;
 
-      const bucketPivot = new THREE.Group();
-      group.add(bucketPivot);
+      const pivot = new BABYLON.TransformNode("bucketPivot", scene);
+      pivot.parent = root;
 
-      const body = new THREE.Mesh(
-        new THREE.CylinderGeometry(1.45, 1.05, 2.7, 16),
-        mat
+      const body = BABYLON.MeshBuilder.CreateCylinder(
+        "bucketBody",
+        { diameterTop: 2.9, diameterBottom: 2.1, height: 2.7, tessellation: 20 },
+        scene
       );
       body.position.y = 1.35;
-      bucketPivot.add(body);
+      body.material = mat;
+      body.parent = pivot;
 
-      const rim = new THREE.Mesh(
-        new THREE.CylinderGeometry(1.56, 1.56, 0.28, 16),
-        mat
+      const rim = BABYLON.MeshBuilder.CreateTorus(
+        "bucketRim",
+        { diameter: 2.95, thickness: 0.24, tessellation: 20 },
+        scene
       );
-      rim.position.y = 2.6;
-      bucketPivot.add(rim);
+      rim.position.y = 2.65;
+      rim.material = mat;
+      rim.parent = pivot;
 
-      const handle = new THREE.Mesh(
-        new THREE.TorusGeometry(1.45, 0.09, 8, 16, Math.PI),
-        whiteToyMat
+      const handle = BABYLON.MeshBuilder.CreateTorus(
+        "bucketHandle",
+        { diameter: 2.9, thickness: 0.14, tessellation: 18 },
+        scene
       );
-      handle.position.y = 2.6;
-      handle.rotation.z = 0.4;
-      bucketPivot.add(handle);
+      handle.position.y = 2.65;
+      handle.rotation.x = Math.PI / 2 + 0.35;
+      handle.material = whiteToyMat;
+      handle.parent = pivot;
 
       if (tipped) {
-        bucketPivot.position.y = 1.25;
-        bucketPivot.rotation.z = Math.PI / 2 - 0.12;
+        pivot.position.y = 1.25;
+        pivot.rotation.z = Math.PI / 2 - 0.12;
       }
 
-      registerObstacleObject(group, x, z, 3.0, 3.0, 2.9);
+      registerToyObstacle(root, x, z, 3.0, 3.0, 2.9);
     }
 
     // Toy 4: Yellow Toy Dump Truck
     function createToyDumpTruck(x, z, rotY) {
-      const group = new THREE.Group();
+      const root = new BABYLON.TransformNode("dumpTruck", scene);
       const groundY = getSandHeight(x, z);
-      group.position.set(x, groundY + 0.1, z);
-      group.rotation.y = rotY || 0;
+      root.position.set(x, groundY + 0.1, z);
+      root.rotation.y = rotY || 0;
 
-      // Chassis
-      const chassis = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.6, 6.2), tireMat);
-      chassis.position.y = 0.85;
-      group.add(chassis);
-
-      // Cab
-      const cab = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.1, 2.2), yellowToyMat);
-      cab.position.set(0, 2.1, -1.8);
-      group.add(cab);
-
-      // Windshield cutout bar
-      const visor = new THREE.Mesh(new THREE.BoxGeometry(3.3, 0.35, 2.3), yellowToyMat);
-      visor.position.set(0, 3.1, -1.8);
-      group.add(visor);
-
-      // Dump bed
-      const bed = new THREE.Mesh(new THREE.BoxGeometry(3.5, 1.8, 3.8), yellowToyMat);
-      bed.position.set(0, 2.0, 1.3);
-      bed.rotation.x = -0.08;
-      group.add(bed);
-
-      // Sand pile inside the dump bed
-      const load = new THREE.Mesh(
-        new THREE.SphereGeometry(1.55, 10, 8),
-        sandCastleMat
+      const chassis = BABYLON.MeshBuilder.CreateBox(
+        "chassis",
+        { width: 3.4, height: 0.6, depth: 6.2 },
+        scene
       );
-      load.scale.set(1.0, 0.55, 1.15);
-      load.position.set(0, 2.75, 1.3);
-      group.add(load);
+      chassis.position.y = 0.85;
+      chassis.material = tireMat;
+      chassis.parent = root;
 
-      // 6 Chunky Wheels
-      const wheelGeo = new THREE.CylinderGeometry(0.85, 0.85, 0.65, 14);
-      wheelGeo.rotateZ(Math.PI / 2);
-      const hubGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.7, 10);
-      hubGeo.rotateZ(Math.PI / 2);
+      const cab = BABYLON.MeshBuilder.CreateBox(
+        "cab",
+        { width: 3.2, height: 2.1, depth: 2.2 },
+        scene
+      );
+      cab.position.set(0, 2.1, -1.8);
+      cab.material = yellowToyMat;
+      cab.parent = root;
+
+      const visor = BABYLON.MeshBuilder.CreateBox(
+        "visor",
+        { width: 3.35, height: 0.35, depth: 2.35 },
+        scene
+      );
+      visor.position.set(0, 3.1, -1.8);
+      visor.material = yellowToyMat;
+      visor.parent = root;
+
+      const bed = BABYLON.MeshBuilder.CreateBox(
+        "bed",
+        { width: 3.55, height: 1.85, depth: 3.85 },
+        scene
+      );
+      bed.position.set(0, 2.02, 1.3);
+      bed.rotation.x = -0.08;
+      bed.material = yellowToyMat;
+      bed.parent = root;
+
+      const sandLoad = BABYLON.MeshBuilder.CreateSphere(
+        "sandLoad",
+        { diameterX: 3.1, diameterY: 1.7, diameterZ: 3.5, segments: 12 },
+        scene
+      );
+      sandLoad.position.set(0, 2.75, 1.3);
+      sandLoad.material = sandCastleMat;
+      sandLoad.parent = root;
 
       const wheelPositions = [
         [-1.85, -1.9],
@@ -712,348 +807,456 @@
         [-1.85, 2.2],
         [1.85, 2.2]
       ];
-      wheelPositions.forEach(([wx, wz]) => {
-        const wheel = new THREE.Mesh(wheelGeo, tireMat);
+      wheelPositions.forEach(([wx, wz], idx) => {
+        const wheel = BABYLON.MeshBuilder.CreateCylinder(
+          "wheel_" + idx,
+          { diameter: 1.7, height: 0.65, tessellation: 16 },
+          scene
+        );
+        wheel.rotation.z = Math.PI / 2;
         wheel.position.set(wx, 0.85, wz);
-        group.add(wheel);
+        wheel.material = tireMat;
+        wheel.parent = root;
 
-        const hub = new THREE.Mesh(hubGeo, yellowToyMat);
+        const hub = BABYLON.MeshBuilder.CreateCylinder(
+          "hub_" + idx,
+          { diameter: 0.78, height: 0.7, tessellation: 12 },
+          scene
+        );
+        hub.rotation.z = Math.PI / 2;
         hub.position.set(wx, 0.85, wz);
-        group.add(hub);
+        hub.material = yellowToyMat;
+        hub.parent = root;
       });
 
-      registerObstacleObject(group, x, z, 5.2, 6.4, 3.4);
+      registerToyObstacle(root, x, z, 5.2, 6.4, 3.4);
     }
 
     // Toy 5: Giant Plastic Shovel Stuck in the Sand
     function createPlasticShovel(x, z, mat, rotY) {
-      const group = new THREE.Group();
+      const root = new BABYLON.TransformNode("shovel", scene);
       const groundY = getSandHeight(x, z);
-      group.position.set(x, groundY, z);
-      group.rotation.y = rotY || 0;
-      group.rotation.x = 0.45;
+      root.position.set(x, groundY, z);
+      root.rotation.y = rotY || 0;
+      root.rotation.x = 0.45;
 
-      const scoop = new THREE.Mesh(new THREE.BoxGeometry(2.1, 2.4, 0.35), mat);
+      const scoop = BABYLON.MeshBuilder.CreateBox(
+        "scoop",
+        { width: 2.1, height: 2.4, depth: 0.35 },
+        scene
+      );
       scoop.position.y = 0.8;
-      group.add(scoop);
+      scoop.material = mat;
+      scoop.parent = root;
 
-      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 3.6, 10), mat);
+      const shaft = BABYLON.MeshBuilder.CreateCylinder(
+        "shaft",
+        { diameter: 0.36, height: 3.6, tessellation: 12 },
+        scene
+      );
       shaft.position.y = 3.4;
-      group.add(shaft);
+      shaft.material = mat;
+      shaft.parent = root;
 
-      const grip = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.15, 8, 12), mat);
-      grip.position.y = 5.5;
-      group.add(grip);
+      const grip = BABYLON.MeshBuilder.CreateTorus(
+        "grip",
+        { diameter: 1.1, thickness: 0.28, tessellation: 14 },
+        scene
+      );
+      grip.position.y = 5.45;
+      grip.rotation.x = Math.PI / 2;
+      grip.material = mat;
+      grip.parent = root;
 
-      registerObstacleObject(group, x, z, 2.2, 2.2, 3.2);
+      registerToyObstacle(root, x, z, 2.2, 2.2, 3.2);
     }
 
-    // Toy 6: Colorful Beach Ball
-    function createBeachBall(x, z, radius) {
-      const canvas = document.createElement("canvas");
-      canvas.width = 256;
-      canvas.height = 128;
-      const ctx = canvas.getContext("2d");
+    // Toy 6: Dynamic Physics Beach Ball (rolls down sand dunes, bounces off soldiers & bullets!)
+    let physicsBall = null;
+
+    function createPhysicsBeachBall(x, z, radius) {
+      const dynTex = new BABYLON.DynamicTexture("ballTex", { width: 256, height: 128 }, scene, true);
+      const ctx = dynTex.getContext();
       const colors = ["#e63946", "#ffffff", "#1d6fd8", "#ffffff", "#f4c41c", "#ffffff"];
       const stripeW = 256 / colors.length;
       colors.forEach((c, idx) => {
         ctx.fillStyle = c;
         ctx.fillRect(idx * stripeW, 0, stripeW, 128);
       });
+      dynTex.update();
 
-      const tex = new THREE.CanvasTexture(canvas);
-      const ballMat = new THREE.MeshPhongMaterial({
-        map: tex,
-        specular: 0xffffff,
-        shininess: 95
-      });
+      const ballMat = new BABYLON.PBRMaterial("beachBallMat", scene);
+      ballMat.albedoTexture = dynTex;
+      ballMat.metallic = 0.02;
+      ballMat.roughness = 0.16;
+      ballMat.clearCoat.isEnabled = true;
+      ballMat.clearCoat.intensity = 1.0;
+      ballMat.clearCoat.roughness = 0.08;
 
-      const ball = new THREE.Mesh(new THREE.SphereGeometry(radius, 18, 16), ballMat);
+      const mesh = BABYLON.MeshBuilder.CreateSphere(
+        "physicsBeachBall",
+        { diameter: radius * 2, segments: 20 },
+        scene
+      );
       const groundY = getSandHeight(x, z);
-      ball.position.set(x, groundY + radius * 0.82, z);
-      ball.rotation.z = 0.35;
-      registerObstacleObject(ball, x, z, radius * 1.85, radius * 1.85, radius * 1.8);
+      mesh.position.set(x, groundY + radius, z);
+      mesh.material = ballMat;
+      mesh.receiveShadows = true;
+      shadowGen.addShadowCaster(mesh);
+      mesh.metadata = { isEnvironment: true, isPhysicsBall: true };
+
+      physicsBall = {
+        mesh,
+        radius,
+        velocity: new BABYLON.Vector3(0, 0, 0)
+      };
     }
 
     function populateSandboxWithToys() {
-      // Center sculpted sandcastle
-      createSandcastle(0, -2);
+      createSandcastle(0, 2);
+      createToyDumpTruck(-18, 14, 2.6);
 
-      // Toy dump truck on the northwest dune
-      createToyDumpTruck(-18, -14, 0.55);
+      createBeachBucket(15, 12, redToyMat, false, 0.3);
+      createBeachBucket(-14, -13, blueToyMat, true, 1.1);
+      createBeachBucket(22, -16, tealToyMat, false, -0.6);
 
-      // Colorful Beach Buckets
-      createBeachBucket(15, -12, redToyMat, false, 0.3);
-      createBeachBucket(-14, 13, blueToyMat, true, 1.1);
-      createBeachBucket(22, 16, tealToyMat, false, -0.6);
+      createToyBrick(-9, 18, 6.0, 2.1, 3.0, 4, 2, redToyMat, 0.18);
+      createToyBrick(10, 22, 6.0, 2.1, 3.0, 4, 2, blueToyMat, -0.22);
+      createToyBrick(-20, -2, 3.0, 2.3, 6.0, 2, 4, yellowToyMat, 0.12);
+      createToyBrick(20, 1, 3.0, 2.3, 6.0, 2, 4, redToyMat, -0.15);
+      createToyBrick(-7, -18, 6.0, 2.1, 3.0, 4, 2, tealToyMat, -0.1);
+      createToyBrick(9, -17, 6.0, 2.1, 3.0, 4, 2, yellowToyMat, 0.25);
 
-      // Oversized LEGO-style plastic building bricks for tactical cover
-      createToyBrick(-9, -18, 6.0, 2.1, 3.0, 4, 2, redToyMat, 0.18);
-      createToyBrick(10, -22, 6.0, 2.1, 3.0, 4, 2, blueToyMat, -0.22);
-      createToyBrick(-20, 2, 3.0, 2.3, 6.0, 2, 4, yellowToyMat, 0.12);
-      createToyBrick(20, -1, 3.0, 2.3, 6.0, 2, 4, redToyMat, -0.15);
-      createToyBrick(-7, 18, 6.0, 2.1, 3.0, 4, 2, tealToyMat, -0.1);
-      createToyBrick(9, 17, 6.0, 2.1, 3.0, 4, 2, yellowToyMat, 0.25);
-
-      // Beach ball & plastic shovel
-      createBeachBall(15, 5, 2.0);
-      createPlasticShovel(-11, -5, tealToyMat, 0.8);
+      createPhysicsBeachBall(13, -5, 1.85);
+      createPlasticShovel(-11, 5, tealToyMat, 0.8);
     }
 
     populateSandboxWithToys();
 
     // =========================================================================
-    // 6. ARTICULATED HUMAN-LIKE PLASTIC SOLDIER BUILDER & ANIMATOR
+    // 6. CAPSULE-SCULPTED HUMAN-LIKE SOLDIER BUILDER & ANIMATOR
     // =========================================================================
-    function createPlasticSoldier(team, labelText) {
+    // Built facing +Z in Babylon's left-handed coordinate system
+    function createPlasticSoldier(team, soldierIndex, showOverheadBar) {
       const isGreen = team === "green";
       const bodyMat = isGreen ? greenPlasticMat : tanPlasticMat;
       const darkMat = isGreen ? greenDarkPlasticMat : tanDarkPlasticMat;
+      const prefix = team + "_" + soldierIndex + "_";
 
-      const root = new THREE.Group();
+      const root = new BABYLON.TransformNode(prefix + "root", scene);
 
-      // Waist / Pelvis Root (allows vertical bobbing, hip sway, and kneeling/falling)
-      const pelvis = new THREE.Group();
+      // Pelvis / Hips Pivot
+      const pelvis = new BABYLON.TransformNode(prefix + "pelvis", scene);
       pelvis.position.y = 0.96;
-      root.add(pelvis);
+      pelvis.parent = root;
 
-      // Rounded hips
-      const hipMesh = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.28, 0.26, 0.24, 12),
-        bodyMat
+      const hipMesh = BABYLON.MeshBuilder.CreateCapsule(
+        prefix + "hips",
+        { radius: 0.21, height: 0.56, orientation: BABYLON.Vector3.Right(), tessellation: 12 },
+        scene
       );
-      hipMesh.scale.set(1.15, 1, 0.82);
-      pelvis.add(hipMesh);
+      hipMesh.scaling.set(1.0, 0.9, 0.85);
+      hipMesh.material = bodyMat;
+      hipMesh.parent = pelvis;
 
-      // Helper to build an articulated 2-segment human leg (thigh -> knee -> calf -> boot)
-      function createLeg(sideSign) {
-        const hipJoint = new THREE.Group();
-        hipJoint.position.set(sideSign * 0.18, -0.04, 0);
-        pelvis.add(hipJoint);
+      // Sculpted 2-Segment Human Leg (Thigh Capsule -> Knee -> Calf Capsule -> Boot)
+      function createLeg(sideSign, sideName) {
+        const hipJoint = new BABYLON.TransformNode(prefix + sideName + "Hip", scene);
+        hipJoint.position.set(sideSign * 0.19, -0.04, 0);
+        hipJoint.parent = pelvis;
 
-        // Hip ball joint
-        const hipBall = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 10), bodyMat);
-        hipJoint.add(hipBall);
-
-        // Upper leg (thigh)
-        const thigh = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.145, 0.12, 0.44, 10),
-          bodyMat
+        const thigh = BABYLON.MeshBuilder.CreateCapsule(
+          prefix + sideName + "Thigh",
+          { radius: 0.135, height: 0.62, tessellation: 12 },
+          scene
         );
         thigh.position.y = -0.22;
-        hipJoint.add(thigh);
+        thigh.material = bodyMat;
+        thigh.parent = hipJoint;
 
-        // Knee joint pivot
-        const kneeJoint = new THREE.Group();
+        const kneeJoint = new BABYLON.TransformNode(prefix + sideName + "Knee", scene);
         kneeJoint.position.y = -0.44;
-        hipJoint.add(kneeJoint);
+        kneeJoint.parent = hipJoint;
 
-        const kneeCap = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 10), bodyMat);
-        kneeJoint.add(kneeCap);
-
-        // Lower leg (calf/shin)
-        const shin = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.115, 0.095, 0.42, 10),
-          bodyMat
+        const shin = BABYLON.MeshBuilder.CreateCapsule(
+          prefix + sideName + "Shin",
+          { radius: 0.11, height: 0.58, tessellation: 12 },
+          scene
         );
         shin.position.y = -0.21;
-        kneeJoint.add(shin);
+        shin.material = bodyMat;
+        shin.parent = kneeJoint;
 
-        // Combat Boot
-        const boot = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.36), darkMat);
-        boot.position.set(0, -0.42, -0.05);
-        kneeJoint.add(boot);
+        // Sculpted Combat Boot (ankle + rounded boot toe pointing +Z)
+        const boot = BABYLON.MeshBuilder.CreateCapsule(
+          prefix + sideName + "Boot",
+          { radius: 0.11, height: 0.4, orientation: BABYLON.Vector3.Forward(), tessellation: 12 },
+          scene
+        );
+        boot.scaling.set(1.05, 0.72, 1.0);
+        boot.position.set(0, -0.43, 0.06);
+        boot.material = darkMat;
+        boot.parent = kneeJoint;
 
         return { hipJoint, kneeJoint };
       }
 
-      const leftLeg = createLeg(-1);
-      const rightLeg = createLeg(1);
+      const leftLeg = createLeg(-1, "left");
+      const rightLeg = createLeg(1, "right");
 
-      // Upper Body / Spine Pivot
-      const spine = new THREE.Group();
+      // Spine / Upper Body Pivot
+      const spine = new BABYLON.TransformNode(prefix + "spine", scene);
       spine.position.y = 0.08;
-      pelvis.add(spine);
+      spine.parent = pelvis;
 
-      // Belt with ammo pouches
-      const belt = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.3, 0.29, 0.12, 12),
-        darkMat
+      // Tactical Webbing Belt & Canteen Pouches
+      const belt = BABYLON.MeshBuilder.CreateCylinder(
+        prefix + "belt",
+        { diameterTop: 0.62, diameterBottom: 0.6, height: 0.13, tessellation: 14 },
+        scene
       );
-      belt.scale.set(1.15, 1, 0.85);
-      belt.position.y = 0.04;
-      spine.add(belt);
+      belt.scaling.set(1.12, 1.0, 0.82);
+      belt.position.y = 0.05;
+      belt.material = darkMat;
+      belt.parent = spine;
 
-      // Sculpted human torso (wider at chest/shoulders, tapered at waist)
-      const torso = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.36, 0.27, 0.68, 12),
-        bodyMat
+      // Lower & Upper Sculpted Torso
+      const abdomen = BABYLON.MeshBuilder.CreateCapsule(
+        prefix + "abdomen",
+        { radius: 0.25, height: 0.68, tessellation: 14 },
+        scene
       );
-      torso.scale.set(1.18, 1, 0.78);
-      torso.position.y = 0.42;
-      spine.add(torso);
+      abdomen.scaling.set(1.15, 1.0, 0.78);
+      abdomen.position.y = 0.32;
+      abdomen.material = bodyMat;
+      abdomen.parent = spine;
 
-      // Tactical Field Pack on back
-      const pack = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.48, 0.22), darkMat);
-      pack.position.set(0, 0.46, 0.28);
-      spine.add(pack);
+      const chest = BABYLON.MeshBuilder.CreateCapsule(
+        prefix + "chest",
+        { radius: 0.24, height: 0.78, orientation: BABYLON.Vector3.Right(), tessellation: 14 },
+        scene
+      );
+      chest.scaling.set(1.0, 1.15, 0.85);
+      chest.position.y = 0.56;
+      chest.material = bodyMat;
+      chest.parent = spine;
+
+      // Field Pack on back (-Z)
+      const pack = BABYLON.MeshBuilder.CreateBox(
+        prefix + "pack",
+        { width: 0.46, height: 0.48, depth: 0.22 },
+        scene
+      );
+      pack.position.set(0, 0.48, -0.27);
+      pack.material = darkMat;
+      pack.parent = spine;
 
       // Neck & Head Pivot
-      const headPivot = new THREE.Group();
+      const headPivot = new BABYLON.TransformNode(prefix + "headPivot", scene);
       headPivot.position.y = 0.82;
-      spine.add(headPivot);
+      headPivot.parent = spine;
 
-      const neck = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.11, 0.13, 0.16, 10),
-        bodyMat
+      const neck = BABYLON.MeshBuilder.CreateCylinder(
+        prefix + "neck",
+        { diameter: 0.22, height: 0.18, tessellation: 12 },
+        scene
       );
-      neck.position.y = 0.04;
-      headPivot.add(neck);
+      neck.position.y = 0.05;
+      neck.material = bodyMat;
+      neck.parent = headPivot;
 
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12), bodyMat);
-      head.scale.set(0.95, 1.08, 0.98);
-      head.position.y = 0.22;
-      headPivot.add(head);
-
-      // M1 Army Helmet (angled dome + flared brim)
-      const helmet = new THREE.Mesh(
-        new THREE.SphereGeometry(0.265, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.58),
-        darkMat
+      const head = BABYLON.MeshBuilder.CreateCapsule(
+        prefix + "head",
+        { radius: 0.2, height: 0.46, tessellation: 14 },
+        scene
       );
-      helmet.scale.set(1.02, 0.95, 1.12);
-      helmet.position.set(0, 0.25, 0.01);
-      helmet.rotation.x = -0.1;
-      headPivot.add(helmet);
+      head.position.y = 0.23;
+      head.material = bodyMat;
+      head.parent = headPivot;
 
-      // Right Arm (Shoulder -> Upper Arm -> Elbow -> Forearm -> Hand + Rifle)
-      const rightShoulder = new THREE.Group();
-      rightShoulder.position.set(0.42, 0.68, 0);
-      spine.add(rightShoulder);
-
-      const rShoulderBall = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 10), bodyMat);
-      rightShoulder.add(rShoulderBall);
-
-      const rUpperArm = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.11, 0.095, 0.36, 10),
-        bodyMat
+      // Classic M1 Army Helmet (curved dome + visor rim)
+      const helmet = BABYLON.MeshBuilder.CreateSphere(
+        prefix + "helmet",
+        { diameterX: 0.54, diameterY: 0.48, diameterZ: 0.58, slice: 0.58, segments: 14 },
+        scene
       );
-      rUpperArm.position.y = -0.18;
-      rightShoulder.add(rUpperArm);
+      helmet.position.set(0, 0.24, -0.01);
+      helmet.rotation.x = -0.12;
+      helmet.material = darkMat;
+      helmet.parent = headPivot;
 
-      const rightElbow = new THREE.Group();
-      rightElbow.position.y = -0.36;
-      rightShoulder.add(rightElbow);
-
-      const rForearm = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.095, 0.08, 0.34, 10),
-        bodyMat
+      const helmetRim = BABYLON.MeshBuilder.CreateTorus(
+        prefix + "helmetRim",
+        { diameter: 0.52, thickness: 0.045, tessellation: 16 },
+        scene
       );
-      rForearm.position.y = -0.17;
-      rightElbow.add(rForearm);
+      helmetRim.scaling.set(1.0, 1.0, 1.08);
+      helmetRim.position.set(0, 0.27, -0.01);
+      helmetRim.rotation.x = -0.12;
+      helmetRim.material = darkMat;
+      helmetRim.parent = headPivot;
 
-      const rHand = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), bodyMat);
-      rHand.position.y = -0.35;
-      rightElbow.add(rHand);
+      // Sculpted 2-Segment Arms (Shoulder -> Upper Arm Capsule -> Elbow -> Forearm Capsule -> Hand)
+      function createArm(sideSign, sideName) {
+        const shoulder = new BABYLON.TransformNode(prefix + sideName + "Shoulder", scene);
+        shoulder.position.set(sideSign * 0.42, 0.67, 0);
+        shoulder.parent = spine;
 
-      // Left Arm (Supporting the rifle barrel)
-      const leftShoulder = new THREE.Group();
-      leftShoulder.position.set(-0.42, 0.68, 0);
-      spine.add(leftShoulder);
-
-      const lShoulderBall = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 10), bodyMat);
-      leftShoulder.add(lShoulderBall);
-
-      const lUpperArm = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.11, 0.095, 0.36, 10),
-        bodyMat
-      );
-      lUpperArm.position.y = -0.18;
-      leftShoulder.add(lUpperArm);
-
-      const leftElbow = new THREE.Group();
-      leftElbow.position.y = -0.36;
-      leftShoulder.add(leftElbow);
-
-      const lForearm = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.095, 0.08, 0.36, 10),
-        bodyMat
-      );
-      lForearm.position.y = -0.18;
-      leftElbow.add(lForearm);
-
-      const lHand = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), bodyMat);
-      lHand.position.y = -0.36;
-      leftElbow.add(lHand);
-
-      // Rifle mounted on the upper torso/hands so it aims cleanly forward
-      const weaponMount = new THREE.Group();
-      weaponMount.position.set(0.22, 0.56, -0.25);
-      spine.add(weaponMount);
-
-      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.15, 0.45), darkMat);
-      stock.position.set(0, -0.02, 0.14);
-      weaponMount.add(stock);
-
-      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.42), darkMat);
-      receiver.position.set(0, 0.02, -0.18);
-      weaponMount.add(receiver);
-
-      const magazine = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.24, 0.12), darkMat);
-      magazine.position.set(0, -0.12, -0.2);
-      magazine.rotation.x = 0.25;
-      weaponMount.add(magazine);
-
-      const barrel = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.032, 0.035, 0.65, 8),
-        darkMat
-      );
-      barrel.rotation.x = Math.PI / 2;
-      barrel.position.set(0, 0.05, -0.62);
-      weaponMount.add(barrel);
-
-      // Muzzle flash at barrel tip
-      const flashGeo = new THREE.SphereGeometry(0.15, 6, 6);
-      const flashMat = new THREE.MeshBasicMaterial({ color: 0xffee55 });
-      const muzzleFlash = new THREE.Mesh(flashGeo, flashMat);
-      muzzleFlash.position.set(0, 0.05, -0.98);
-      muzzleFlash.visible = false;
-      weaponMount.add(muzzleFlash);
-
-      // Overhead floating squad/enemy indicator bar (visible for AI teammates & enemies)
-      let overheadBarFill = null;
-      let overheadGroup = null;
-      if (labelText) {
-        overheadGroup = new THREE.Group();
-        overheadGroup.position.set(0, 2.38, 0);
-        root.add(overheadGroup);
-
-        const bgPlane = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.95, 0.13),
-          new THREE.MeshBasicMaterial({
-            color: 0x111111,
-            side: THREE.DoubleSide
-          })
+        const upperArm = BABYLON.MeshBuilder.CreateCapsule(
+          prefix + sideName + "UpperArm",
+          { radius: 0.105, height: 0.52, tessellation: 12 },
+          scene
         );
-        overheadGroup.add(bgPlane);
+        upperArm.position.y = -0.18;
+        upperArm.material = bodyMat;
+        upperArm.parent = shoulder;
 
-        const fillGeo = new THREE.PlaneGeometry(0.9, 0.09);
-        fillGeo.translate(0.45, 0, 0); // Anchor at left edge
-        overheadBarFill = new THREE.Mesh(
-          fillGeo,
-          new THREE.MeshBasicMaterial({
-            color: isGreen ? 0x52ff47 : 0xffb347,
-            side: THREE.DoubleSide
-          })
+        const elbow = new BABYLON.TransformNode(prefix + sideName + "Elbow", scene);
+        elbow.position.y = -0.35;
+        elbow.parent = shoulder;
+
+        const forearm = BABYLON.MeshBuilder.CreateCapsule(
+          prefix + sideName + "Forearm",
+          { radius: 0.09, height: 0.48, tessellation: 12 },
+          scene
         );
-        overheadBarFill.position.set(-0.45, 0, 0.01);
-        overheadGroup.add(overheadBarFill);
+        forearm.position.y = -0.17;
+        forearm.material = bodyMat;
+        forearm.parent = elbow;
+
+        const hand = BABYLON.MeshBuilder.CreateSphere(
+          prefix + sideName + "Hand",
+          { diameter: 0.18, segments: 8 },
+          scene
+        );
+        hand.position.y = -0.35;
+        hand.material = bodyMat;
+        hand.parent = elbow;
+
+        return { shoulder, elbow };
       }
 
-      // Enable shadows on soldier parts
-      pelvis.traverse((child) => {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
+      const leftArm = createArm(-1, "left");
+      const rightArm = createArm(1, "right");
+
+      // Detailed M16-style Plastic Rifle aiming forward (+Z)
+      const weaponMount = new BABYLON.TransformNode(prefix + "weaponMount", scene);
+      weaponMount.position.set(0.22, 0.56, 0.26);
+      weaponMount.parent = spine;
+
+      const stock = BABYLON.MeshBuilder.CreateBox(
+        prefix + "stock",
+        { width: 0.075, height: 0.15, depth: 0.42 },
+        scene
+      );
+      stock.position.set(0, -0.02, -0.14);
+      stock.material = darkMat;
+      stock.parent = weaponMount;
+
+      const receiver = BABYLON.MeshBuilder.CreateBox(
+        prefix + "receiver",
+        { width: 0.095, height: 0.16, depth: 0.44 },
+        scene
+      );
+      receiver.position.set(0, 0.02, 0.18);
+      receiver.material = darkMat;
+      receiver.parent = weaponMount;
+
+      const magazine = BABYLON.MeshBuilder.CreateBox(
+        prefix + "mag",
+        { width: 0.068, height: 0.25, depth: 0.12 },
+        scene
+      );
+      magazine.position.set(0, -0.13, 0.22);
+      magazine.rotation.x = -0.25;
+      magazine.material = darkMat;
+      magazine.parent = weaponMount;
+
+      const handguard = BABYLON.MeshBuilder.CreateCylinder(
+        prefix + "handguard",
+        { diameter: 0.095, height: 0.36, tessellation: 10 },
+        scene
+      );
+      handguard.rotation.x = Math.PI / 2;
+      handguard.position.set(0, 0.04, 0.52);
+      handguard.material = darkMat;
+      handguard.parent = weaponMount;
+
+      const barrel = BABYLON.MeshBuilder.CreateCylinder(
+        prefix + "barrel",
+        { diameter: 0.05, height: 0.48, tessellation: 10 },
+        scene
+      );
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0.045, 0.78);
+      barrel.material = darkMat;
+      barrel.parent = weaponMount;
+
+      const muzzleFlash = BABYLON.MeshBuilder.CreateSphere(
+        prefix + "muzzleFlash",
+        { diameterX: 0.26, diameterY: 0.26, diameterZ: 0.42, segments: 8 },
+        scene
+      );
+      muzzleFlash.position.set(0, 0.045, 1.08);
+      muzzleFlash.material = flashMat;
+      muzzleFlash.isVisible = false;
+      muzzleFlash.isPickable = false;
+      muzzleFlash.parent = weaponMount;
+
+      // Invisible hitbox cylinder for crisp raycast bullet detection
+      const hitbox = BABYLON.MeshBuilder.CreateCylinder(
+        prefix + "hitbox",
+        { diameter: 0.92, height: 2.05, tessellation: 10 },
+        scene
+      );
+      hitbox.position.y = 1.02;
+      hitbox.visibility = 0;
+      hitbox.isPickable = true;
+      hitbox.parent = root;
+
+      // Overhead floating health bar for AI teammates & enemies
+      let overheadGroup = null;
+      let overheadBarFill = null;
+      if (showOverheadBar) {
+        overheadGroup = new BABYLON.TransformNode(prefix + "overhead", scene);
+        overheadGroup.position.set(0, 2.42, 0);
+        overheadGroup.parent = root;
+
+        const bgPlane = BABYLON.MeshBuilder.CreatePlane(
+          prefix + "hpBg",
+          { width: 0.96, height: 0.13 },
+          scene
+        );
+        const bgMat = new BABYLON.StandardMaterial(prefix + "hpBgMat", scene);
+        bgMat.emissiveColor = new BABYLON.Color3(0.08, 0.08, 0.08);
+        bgMat.disableLighting = true;
+        bgPlane.material = bgMat;
+        bgPlane.isPickable = false;
+        bgPlane.parent = overheadGroup;
+
+        overheadBarFill = BABYLON.MeshBuilder.CreatePlane(
+          prefix + "hpFill",
+          { width: 0.9, height: 0.085 },
+          scene
+        );
+        overheadBarFill.setPivotPoint(new BABYLON.Vector3(-0.45, 0, 0));
+        overheadBarFill.position.set(0, 0, -0.01);
+        const fillMat = new BABYLON.StandardMaterial(prefix + "hpFillMat", scene);
+        fillMat.emissiveColor = isGreen
+          ? new BABYLON.Color3(0.32, 0.98, 0.28)
+          : new BABYLON.Color3(1.0, 0.72, 0.26);
+        fillMat.disableLighting = true;
+        overheadBarFill.material = fillMat;
+        overheadBarFill.isPickable = false;
+        overheadBarFill.parent = overheadGroup;
+      }
+
+      // Register soldier meshes for shadow casting
+      pelvis.getChildMeshes().forEach((m) => {
+        if (m !== muzzleFlash) {
+          m.receiveShadows = true;
+          shadowGen.addShadowCaster(m);
+          m.isPickable = false;
         }
       });
 
@@ -1064,12 +1267,11 @@
         headPivot,
         leftLeg,
         rightLeg,
-        leftShoulder,
-        leftElbow,
-        rightShoulder,
-        rightElbow,
+        leftArm,
+        rightArm,
         weaponMount,
         muzzleFlash,
+        hitbox,
         overheadGroup,
         overheadBarFill,
         flashTimer: 0,
@@ -1078,73 +1280,66 @@
       };
     }
 
-    // Updates articulated human gait, breathing, aiming, recoil, and collapse
+    // Updates articulated human gait, knees, hips, spine twist, breathing, recoil, and ragdoll collapse
     function animateSoldier(soldier, dt, isMoving, strideDir) {
       const m = soldier.model;
 
-      // Muzzle flash timer
       if (m.flashTimer > 0) {
         m.flashTimer -= dt;
-        if (m.flashTimer <= 0) m.muzzleFlash.visible = false;
+        if (m.flashTimer <= 0) m.muzzleFlash.isVisible = false;
       }
 
-      // Recoil timer
       if (m.recoilTimer > 0) {
         m.recoilTimer = Math.max(0, m.recoilTimer - dt * 7);
       }
 
-      // Hit flinch timer
       if (m.flinchTimer > 0) {
         m.flinchTimer = Math.max(0, m.flinchTimer - dt * 6);
       }
 
-      // Keep overhead bar facing camera
       if (m.overheadGroup) {
         m.overheadGroup.lookAt(camera.position);
       }
 
-      // ----- DEATH / COLLAPSE ANIMATION -----
+      // ----- RAGDOLL COLLAPSE & SLOPE ALIGNMENT WHEN ELIMINATED -----
       if (!soldier.alive) {
         soldier.fallProgress = Math.min(1, soldier.fallProgress + dt * 2.8);
         const p = soldier.fallProgress;
-        // Smooth ease-out collapse
         const ease = 1 - Math.pow(1 - p, 3);
 
-        // Knees buckle & body drops onto the sand
-        m.pelvis.position.y = 0.96 * (1 - ease * 0.72);
-        m.pelvis.rotation.x = ease * 1.35 * soldier.fallDir;
-        m.pelvis.rotation.z = ease * 0.45 * soldier.fallTwist;
+        m.pelvis.position.y = 0.96 * (1 - ease * 0.74);
+        m.pelvis.rotation.x = ease * 1.38 * soldier.fallDir;
+        m.pelvis.rotation.z = ease * 0.48 * soldier.fallTwist;
 
+        // Knees bend backward (+rotation.x in Babylon left-handed space)
         m.leftLeg.hipJoint.rotation.x = -ease * 0.65;
         m.leftLeg.kneeJoint.rotation.x = ease * 1.25;
         m.rightLeg.hipJoint.rotation.x = -ease * 0.35;
-        m.rightLeg.kneeJoint.rotation.x = ease * 0.85;
+        m.rightLeg.kneeJoint.rotation.x = ease * 0.9;
 
-        m.spine.rotation.x = ease * 0.3;
-        m.leftShoulder.rotation.x = 0.4 + ease * 0.8;
-        m.rightShoulder.rotation.x = 0.4 + ease * 0.7;
+        m.spine.rotation.x = ease * 0.35;
+        m.leftArm.shoulder.rotation.x = -0.35 - ease * 0.6;
+        m.rightArm.shoulder.rotation.x = -0.35 - ease * 0.5;
         return;
       }
 
-      // ----- ALIVE: WALKING OR IDLE HUMAN POSTURE -----
+      // ----- ALIVE: REALISTIC HUMAN GAIT, BREATHING & AIMING -----
       soldier.idleClock += dt;
-
       if (isMoving) {
         soldier.walkCycle += dt * (soldier.speed * 1.35);
       }
 
       const phase = soldier.walkCycle;
-      const blend = soldier.moveBlend; // 0 = idle, 1 = full run
+      const blend = soldier.moveBlend;
 
-      // 1. Legs: human stride with knee flexion on swing phase
-      const leftSwing = Math.sin(phase) * 0.72 * blend;
-      const rightSwing = Math.sin(phase + Math.PI) * 0.72 * blend;
+      // 1. Legs: human stride with anatomical backward knee flexion (+rotation.x)
+      const leftSwing = Math.sin(phase) * 0.74 * blend;
+      const rightSwing = Math.sin(phase + Math.PI) * 0.74 * blend;
 
-      // Knees bend when leg lifts forward/back, slight athletic bend when idle
       const leftKneeBend =
-        0.1 + Math.max(0, Math.sin(phase - 1.35)) * 1.15 * blend;
+        0.12 + Math.max(0, Math.sin(phase + 1.35)) * 1.18 * blend;
       const rightKneeBend =
-        0.1 + Math.max(0, Math.sin(phase + Math.PI - 1.35)) * 1.15 * blend;
+        0.12 + Math.max(0, Math.sin(phase + Math.PI + 1.35)) * 1.18 * blend;
 
       m.leftLeg.hipJoint.rotation.x = leftSwing - 0.06 * (1 - blend);
       m.leftLeg.kneeJoint.rotation.x = leftKneeBend;
@@ -1152,75 +1347,74 @@
       m.rightLeg.hipJoint.rotation.x = rightSwing + 0.08 * (1 - blend);
       m.rightLeg.kneeJoint.rotation.x = rightKneeBend;
 
-      // 2. Pelvis bobbing (twice per stride) & lateral weight shift
+      // 2. Pelvis vertical bounce (twice per stride) & hip roll
       const bob = Math.abs(Math.cos(phase)) * 0.085 * blend;
       const sway = Math.sin(phase) * 0.055 * blend;
       m.pelvis.position.y = 0.94 - 0.04 * blend + bob;
       m.pelvis.rotation.z = sway - strideDir * 0.08 * blend;
-      m.pelvis.rotation.y = -Math.sin(phase) * 0.08 * blend;
+      m.pelvis.rotation.y = Math.sin(phase) * 0.08 * blend;
       m.pelvis.rotation.x = 0;
 
       // 3. Spine / Torso: breathing + forward run lean + vertical aim + recoil + flinch
       const breath = Math.sin(soldier.idleClock * 2.6) * 0.025;
-      const aimPitch = -soldier.pitch * 0.65;
+      const aimPitch = soldier.pitch * 0.65;
       const recoilKick = m.recoilTimer * 0.22;
       const flinchKick = m.flinchTimer * 0.28;
 
       m.spine.rotation.x =
-        0.12 * blend + aimPitch - recoilKick - flinchKick + breath;
-      m.spine.rotation.y = Math.sin(phase) * 0.1 * blend - 0.15;
-      m.spine.rotation.z = flinchKick * 0.5;
+        0.14 * blend + aimPitch - recoilKick - flinchKick + breath;
+      m.spine.rotation.y = -Math.sin(phase) * 0.1 * blend + 0.14;
+      m.spine.rotation.z = flinchKick * 0.45;
 
-      // 4. Head: looks cleanly along the aim pitch and counter-rotates spine twist
-      m.headPivot.rotation.x = -soldier.pitch * 0.35 - 0.08 * blend;
-      m.headPivot.rotation.y = 0.15 - Math.sin(phase) * 0.06 * blend;
+      // 4. Head: tracks aim pitch and stabilizes against torso twist
+      m.headPivot.rotation.x = soldier.pitch * 0.35 - 0.08 * blend;
+      m.headPivot.rotation.y = -0.14 + Math.sin(phase) * 0.06 * blend;
 
-      // 5. Arms & Rifle: posed holding the rifle into the shoulder with natural sway
+      // 5. Arms & Rifle: raised forward (-rotation.x in left-handed space) holding rifle
       const armBob = Math.sin(phase * 2) * 0.04 * blend;
 
-      m.rightShoulder.rotation.x = 0.85 + aimPitch * 0.5 + armBob - recoilKick;
-      m.rightShoulder.rotation.z = -0.15;
-      m.rightElbow.rotation.x = 1.05 + recoilKick * 0.5;
+      m.rightArm.shoulder.rotation.x = -0.88 + aimPitch * 0.5 + armBob + recoilKick;
+      m.rightArm.shoulder.rotation.z = 0.15;
+      m.rightArm.elbow.rotation.x = -1.05 - recoilKick * 0.5;
 
-      m.leftShoulder.rotation.x = 1.08 + aimPitch * 0.5 - armBob - recoilKick;
-      m.leftShoulder.rotation.y = 0.52;
-      m.leftShoulder.rotation.z = 0.18;
-      m.leftElbow.rotation.x = 0.82;
+      m.leftArm.shoulder.rotation.x = -1.1 + aimPitch * 0.5 - armBob + recoilKick;
+      m.leftArm.shoulder.rotation.y = -0.52;
+      m.leftArm.shoulder.rotation.z = -0.18;
+      m.leftArm.elbow.rotation.x = -0.82;
 
-      m.weaponMount.position.z = -0.25 + m.recoilTimer * 0.09;
-      m.weaponMount.rotation.x = aimPitch * 0.35 - recoilKick * 0.6;
+      m.weaponMount.position.z = 0.26 - m.recoilTimer * 0.09;
+      m.weaponMount.rotation.x = aimPitch * 0.35 - recoilKick * 0.55;
     }
 
     // =========================================================================
     // 7. SQUAD CREATION (4 GREEN SOLDIERS VS 4 TAN SOLDIERS)
     // =========================================================================
-    const soldiers = []; // All 8 soldiers (1 player + 3 green AI + 4 tan AI)
+    const soldiers = [];
     let player = null;
 
     const GREEN_SPAWNS = [
-      { x: 0, z: 30, name: "You (Squad Leader)", isPlayer: true },
-      { x: -12, z: 28, name: "Green Alpha", isPlayer: false },
-      { x: 12, z: 28, name: "Green Bravo", isPlayer: false },
-      { x: -4, z: 35, name: "Green Charlie", isPlayer: false }
+      { x: 0, z: -30, name: "You (Squad Leader)", isPlayer: true },
+      { x: -12, z: -28, name: "Green Alpha", isPlayer: false },
+      { x: 12, z: -28, name: "Green Bravo", isPlayer: false },
+      { x: -4, z: -35, name: "Green Charlie", isPlayer: false }
     ];
 
     const TAN_SPAWNS = [
-      { x: -16, z: -28, name: "Tan 1" },
-      { x: -5, z: -32, name: "Tan 2" },
-      { x: 8, z: -31, name: "Tan 3" },
-      { x: 20, z: -27, name: "Tan 4" }
+      { x: -16, z: 28, name: "Tan 1" },
+      { x: -5, z: 32, name: "Tan 2" },
+      { x: 8, z: 31, name: "Tan 3" },
+      { x: 20, z: 27, name: "Tan 4" }
     ];
 
     function spawnAllSoldiers() {
-      soldiers.forEach((s) => scene.remove(s.model.root));
+      soldiers.forEach((s) => s.model.root.dispose());
       soldiers.length = 0;
 
-      // Spawn Green Squad (4 soldiers)
-      GREEN_SPAWNS.forEach((sp) => {
-        const model = createPlasticSoldier("green", sp.isPlayer ? null : sp.name);
+      // Spawn Green Squad (faces +Z toward center)
+      GREEN_SPAWNS.forEach((sp, idx) => {
+        const model = createPlasticSoldier("green", idx, !sp.isPlayer);
         const y = getSandHeight(sp.x, sp.z);
         model.root.position.set(sp.x, y, sp.z);
-        scene.add(model.root);
 
         const unit = {
           name: sp.name,
@@ -1228,62 +1422,81 @@
           isPlayer: sp.isPlayer,
           model,
           position: model.root.position,
+          velocity: new BABYLON.Vector3(0, 0, 0),
+          isGrounded: true,
           yaw: 0,
           pitch: 0.04,
-          speed: sp.isPlayer ? 9.5 : 5.4 + Math.random() * 0.6,
+          speed: sp.isPlayer ? 9.6 : 5.5 + Math.random() * 0.6,
           radius: 0.72,
           health: 100,
           maxHealth: 100,
           alive: true,
           fireCooldown: 0,
-          fireRate: sp.isPlayer ? 0.21 : 0.75 + Math.random() * 0.35,
+          fireRate: sp.isPlayer ? 0.2 : 0.72 + Math.random() * 0.35,
           walkCycle: Math.random() * 6,
           idleClock: Math.random() * 6,
           moveBlend: 0,
           fallProgress: 0,
-          fallDir: Math.random() > 0.5 ? 1 : -1,
+          fallDir: 1,
           fallTwist: (Math.random() - 0.5) * 1.2,
           strafeDir: Math.random() > 0.5 ? 1 : -1,
           strafeTimer: 1.5 + Math.random() * 2.0
         };
+        model.hitbox.metadata = { soldier: unit };
 
         soldiers.push(unit);
         if (sp.isPlayer) player = unit;
       });
 
-      // Spawn Tan Squad (4 soldiers)
-      TAN_SPAWNS.forEach((sp) => {
-        const model = createPlasticSoldier("tan", sp.name);
+      // Spawn Tan Squad (faces -Z toward Green Squad)
+      TAN_SPAWNS.forEach((sp, idx) => {
+        const model = createPlasticSoldier("tan", idx, true);
         const y = getSandHeight(sp.x, sp.z);
         model.root.position.set(sp.x, y, sp.z);
         model.root.rotation.y = Math.PI;
-        scene.add(model.root);
 
-        soldiers.push({
+        const unit = {
           name: sp.name,
           team: "tan",
           isPlayer: false,
           model,
           position: model.root.position,
+          velocity: new BABYLON.Vector3(0, 0, 0),
+          isGrounded: true,
           yaw: Math.PI,
           pitch: 0,
-          speed: 5.0 + Math.random() * 0.7,
+          speed: 5.1 + Math.random() * 0.7,
           radius: 0.72,
           health: 100,
           maxHealth: 100,
           alive: true,
           fireCooldown: 0.8 + Math.random() * 1.2,
-          fireRate: 0.85 + Math.random() * 0.4,
+          fireRate: 0.82 + Math.random() * 0.4,
           walkCycle: Math.random() * 6,
           idleClock: Math.random() * 6,
           moveBlend: 0,
           fallProgress: 0,
-          fallDir: Math.random() > 0.5 ? 1 : -1,
+          fallDir: 1,
           fallTwist: (Math.random() - 0.5) * 1.2,
           strafeDir: Math.random() > 0.5 ? 1 : -1,
           strafeTimer: 1.5 + Math.random() * 2.0
-        });
+        };
+        model.hitbox.metadata = { soldier: unit };
+
+        soldiers.push(unit);
       });
+
+      // Reset beach ball to its starting spot
+      if (physicsBall) {
+        const bx = 13;
+        const bz = -5;
+        physicsBall.mesh.position.set(
+          bx,
+          getSandHeight(bx, bz) + physicsBall.radius,
+          bz
+        );
+        physicsBall.velocity.set(0, 0, 0);
+      }
 
       updateHUD();
     }
@@ -1291,7 +1504,15 @@
     // =========================================================================
     // 8. INPUT CONTROLS
     // =========================================================================
-    const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, Space: false };
+    const keys = {
+      KeyW: false,
+      KeyA: false,
+      KeyS: false,
+      KeyD: false,
+      Space: false,
+      ShiftLeft: false,
+      ShiftRight: false
+    };
     let isMouseDown = false;
     let gameEnded = false;
 
@@ -1304,9 +1525,9 @@
       if (e.code in keys) keys[e.code] = false;
     });
 
-    renderer.domElement.addEventListener("click", () => {
-      if (!gameEnded && document.pointerLockElement !== renderer.domElement) {
-        renderer.domElement.requestPointerLock();
+    canvas.addEventListener("click", () => {
+      if (!gameEnded && document.pointerLockElement !== canvas) {
+        canvas.requestPointerLock();
       }
     });
 
@@ -1321,7 +1542,7 @@
     window.addEventListener("mousemove", (e) => {
       if (gameEnded || !player) return;
       const sensitivity = 0.0026;
-      player.yaw -= e.movementX * sensitivity;
+      player.yaw += e.movementX * sensitivity;
       player.pitch = Math.max(
         -0.42,
         Math.min(0.65, player.pitch + e.movementY * sensitivity)
@@ -1329,150 +1550,191 @@
     });
 
     // =========================================================================
-    // 9. WEAPON, TRACERS & HIT DETECTION (TERRAIN + TOYS + SOLDIERS)
+    // 9. WEAPON, TRACERS, IMPACT PARTICLES & RAYCAST HIT DETECTION
     // =========================================================================
     const tracers = [];
-    const raycaster = new THREE.Raycaster();
+    const impactParticles = [];
 
-    function spawnTracer(startPoint, endPoint, colorHex) {
-      const points = [startPoint.clone(), endPoint.clone()];
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      const material = new THREE.LineBasicMaterial({ color: colorHex });
-      const line = new THREE.Line(geometry, material);
-      scene.add(line);
-      tracers.push({ line, life: 0.075 });
+    function spawnTracer(startPoint, endPoint, color3) {
+      const line = BABYLON.MeshBuilder.CreateLines(
+        "tracer",
+        { points: [startPoint.clone(), endPoint.clone()] },
+        scene
+      );
+      line.color = color3;
+      line.isPickable = false;
+      tracers.push({ mesh: line, life: 0.075 });
+    }
+
+    // Spawns physical sand splashes or plastic sparks on bullet impact
+    function spawnImpactBurst(point, isSand, colorHex) {
+      const count = isSand ? 7 : 5;
+      const mat = new BABYLON.StandardMaterial("burstMat", scene);
+      mat.emissiveColor = BABYLON.Color3.FromHexString(colorHex);
+      mat.disableLighting = true;
+
+      for (let i = 0; i < count; i++) {
+        const p = BABYLON.MeshBuilder.CreateBox(
+          "part",
+          { size: isSand ? 0.13 : 0.1 },
+          scene
+        );
+        p.position.copyFrom(point);
+        p.material = mat;
+        p.isPickable = false;
+
+        const vel = new BABYLON.Vector3(
+          (Math.random() - 0.5) * 6,
+          2.2 + Math.random() * 4.5,
+          (Math.random() - 0.5) * 6
+        );
+        impactParticles.push({
+          mesh: p,
+          velocity: vel,
+          life: 0.35 + Math.random() * 0.2,
+          mat: i === 0 ? mat : null
+        });
+      }
     }
 
     function getMuzzleWorldPosition(soldier) {
-      const pos = new THREE.Vector3();
-      soldier.model.muzzleFlash.getWorldPosition(pos);
-      return pos;
+      soldier.model.muzzleFlash.computeWorldMatrix(true);
+      return soldier.model.muzzleFlash.getAbsolutePosition().clone();
     }
 
     function fireWeapon(shooter, aimDir, damageAmount) {
       shooter.fireCooldown = shooter.fireRate;
-      shooter.model.muzzleFlash.visible = true;
-      shooter.model.flashTimer = 0.05;
+      shooter.model.muzzleFlash.isVisible = true;
+      shooter.model.flashTimer = 0.055;
       shooter.model.recoilTimer = 1.0;
 
       const muzzlePos = getMuzzleWorldPosition(shooter);
-      const maxRange = 95;
-      raycaster.set(muzzlePos, aimDir);
-      raycaster.far = maxRange;
+      muzzleLight.position.copyFrom(muzzlePos);
+      muzzleLight.intensity = 2.2;
 
-      // 1. Check hit against sand dunes and sandbox toys
-      const envHits = raycaster.intersectObjects(shootableMeshes, false);
-      let closestDist = envHits.length > 0 ? envHits[0].distance : maxRange;
-      let hitPoint = muzzlePos.clone().addScaledVector(aimDir, closestDist);
+      const maxRange = 100;
+      const ray = new BABYLON.Ray(muzzlePos, aimDir, maxRange);
 
-      // 2. Check hit against opposing team soldiers
-      let hitTarget = null;
-      soldiers.forEach((other) => {
-        if (!other.alive || other.team === shooter.team) return;
-
-        const targetBox = new THREE.Box3(
-          new THREE.Vector3(
-            other.position.x - 0.48,
-            other.position.y,
-            other.position.z - 0.48
-          ),
-          new THREE.Vector3(
-            other.position.x + 0.48,
-            other.position.y + 2.05,
-            other.position.z + 0.48
-          )
-        );
-
-        const intersection = raycaster.ray.intersectBox(
-          targetBox,
-          new THREE.Vector3()
-        );
-        if (intersection) {
-          const dist = muzzlePos.distanceTo(intersection);
-          if (dist < closestDist) {
-            closestDist = dist;
-            hitPoint = intersection;
-            hitTarget = other;
-          }
+      const pickInfo = scene.pickWithRay(ray, (mesh) => {
+        if (!mesh.isPickable) return false;
+        if (mesh.metadata && mesh.metadata.soldier) {
+          const targetSoldier = mesh.metadata.soldier;
+          return targetSoldier.alive && targetSoldier.team !== shooter.team;
         }
+        return Boolean(mesh.metadata && mesh.metadata.isEnvironment);
       });
 
-      if (hitTarget) {
-        applyDamage(hitTarget, damageAmount);
+      let hitPoint = muzzlePos.add(aimDir.scale(maxRange));
+
+      if (pickInfo && pickInfo.hit && pickInfo.pickedPoint) {
+        hitPoint = pickInfo.pickedPoint;
+        const hitMesh = pickInfo.pickedMesh;
+
+        if (hitMesh && hitMesh.metadata) {
+          if (hitMesh.metadata.soldier) {
+            const target = hitMesh.metadata.soldier;
+            // Apply physical knockback impulse along shot direction
+            target.velocity.addInPlace(aimDir.scale(4.5));
+            applyDamage(target, damageAmount, aimDir);
+            spawnImpactBurst(
+              hitPoint,
+              false,
+              target.team === "green" ? "#4be03e" : "#ffd584"
+            );
+          } else if (hitMesh.metadata.isPhysicsBall && physicsBall) {
+            // Shoot the beach ball to send it flying across the sandbox!
+            physicsBall.velocity.addInPlace(aimDir.scale(11));
+            physicsBall.velocity.y += 4.5;
+            spawnImpactBurst(hitPoint, false, "#ffffff");
+          } else if (hitMesh.metadata.isSand) {
+            spawnImpactBurst(hitPoint, true, "#e6c373");
+          } else {
+            spawnImpactBurst(hitPoint, false, "#fff0a0");
+          }
+        }
       }
 
-      const tracerColor = shooter.team === "green" ? 0xfff275 : 0xff9e44;
+      const tracerColor =
+        shooter.team === "green"
+          ? new BABYLON.Color3(1.0, 0.95, 0.45)
+          : new BABYLON.Color3(1.0, 0.62, 0.25);
       spawnTracer(muzzlePos, hitPoint, tracerColor);
     }
 
     function firePlayerWeapon() {
-      // Cast from camera through screen crosshair to find world target
-      raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-      const maxRange = 95;
-      const envHits = raycaster.intersectObjects(shootableMeshes, false);
-      let aimDist = envHits.length > 0 ? envHits[0].distance : maxRange;
+      const camForward = camera.getDirection(BABYLON.Vector3.Forward());
+      const camRay = new BABYLON.Ray(camera.position, camForward, 110);
 
-      // Also check if crosshair is directly over an enemy
-      soldiers.forEach((s) => {
-        if (!s.alive || s.team === "green") return;
-        const box = new THREE.Box3(
-          new THREE.Vector3(s.position.x - 0.5, s.position.y, s.position.z - 0.5),
-          new THREE.Vector3(s.position.x + 0.5, s.position.y + 2.05, s.position.z + 0.5)
-        );
-        const hit = raycaster.ray.intersectBox(box, new THREE.Vector3());
-        if (hit) {
-          const d = camera.position.distanceTo(hit);
-          if (d < aimDist) aimDist = d;
+      const pick = scene.pickWithRay(camRay, (mesh) => {
+        if (!mesh.isPickable) return false;
+        if (mesh.metadata && mesh.metadata.soldier) {
+          return mesh.metadata.soldier.alive && mesh.metadata.soldier.team !== "green";
         }
+        return Boolean(mesh.metadata && mesh.metadata.isEnvironment);
       });
 
-      const aimPoint = raycaster.ray.origin
-        .clone()
-        .addScaledVector(raycaster.ray.direction, Math.max(4, aimDist));
+      let aimDist = 95;
+      if (pick && pick.hit && pick.distance > 3) {
+        aimDist = pick.distance;
+      }
+
+      const aimPoint = camera.position.add(camForward.scale(aimDist));
       const muzzlePos = getMuzzleWorldPosition(player);
-      const shotDir = aimPoint.sub(muzzlePos).normalize();
+      const shotDir = aimPoint.subtract(muzzlePos).normalize();
 
       fireWeapon(player, shotDir, 34);
     }
 
     function hasLineOfSight(fromSoldier, toSoldier) {
-      const start = new THREE.Vector3(
+      const start = new BABYLON.Vector3(
         fromSoldier.position.x,
         fromSoldier.position.y + 1.5,
         fromSoldier.position.z
       );
-      const end = new THREE.Vector3(
+      const end = new BABYLON.Vector3(
         toSoldier.position.x,
         toSoldier.position.y + 1.35,
         toSoldier.position.z
       );
-      const dir = new THREE.Vector3().subVectors(end, start);
-      const dist = dir.length();
-      dir.normalize();
+      const diff = end.subtract(start);
+      const dist = diff.length();
+      const dir = diff.normalize();
 
-      raycaster.set(start, dir);
-      raycaster.far = dist;
-      const hits = raycaster.intersectObjects(shootableMeshes, false);
-      return hits.length === 0;
+      const ray = new BABYLON.Ray(start, dir, dist);
+      const hit = scene.pickWithRay(ray, (mesh) => {
+        return Boolean(mesh.metadata && mesh.metadata.isEnvironment);
+      });
+
+      return !(hit && hit.hit);
     }
 
     // =========================================================================
-    // 10. COLLISION & UNEVEN SAND PLACEMENT
+    // 10. PHYSICS, COLLISIONS & DYNAMIC BEACH BALL SIMULATION
     // =========================================================================
-    function resolveCollisionsAndSand(soldier) {
+    function updateSoldierPhysicsAndCollisions(soldier, dt) {
       const pos = soldier.position;
       const r = soldier.radius;
 
-      // Stay inside wooden sandbox walls
+      // Apply knockback & horizontal velocity damping
+      pos.x += soldier.velocity.x * dt;
+      pos.z += soldier.velocity.z * dt;
+      soldier.velocity.x *= Math.pow(0.08, dt);
+      soldier.velocity.z *= Math.pow(0.08, dt);
+
+      // Gravity & vertical jump physics
+      soldier.velocity.y -= 24.0 * dt;
+      pos.y += soldier.velocity.y * dt;
+
+      // Keep inside wooden sandbox walls
       pos.x = Math.max(-WORLD_LIMIT + 1.2, Math.min(WORLD_LIMIT - 1.2, pos.x));
       pos.z = Math.max(-WORLD_LIMIT + 1.2, Math.min(WORLD_LIMIT - 1.2, pos.z));
 
-      // Push out of sandbox toys
+      // Push out of static sandbox toys
       for (const obs of obstacles) {
-        const minX = obs.box.min.x - r;
-        const maxX = obs.box.max.x + r;
-        const minZ = obs.box.min.z - r;
-        const maxZ = obs.box.max.z + r;
+        const minX = obs.minX - r;
+        const maxX = obs.maxX + r;
+        const minZ = obs.minZ - r;
+        const maxZ = obs.maxZ + r;
 
         if (pos.x > minX && pos.x < maxX && pos.z > minZ && pos.z < maxZ) {
           const overlapLeft = pos.x - minX;
@@ -1493,23 +1755,134 @@
         }
       }
 
-      // Separate living soldiers so they don't overlap each other
-      for (const other of soldiers) {
-        if (other === soldier || !other.alive) continue;
-        const dx = pos.x - other.position.x;
-        const dz = pos.z - other.position.z;
-        const distSq = dx * dx + dz * dz;
-        const minDist = r + other.radius;
-        if (distSq > 0.0001 && distSq < minDist * minDist) {
-          const dist = Math.sqrt(distSq);
-          const push = (minDist - dist) * 0.5;
-          pos.x += (dx / dist) * push;
-          pos.z += (dz / dist) * push;
+      // Separate living soldiers from each other
+      if (soldier.alive) {
+        for (const other of soldiers) {
+          if (other === soldier || !other.alive) continue;
+          const dx = pos.x - other.position.x;
+          const dz = pos.z - other.position.z;
+          const distSq = dx * dx + dz * dz;
+          const minDist = r + other.radius;
+          if (distSq > 0.0001 && distSq < minDist * minDist) {
+            const dist = Math.sqrt(distSq);
+            const push = (minDist - dist) * 0.5;
+            pos.x += (dx / dist) * push;
+            pos.z += (dz / dist) * push;
+          }
         }
       }
 
-      // Snap soldier's feet to the uneven sand height at their position
-      pos.y = getSandHeight(pos.x, pos.z);
+      // Collide with & kick the dynamic beach ball
+      if (physicsBall && soldier.alive) {
+        const bPos = physicsBall.mesh.position;
+        const dx = bPos.x - pos.x;
+        const dz = bPos.z - pos.z;
+        const dist = Math.hypot(dx, dz);
+        const minDist = r + physicsBall.radius;
+        if (dist > 0.001 && dist < minDist) {
+          const nx = dx / dist;
+          const nz = dz / dist;
+          bPos.x += nx * (minDist - dist);
+          bPos.z += nz * (minDist - dist);
+          physicsBall.velocity.x += nx * 8.5;
+          physicsBall.velocity.z += nz * 8.5;
+          physicsBall.velocity.y += 2.2;
+        }
+      }
+
+      // Snap/land on uneven sand heightfield
+      const sandY = getSandHeight(pos.x, pos.z);
+      if (pos.y <= sandY) {
+        pos.y = sandY;
+        soldier.velocity.y = 0;
+        soldier.isGrounded = true;
+      } else {
+        soldier.isGrounded = false;
+      }
+    }
+
+    function updatePhysicsBeachBall(dt) {
+      if (!physicsBall) return;
+      const ball = physicsBall;
+      const pos = ball.mesh.position;
+      const vel = ball.velocity;
+
+      // Gravity
+      vel.y -= 20.0 * dt;
+
+      // Integrate position
+      pos.x += vel.x * dt;
+      pos.y += vel.y * dt;
+      pos.z += vel.z * dt;
+
+      // Bounce off sandbox wooden walls
+      const limit = WORLD_LIMIT - ball.radius;
+      if (pos.x < -limit) {
+        pos.x = -limit;
+        vel.x = Math.abs(vel.x) * 0.75;
+      } else if (pos.x > limit) {
+        pos.x = limit;
+        vel.x = -Math.abs(vel.x) * 0.75;
+      }
+      if (pos.z < -limit) {
+        pos.z = -limit;
+        vel.z = Math.abs(vel.z) * 0.75;
+      } else if (pos.z > limit) {
+        pos.z = limit;
+        vel.z = -Math.abs(vel.z) * 0.75;
+      }
+
+      // Bounce off toy obstacles
+      for (const obs of obstacles) {
+        const minX = obs.minX - ball.radius;
+        const maxX = obs.maxX + ball.radius;
+        const minZ = obs.minZ - ball.radius;
+        const maxZ = obs.maxZ + ball.radius;
+        if (pos.x > minX && pos.x < maxX && pos.z > minZ && pos.z < maxZ) {
+          const overlapL = pos.x - minX;
+          const overlapR = maxX - pos.x;
+          const overlapT = pos.z - minZ;
+          const overlapB = maxZ - pos.z;
+          const m = Math.min(overlapL, overlapR, overlapT, overlapB);
+          if (m === overlapL) {
+            pos.x = minX;
+            vel.x = -Math.abs(vel.x) * 0.7;
+          } else if (m === overlapR) {
+            pos.x = maxX;
+            vel.x = Math.abs(vel.x) * 0.7;
+          } else if (m === overlapT) {
+            pos.z = minZ;
+            vel.z = -Math.abs(vel.z) * 0.7;
+          } else {
+            pos.z = maxZ;
+            vel.z = Math.abs(vel.z) * 0.7;
+          }
+        }
+      }
+
+      // Sand dune collision & slope rolling physics
+      const groundY = getSandHeight(pos.x, pos.z) + ball.radius;
+      if (pos.y <= groundY) {
+        pos.y = groundY;
+        if (vel.y < -1.5) {
+          vel.y = -vel.y * 0.52;
+        } else {
+          vel.y = 0;
+        }
+
+        // Roll down sand slopes naturally using sand surface normal
+        const normal = getSandNormal(pos.x, pos.z);
+        vel.x += normal.x * 12.0 * dt;
+        vel.z += normal.z * 12.0 * dt;
+
+        // Sand rolling friction
+        vel.x *= Math.pow(0.42, dt);
+        vel.z *= Math.pow(0.42, dt);
+      }
+
+      // Visually rotate the ball as it rolls across the sand
+      ball.mesh.rotation.z -= (vel.x / ball.radius) * dt;
+      ball.mesh.rotation.x += (vel.z / ball.radius) * dt;
     }
 
     // =========================================================================
@@ -1527,14 +1900,14 @@
 
     restartBtn.addEventListener("click", resetGame);
 
-    function applyDamage(target, amount) {
+    function applyDamage(target, amount, shotDir) {
       if (!target.alive || gameEnded) return;
 
       target.health = Math.max(0, target.health - amount);
       target.model.flinchTimer = 1.0;
 
       if (target.model.overheadBarFill) {
-        target.model.overheadBarFill.scale.x = Math.max(
+        target.model.overheadBarFill.scaling.x = Math.max(
           0.001,
           target.health / target.maxHealth
         );
@@ -1542,8 +1915,17 @@
 
       if (target.health <= 0) {
         target.alive = false;
+        target.model.hitbox.isPickable = false;
         if (target.model.overheadGroup) {
-          target.model.overheadGroup.visible = false;
+          target.model.overheadGroup.setEnabled(false);
+        }
+        if (shotDir) {
+          const forward = new BABYLON.Vector3(
+            Math.sin(target.yaw),
+            0,
+            Math.cos(target.yaw)
+          );
+          target.fallDir = BABYLON.Vector3.Dot(shotDir, forward) >= 0 ? 1 : -1;
         }
       }
 
@@ -1567,7 +1949,6 @@
       greenCountEl.textContent = greenAlive;
       tanCountEl.textContent = tanAlive;
 
-      // Render Green Squad teammate mini bars
       const teammates = soldiers.filter((s) => s.team === "green" && !s.isPlayer);
       squadListEl.innerHTML = teammates
         .map((tm) => {
@@ -1628,21 +2009,22 @@
     }
 
     // =========================================================================
-    // 12. AI LOGIC (GREEN TEAMMATES & TAN ENEMIES)
+    // 12. AI SQUAD LOGIC (3 GREEN TEAMMATES & 4 TAN ENEMIES)
     // =========================================================================
     function updateAISoldier(ai, dt) {
       if (!ai.alive) {
+        updateSoldierPhysicsAndCollisions(ai, dt);
         animateSoldier(ai, dt, false, 0);
         return;
       }
 
-      // Find nearest living opponent
+      // Locate closest living opponent
       let nearestTarget = null;
       let nearestDist = Infinity;
 
       for (const other of soldiers) {
         if (!other.alive || other.team === ai.team) continue;
-        const d = ai.position.distanceTo(other.position);
+        const d = BABYLON.Vector3.Distance(ai.position, other.position);
         if (d < nearestDist) {
           nearestDist = d;
           nearestTarget = other;
@@ -1651,144 +2033,169 @@
 
       if (!nearestTarget) {
         ai.moveBlend = Math.max(0, ai.moveBlend - dt * 4);
+        updateSoldierPhysicsAndCollisions(ai, dt);
         animateSoldier(ai, dt, false, 0);
         return;
       }
 
-      // Compute horizontal angle & vertical pitch toward target
       const dx = nearestTarget.position.x - ai.position.x;
       const dz = nearestTarget.position.z - ai.position.z;
       const dy = nearestTarget.position.y - ai.position.y;
       const horizDist = Math.max(0.01, Math.hypot(dx, dz));
 
-      const targetYaw = Math.atan2(-dx, -dz);
-      // Smoothly turn toward target
+      // Smoothly turn toward target (+Z forward in Babylon)
+      const targetYaw = Math.atan2(dx, dz);
       let angleDiff = targetYaw - ai.yaw;
       while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
       while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
       ai.yaw += angleDiff * Math.min(1, dt * 8);
       ai.model.root.rotation.y = ai.yaw;
 
-      // Vertical pitch so soldiers aim up/down sand dunes
       ai.pitch = Math.max(-0.35, Math.min(0.35, -Math.atan2(dy, horizDist)));
 
       const canSee = hasLineOfSight(ai, nearestTarget);
 
-      // Update tactical strafe timer
       ai.strafeTimer -= dt;
       if (ai.strafeTimer <= 0) {
         ai.strafeTimer = 1.4 + Math.random() * 1.8;
         ai.strafeDir = Math.random() > 0.5 ? 1 : -1;
       }
 
-      // Decide movement: advance if far or blocked by cover, strafe when in range
-      const forward = new THREE.Vector3(-Math.sin(ai.yaw), 0, -Math.cos(ai.yaw));
-      const right = new THREE.Vector3(Math.cos(ai.yaw), 0, -Math.sin(ai.yaw));
-      const moveVec = new THREE.Vector3();
+      const forward = new BABYLON.Vector3(Math.sin(ai.yaw), 0, Math.cos(ai.yaw));
+      const right = new BABYLON.Vector3(Math.cos(ai.yaw), 0, -Math.sin(ai.yaw));
+      const moveVec = new BABYLON.Vector3(0, 0, 0);
 
       if (horizDist > 20 || !canSee) {
-        moveVec.add(forward);
-        moveVec.addScaledVector(right, ai.strafeDir * 0.45);
+        moveVec.addInPlace(forward);
+        moveVec.addInPlace(right.scale(ai.strafeDir * 0.45));
       } else if (horizDist < 8) {
-        moveVec.addScaledVector(forward, -0.6);
-        moveVec.addScaledVector(right, ai.strafeDir * 0.8);
+        moveVec.addInPlace(forward.scale(-0.6));
+        moveVec.addInPlace(right.scale(ai.strafeDir * 0.8));
       } else {
-        moveVec.addScaledVector(right, ai.strafeDir * 0.75);
+        moveVec.addInPlace(right.scale(ai.strafeDir * 0.75));
       }
 
-      const isMoving = moveVec.lengthSq() > 0.01;
+      const isMoving = moveVec.lengthSquared() > 0.01;
       if (isMoving) {
-        moveVec.normalize().multiplyScalar(ai.speed * dt);
-        ai.position.add(moveVec);
-        resolveCollisionsAndSand(ai);
+        moveVec.normalize().scaleInPlace(ai.speed * dt);
+        ai.position.addInPlace(moveVec);
         ai.moveBlend = Math.min(1, ai.moveBlend + dt * 5);
       } else {
         ai.moveBlend = Math.max(0, ai.moveBlend - dt * 5);
       }
 
+      updateSoldierPhysicsAndCollisions(ai, dt);
       animateSoldier(ai, dt, isMoving, ai.strafeDir * 0.5);
 
-      // Fire weapon when target is within range and visible
       if (ai.fireCooldown > 0) ai.fireCooldown -= dt;
       if (ai.fireCooldown <= 0 && horizDist < 58 && canSee) {
         const muzzlePos = getMuzzleWorldPosition(ai);
-        const spread = ai.team === "green" ? 1.25 : 1.55;
-        const aimPos = new THREE.Vector3(
+        const spread = ai.team === "green" ? 1.2 : 1.5;
+        const aimPos = new BABYLON.Vector3(
           nearestTarget.position.x + (Math.random() - 0.5) * spread,
-          nearestTarget.position.y + 1.25 + (Math.random() - 0.5) * 0.65,
+          nearestTarget.position.y + 1.25 + (Math.random() - 0.5) * 0.6,
           nearestTarget.position.z + (Math.random() - 0.5) * spread
         );
-        const shotDir = aimPos.sub(muzzlePos).normalize();
+        const shotDir = aimPos.subtract(muzzlePos).normalize();
         const dmg = ai.team === "green" ? 20 : 12;
         fireWeapon(ai, shotDir, dmg);
       }
     }
 
     // =========================================================================
-    // 13. MAIN GAME LOOP
+    // 13. MAIN BABYLON RENDER & UPDATE LOOP
     // =========================================================================
     resetGame();
     let lastTime = performance.now();
 
-    function update(dt) {
+    scene.onBeforeRenderObservable.add(() => {
+      const now = performance.now();
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+
+      // Fade muzzle point light
+      if (muzzleLight.intensity > 0) {
+        muzzleLight.intensity = Math.max(0, muzzleLight.intensity - dt * 35);
+      }
+
       // Update active bullet tracers
       for (let i = tracers.length - 1; i >= 0; i--) {
         tracers[i].life -= dt;
         if (tracers[i].life <= 0) {
-          scene.remove(tracers[i].line);
-          tracers[i].line.geometry.dispose();
-          tracers[i].line.material.dispose();
+          tracers[i].mesh.dispose();
           tracers.splice(i, 1);
         }
       }
+
+      // Update physical impact particles
+      for (let i = impactParticles.length - 1; i >= 0; i--) {
+        const p = impactParticles[i];
+        p.life -= dt;
+        p.velocity.y -= 18.0 * dt;
+        p.mesh.position.addInPlace(p.velocity.scale(dt));
+        if (p.life <= 0) {
+          p.mesh.dispose();
+          if (p.mat) p.mat.dispose();
+          impactParticles.splice(i, 1);
+        }
+      }
+
+      // Update dynamic physics beach ball
+      updatePhysicsBeachBall(dt);
 
       // ----- PLAYER UPDATE -----
       if (player) {
         if (player.alive && !gameEnded) {
           player.model.root.rotation.y = player.yaw;
 
-          const forward = new THREE.Vector3(
-            -Math.sin(player.yaw),
+          const forward = new BABYLON.Vector3(
+            Math.sin(player.yaw),
             0,
-            -Math.cos(player.yaw)
+            Math.cos(player.yaw)
           );
-          const right = new THREE.Vector3(
+          const right = new BABYLON.Vector3(
             Math.cos(player.yaw),
             0,
             -Math.sin(player.yaw)
           );
 
-          const moveVec = new THREE.Vector3();
+          const moveVec = new BABYLON.Vector3(0, 0, 0);
           let strideDir = 0;
-          if (keys.KeyW) moveVec.add(forward);
-          if (keys.KeyS) moveVec.sub(forward);
+          if (keys.KeyW) moveVec.addInPlace(forward);
+          if (keys.KeyS) moveVec.subtractInPlace(forward);
           if (keys.KeyD) {
-            moveVec.add(right);
+            moveVec.addInPlace(right);
             strideDir += 1;
           }
           if (keys.KeyA) {
-            moveVec.sub(right);
+            moveVec.subtractInPlace(right);
             strideDir -= 1;
           }
 
-          const isMoving = moveVec.lengthSq() > 0;
+          // Hop / Jump with Shift
+          if ((keys.ShiftLeft || keys.ShiftRight) && player.isGrounded) {
+            player.velocity.y = 7.8;
+            player.isGrounded = false;
+          }
+
+          const isMoving = moveVec.lengthSquared() > 0;
           if (isMoving) {
-            moveVec.normalize().multiplyScalar(player.speed * dt);
-            player.position.add(moveVec);
-            resolveCollisionsAndSand(player);
+            moveVec.normalize().scaleInPlace(player.speed * dt);
+            player.position.addInPlace(moveVec);
             player.moveBlend = Math.min(1, player.moveBlend + dt * 6);
           } else {
             player.moveBlend = Math.max(0, player.moveBlend - dt * 6);
           }
 
+          updateSoldierPhysicsAndCollisions(player, dt);
           animateSoldier(player, dt, isMoving, strideDir);
 
-          // Player shooting
           if (player.fireCooldown > 0) player.fireCooldown -= dt;
           if ((isMouseDown || keys.Space) && player.fireCooldown <= 0) {
             firePlayerWeapon();
           }
         } else {
+          updateSoldierPhysicsAndCollisions(player, dt);
           animateSoldier(player, dt, false, 0);
         }
       }
@@ -1798,6 +2205,7 @@
         if (s.isPlayer) continue;
         if (gameEnded && s.alive) {
           s.moveBlend = Math.max(0, s.moveBlend - dt * 4);
+          updateSoldierPhysicsAndCollisions(s, dt);
           animateSoldier(s, dt, false, 0);
         } else {
           updateAISoldier(s, dt);
@@ -1810,56 +2218,43 @@
         const camHeight = 2.65;
         const shoulderOffset = 0.72;
 
-        const backDir = new THREE.Vector3(
+        const forward = new BABYLON.Vector3(
           Math.sin(player.yaw),
           0,
           Math.cos(player.yaw)
         );
-        const rightDir = new THREE.Vector3(
+        const right = new BABYLON.Vector3(
           Math.cos(player.yaw),
           0,
           -Math.sin(player.yaw)
         );
 
         const desiredCamPos = player.position
-          .clone()
-          .addScaledVector(backDir, camDistance)
-          .addScaledVector(rightDir, shoulderOffset);
+          .subtract(forward.scale(camDistance))
+          .add(right.scale(shoulderOffset));
 
-        // Keep camera above uneven sand dunes behind the player
         const sandUnderCam = getSandHeight(desiredCamPos.x, desiredCamPos.z);
         desiredCamPos.y = Math.max(
           sandUnderCam + 0.85,
           player.position.y + camHeight + Math.sin(player.pitch) * 2.2
         );
 
-        camera.position.copy(desiredCamPos);
+        camera.position.copyFrom(desiredCamPos);
 
         const lookTarget = player.position
-          .clone()
-          .addScaledVector(backDir, -14)
-          .addScaledVector(rightDir, shoulderOffset * 0.45);
+          .add(forward.scale(14))
+          .add(right.scale(shoulderOffset * 0.45));
         lookTarget.y = player.position.y + 1.55 - Math.sin(player.pitch) * 6.5;
-        camera.lookAt(lookTarget);
+        camera.setTarget(lookTarget);
       }
-    }
+    });
 
-    function animate(now) {
-      requestAnimationFrame(animate);
-      const dt = Math.min((now - lastTime) / 1000, 0.1);
-      lastTime = now;
+    engine.runRenderLoop(() => {
+      scene.render();
+    });
 
-      update(dt);
-      renderer.render(scene, camera);
-    }
-
-    requestAnimationFrame(animate);
-
-    // Handle browser window resize
     window.addEventListener("resize", () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      engine.resize();
     });
   </script>
 </body>
