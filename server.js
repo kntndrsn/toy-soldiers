@@ -5,6 +5,24 @@ const { WebSocketServer, WebSocket } = require("ws");
 
 const PORT = process.env.PORT || 3000;
 const INDEX_PATH = path.join(__dirname, "index.html");
+const FAVICON_DIR = path.join(__dirname, "favicon");
+
+const FAVICON_MIME_TYPES = {
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
+  ".webmanifest": "application/manifest+json"
+};
+
+const FAVICON_FILES = new Set([
+  "favicon-96x96.png",
+  "favicon.svg",
+  "favicon.ico",
+  "apple-touch-icon.png",
+  "site.webmanifest",
+  "web-app-manifest-192x192.png",
+  "web-app-manifest-512x512.png"
+]);
 
 // ============================================================================
 // 1. DDoS PROTECTION, RATE LIMITING & PERFORMANCE PROFILER STATE
@@ -29,6 +47,16 @@ const ddosTelemetry = {
 };
 
 function getClientIp(req) {
+  // Allow k6 virtual users (even behind a reverse proxy that overwrites X-Forwarded-For)
+  // to have isolated per-VU connection/rate buckets while still testing per-socket limits
+  const k6VuHeader = req && req.headers && req.headers["x-k6-vu"];
+  if (typeof k6VuHeader === "string" && k6VuHeader.length > 0) {
+    return "k6_" + k6VuHeader.slice(0, 24);
+  }
+  if (req && typeof req.url === "string" && req.url.includes("k6vu=")) {
+    const m = req.url.match(/[?&]k6vu=([a-zA-Z0-9_-]+)/);
+    if (m && m[1]) return "k6_" + m[1].slice(0, 24);
+  }
   const xff = req && req.headers && req.headers["x-forwarded-for"];
   if (typeof xff === "string" && xff.length > 0) {
     return xff.split(",")[0].trim();
@@ -98,7 +126,8 @@ const perfMetrics = {
   totalOutboundPkts: 0,
   msgStats: new Map(), // Map<msgType, { count, totalMs, maxMs }>
   clientProfiles: new Map(), // Map<clientId, ClientPerfSnapshot>
-  history: [] // rolling 60s of 1s snapshots
+  history: [], // rolling 60s of 1s snapshots
+  lastK6Report: null
 };
 
 function recordMsgProfile(type, durationMs) {
@@ -279,7 +308,8 @@ function buildPerfApiPayload() {
     messageProfiling,
     rooms: roomDetails,
     clientProfiles: clientList,
-    history: perfMetrics.history
+    history: perfMetrics.history,
+    lastK6Report: perfMetrics.lastK6Report
   };
 }
 
@@ -290,6 +320,11 @@ function renderPerfDashboardHtml() {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Toy Soldiers — Performance & Scaling Profiler</title>
+  <link rel="icon" type="image/png" href="favicon/favicon-96x96.png" sizes="96x96" />
+  <link rel="icon" type="image/svg+xml" href="favicon/favicon.svg" />
+  <link rel="shortcut icon" href="favicon/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="favicon/apple-touch-icon.png" />
+  <link rel="manifest" href="favicon/site.webmanifest" />
   <style>
     * { box-sizing: border-box; }
     body {
@@ -717,6 +752,43 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Remote k6 Stress Test Report Storage & Retrieval (so k6 run on another PC can publish its summary to the server)
+  if (cleanUrl === "/api/perf/report") {
+    if (req.method === "POST") {
+      let body = "";
+      req.on("data", (chunk) => {
+        if (body.length < 256 * 1024) body += chunk;
+      });
+      req.on("end", () => {
+        try {
+          perfMetrics.lastK6Report = JSON.parse(body);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true }));
+        } catch {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false }));
+        }
+      });
+      return;
+    }
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache"
+    });
+    res.end(
+      JSON.stringify(
+        {
+          ok: true,
+          hasReport: Boolean(perfMetrics.lastK6Report),
+          lastK6Report: perfMetrics.lastK6Report
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
   // Client Performance Telemetry Ingestion Endpoint (supports both Solo & Multiplayer profiling)
   if (cleanUrl === "/api/perf/client" && req.method === "POST") {
     let body = "";
@@ -772,6 +844,30 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-cache"
+      });
+      res.end(content);
+    });
+    return;
+  }
+
+  // Serve favicon & web-app manifest assets at both /favicon/<file> and root /<file>
+  const strippedPath = cleanUrl.replace(/^\/+/, "");
+  const assetName = strippedPath.startsWith("favicon/")
+    ? strippedPath.slice("favicon/".length)
+    : strippedPath;
+  if (FAVICON_FILES.has(assetName)) {
+    const filePath = path.join(FAVICON_DIR, assetName);
+    const ext = path.extname(assetName).toLowerCase();
+    const contentType = FAVICON_MIME_TYPES[ext] || "application/octet-stream";
+    fs.readFile(filePath, (err, content) => {
+      if (err) {
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end("Not Found");
+        return;
+      }
+      res.writeHead(200, {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=86400"
       });
       res.end(content);
     });
