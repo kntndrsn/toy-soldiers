@@ -185,39 +185,73 @@
       height: 20px;
     }
 
-    /* Win / Game Over Message */
+    /* Win / Game Over / Respawn / Final Scoreboard Modal */
     #end-message {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: rgba(15, 18, 15, 0.88);
-      padding: 30px 44px;
-      border-radius: 10px;
+      background: rgba(15, 18, 15, 0.94);
+      padding: 22px 28px;
+      border-radius: 12px;
       text-align: center;
       display: none;
       pointer-events: auto;
-      touch-action: auto;
+      touch-action: pan-y;
       border: 2px solid #ffffff;
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65);
+      width: min(440px, 94vw);
+      max-height: 90dvh;
+      overflow-y: auto;
       z-index: 30;
     }
 
     #end-title {
-      font-size: 34px;
+      font-size: 28px;
       font-weight: bold;
-      margin: 0 0 10px 0;
+      margin: 0 0 6px 0;
     }
 
     #end-subtitle {
-      font-size: 16px;
-      margin: 0 0 20px 0;
+      font-size: 14px;
+      margin: 0 0 14px 0;
       color: #e0e0e0;
     }
 
+    #final-scoreboard-wrap {
+      display: none;
+      margin: 0 0 16px 0;
+      max-height: 220px;
+      overflow-y: auto;
+      background: rgba(0, 0, 0, 0.42);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+    }
+
+    #final-scoreboard-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+
+    #final-scoreboard-table th,
+    #final-scoreboard-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    #final-scoreboard-table th {
+      background: rgba(255, 255, 255, 0.08);
+      color: #cccccc;
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
     #restart-btn, .primary-btn {
-      padding: 11px 24px;
-      font-size: 15px;
+      padding: 10px 20px;
+      font-size: 14.5px;
       font-weight: bold;
       color: #ffffff;
       background: #2e8b24;
@@ -232,8 +266,8 @@
     }
 
     .secondary-btn {
-      padding: 11px 20px;
-      font-size: 15px;
+      padding: 10px 18px;
+      font-size: 14.5px;
       font-weight: bold;
       color: #e8e8e8;
       background: #444b44;
@@ -247,38 +281,39 @@
       background: #586158;
     }
 
-    /* Match Setup Modal (Start of Match) */
+    /* Streamlined Match Setup Modal */
     #setup-modal {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
       background: rgba(16, 22, 16, 0.94);
-      padding: 22px 26px;
+      padding: 18px 20px;
       border-radius: 12px;
       text-align: center;
       pointer-events: auto;
       touch-action: pan-y;
       border: 2px solid #58d64d;
       box-shadow: 0 14px 40px rgba(0, 0, 0, 0.7);
-      width: min(430px, 94vw);
-      max-height: 90dvh;
+      width: min(410px, 94vw);
+      max-height: 92dvh;
       overflow-y: auto;
       backdrop-filter: blur(6px);
       z-index: 30;
     }
 
     #setup-modal h2 {
-      margin: 0 0 6px 0;
-      font-size: 26px;
+      margin: 0 0 12px 0;
+      font-size: 21px;
       color: #98ff8c;
       letter-spacing: 0.5px;
     }
 
-    #setup-modal p {
-      margin: 0 0 20px 0;
-      font-size: 14px;
-      color: #cccccc;
+    .setup-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 8px;
     }
 
     .setup-field {
@@ -286,33 +321,35 @@
       justify-content: space-between;
       align-items: center;
       background: rgba(255, 255, 255, 0.07);
-      padding: 12px 16px;
+      padding: 8px 11px;
       border-radius: 8px;
-      margin-bottom: 14px;
+      margin-bottom: 8px;
       text-align: left;
     }
 
-    .setup-field-label {
-      font-size: 14.5px;
-      font-weight: bold;
+    .setup-grid .setup-field {
+      margin-bottom: 0;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
     }
 
-    .setup-field-sub {
-      font-size: 12px;
-      color: #bbbbbb;
-      margin-top: 2px;
+    .setup-field-label {
+      font-size: 13px;
+      font-weight: bold;
     }
 
     .stepper {
       display: flex;
       align-items: center;
-      gap: 8px;
+      justify-content: space-between;
+      gap: 6px;
     }
 
     .step-btn {
-      width: 32px;
-      height: 32px;
-      font-size: 18px;
+      width: 30px;
+      height: 30px;
+      font-size: 17px;
       font-weight: bold;
       color: #ffffff;
       background: rgba(255, 255, 255, 0.16);
@@ -327,10 +364,10 @@
     }
 
     .count-input {
-      width: 52px;
-      height: 32px;
+      width: 50px;
+      height: 30px;
       text-align: center;
-      font-size: 16px;
+      font-size: 14px;
       font-weight: bold;
       color: #ffffff;
       background: rgba(0, 0, 0, 0.5);
@@ -830,9 +867,11 @@
     </div>
 
     <div id="scoreboard">
-      <span class="team-badge-green">GREEN: <span id="green-count">4</span>/<span id="green-total">4</span></span>
+      <span id="match-timer" style="color: #ffffff;">05:00</span>
+      <span style="opacity: 0.45;">|</span>
+      <span class="team-badge-green">GREEN: <span id="green-kills">0</span> (<span id="green-count">4</span>/<span id="green-total">4</span>)</span>
       <span>vs</span>
-      <span class="team-badge-tan">TAN: <span id="tan-count">4</span>/<span id="tan-total">4</span></span>
+      <span class="team-badge-tan">TAN: <span id="tan-kills">0</span> (<span id="tan-count">4</span>/<span id="tan-total">4</span>)</span>
     </div>
 
     <div id="mp-toast-container"></div>
@@ -851,88 +890,116 @@
       </div>
     </div>
 
-    <!-- Start-of-Match Team & Multiplayer Configuration Modal -->
+    <!-- Streamlined New Match & Multiplayer Modal -->
     <div id="setup-modal">
-      <h2>SANDBOX DEPLOYMENT</h2>
-      <p>Configure your soldier, Host a Match, or Join an Active Game</p>
+      <h2>NEW MATCH</h2>
 
-      <!-- Player Identity (Saved in Browser localStorage) -->
-      <div class="setup-field" style="gap: 10px;">
-        <div style="flex: 1;">
-          <div class="setup-field-label" style="color: #7ad7ff;">Your Soldier Name &amp; Team</div>
-          <div class="setup-field-sub">Saved automatically in your browser</div>
-        </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <input id="mp-name-input" class="count-input" type="text" value="Soldier" placeholder="Your Name" style="width: 125px; font-size: 14px;" />
-          <select id="mp-team-select" class="count-input" style="width: 112px; font-size: 13px;">
+      <!-- Row 1: Name & Team -->
+      <div class="setup-field" style="gap: 8px;">
+        <span class="setup-field-label" style="color: #7ad7ff;">Player</span>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <input id="mp-name-input" class="count-input" type="text" value="Soldier" placeholder="Name" style="width: 120px; font-size: 13.5px;" />
+          <select id="mp-team-select" class="count-input" style="width: 105px; font-size: 13px;">
             <option value="green">Green Team</option>
             <option value="tan">Tan Team</option>
           </select>
         </div>
       </div>
 
-      <!-- Host / Solo Match Settings -->
-      <div class="setup-field">
-        <div>
-          <div class="setup-field-label" style="color: #84ff78;">Green Squad Size (Host / Solo)</div>
-          <div class="setup-field-sub" id="friendly-summary">You + 3 Friendly = 4 Green Total</div>
-        </div>
-        <div class="stepper">
-          <button class="step-btn" id="friendly-minus" type="button">&minus;</button>
-          <input class="count-input" id="friendly-input" type="number" min="0" max="12" value="3" />
-          <button class="step-btn" id="friendly-plus" type="button">+</button>
-        </div>
-      </div>
-
-      <div class="setup-field">
-        <div>
-          <div class="setup-field-label" style="color: #ffd584;">Tan Squad Size (Host / Solo)</div>
-          <div class="setup-field-sub" id="enemy-summary">4 Bad Guys to eliminate</div>
-        </div>
-        <div class="stepper">
-          <button class="step-btn" id="enemy-minus" type="button">&minus;</button>
-          <input class="count-input" id="enemy-input" type="number" min="1" max="16" value="4" />
-          <button class="step-btn" id="enemy-plus" type="button">+</button>
-        </div>
-      </div>
-
-      <!-- Host or Play Solo Buttons -->
-      <div style="display: flex; gap: 8px; margin-bottom: 14px; align-items: center;">
-        <button class="primary-btn" id="start-match-btn" type="button" style="flex: 1; font-size: 14.5px; background: #3b6e36;">
-          Play Solo
-        </button>
-        <input id="mp-room-input" class="count-input" type="text" value="SAND1" placeholder="Room" title="Room Code to Host" style="width: 82px; height: 41px; font-size: 14px; text-transform: uppercase;" />
-        <button class="primary-btn" id="host-mp-btn" type="button" style="flex: 1.25; font-size: 14.5px; background: #2e8b24;">
-          Host Online Match
-        </button>
-      </div>
-
-      <!-- Join Active Online Match Browser -->
-      <div class="setup-field" style="flex-direction: column; align-items: stretch; gap: 8px; margin-bottom: 0;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span class="setup-field-label" style="color: #7ad7ff;">Join an Active Match</span>
-          <span id="mp-modal-status" style="font-size: 12px; color: #cccccc;">Checking server...</span>
-        </div>
-        <div id="active-matches-box">
-          <div id="active-matches-list" style="font-size: 12.5px; color: #bbbbbb;">
-            No active matches yet — click <strong>Host Online Match</strong> above to start one!
+      <!-- Row 2: Green Bots & Tan Bots -->
+      <div class="setup-grid">
+        <div class="setup-field">
+          <span class="setup-field-label" style="color: #84ff78;">Green Bots</span>
+          <div class="stepper">
+            <button class="step-btn" id="friendly-minus" type="button">&minus;</button>
+            <input class="count-input" id="friendly-input" type="number" min="0" max="12" value="3" />
+            <button class="step-btn" id="friendly-plus" type="button">+</button>
           </div>
         </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <input id="mp-url-input" class="count-input" type="text" placeholder="wss://toy-soldiers.duckdns.org" style="flex: 1; width: auto; height: 28px; font-size: 11.5px; text-align: left; padding: 0 8px; opacity: 0.75;" />
-          <button class="join-row-btn" id="join-mp-btn" type="button" style="height: 28px; padding: 0 12px; font-size: 12px;">
-            Join Room Code
+
+        <div class="setup-field">
+          <span class="setup-field-label" style="color: #ffd584;">Tan Bots</span>
+          <div class="stepper">
+            <button class="step-btn" id="enemy-minus" type="button">&minus;</button>
+            <input class="count-input" id="enemy-input" type="number" min="1" max="16" value="4" />
+            <button class="step-btn" id="enemy-plus" type="button">+</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 3: Map Size & Time Limit -->
+      <div class="setup-grid">
+        <div class="setup-field">
+          <span class="setup-field-label" style="color: #e8d59e;">Map Size</span>
+          <select id="map-size-select" class="count-input" style="width: 100%; font-size: 13px;">
+            <option value="60">Medium</option>
+            <option value="80" selected>Large</option>
+            <option value="105">Huge</option>
+          </select>
+        </div>
+
+        <div class="setup-field">
+          <span class="setup-field-label" style="color: #b8e8ff;">Time Limit</span>
+          <select id="time-limit-select" class="count-input" style="width: 100%; font-size: 13px;">
+            <option value="120">2 Minutes</option>
+            <option value="180">3 Minutes</option>
+            <option value="300" selected>5 Minutes</option>
+            <option value="600">10 Minutes</option>
+            <option value="900">15 Minutes</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Row 4: Solo or Host Online -->
+      <div style="display: flex; gap: 6px; margin-bottom: 8px; align-items: center;">
+        <button class="primary-btn" id="start-match-btn" type="button" style="flex: 1; background: #3b6e36;">
+          Play Solo
+        </button>
+        <input id="mp-room-input" class="count-input" type="text" value="SAND1" placeholder="Room" title="Room Code" style="width: 74px; height: 39px; font-size: 13.5px; text-transform: uppercase;" />
+        <button class="primary-btn" id="host-mp-btn" type="button" style="flex: 1.2; background: #2e8b24;">
+          Host Match
+        </button>
+      </div>
+
+      <!-- Row 5: Active Matches Browser -->
+      <div class="setup-field" style="flex-direction: column; align-items: stretch; gap: 6px; margin-bottom: 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span class="setup-field-label" style="color: #7ad7ff;">Active Matches</span>
+          <span id="mp-modal-status" style="font-size: 11.5px; color: #cccccc;">Checking...</span>
+        </div>
+        <div id="active-matches-box">
+          <div id="active-matches-list" style="font-size: 12px; color: #bbbbbb;">
+            No active matches — click <strong>Host Match</strong> above.
+          </div>
+        </div>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <input id="mp-url-input" class="count-input" type="text" placeholder="wss://toy-soldiers.duckdns.org" style="flex: 1; width: auto; height: 26px; font-size: 11px; text-align: left; padding: 0 8px; opacity: 0.7;" />
+          <button class="join-row-btn" id="join-mp-btn" type="button" style="height: 26px; padding: 0 10px; font-size: 11.5px;">
+            Join Code
           </button>
         </div>
       </div>
     </div>
 
     <div id="end-message">
-      <div id="end-title">VICTORY!</div>
-      <div id="end-subtitle">All tan soldiers have been eliminated.</div>
+      <div id="end-title">TIME UP!</div>
+      <div id="end-subtitle">Match Results</div>
+      <div id="final-scoreboard-wrap">
+        <table id="final-scoreboard-table">
+          <thead>
+            <tr>
+              <th>Soldier</th>
+              <th>Team</th>
+              <th>Kills</th>
+              <th>Deaths</th>
+            </tr>
+          </thead>
+          <tbody id="final-scoreboard-body"></tbody>
+        </table>
+      </div>
       <div>
-        <button id="restart-btn" type="button">Play Again (R)</button>
-        <button id="setup-again-btn" class="secondary-btn" type="button">Change Teams (M)</button>
+        <button id="restart-btn" type="button">New Round (R)</button>
+        <button id="setup-again-btn" class="secondary-btn" type="button">Match Setup (M)</button>
       </div>
     </div>
   </div>
@@ -1051,8 +1118,10 @@
     // =========================================================================
     // 4. UNEVEN SANDBOX TERRAIN, NORMAL CALCULATION & WOODEN FRAME
     // =========================================================================
-    const WORLD_LIMIT = 44; // Inner sandbox half-size
-    const obstacles = [];   // Static toy bounding boxes for movement collision
+    let WORLD_LIMIT = 80; // Default Large sandbox half-size (160x160 total)
+    let builtWorldLimit = 0;
+    let envRootNode = null;
+    const obstacles = []; // Static toy bounding boxes for movement collision
 
     // Analytical height function for sculpted sand dunes, hills, and hollows
     function getSandHeight(x, z) {
@@ -1117,8 +1186,8 @@
       dynTex.update();
       dynTex.wrapU = BABYLON.Texture.WRAP_ADDRESSMODE;
       dynTex.wrapV = BABYLON.Texture.WRAP_ADDRESSMODE;
-      dynTex.uScale = 18;
-      dynTex.vScale = 18;
+      dynTex.uScale = 24;
+      dynTex.vScale = 24;
 
       const mat = new BABYLON.StandardMaterial("sandMat", scene);
       mat.diffuseTexture = dynTex;
@@ -1128,7 +1197,6 @@
     }
 
     // Dedicated wet/molded sand material for the Sandcastle & Dump Truck load
-    // (Avoids StandardMaterial.clone() creating an un-updated blank DynamicTexture)
     function createMoldedSandMaterial() {
       const dynTex = new BABYLON.DynamicTexture("moldedSandTex", 256, scene, true);
       const ctx = dynTex.getContext();
@@ -1136,13 +1204,11 @@
       ctx.fillStyle = "#c99f55";
       ctx.fillRect(0, 0, 256, 256);
 
-      // Subtle horizontal molded bucket-ring bands
       for (let y = 0; y < 256; y += 32) {
         ctx.fillStyle = "rgba(95, 65, 25, 0.16)";
         ctx.fillRect(0, y, 256, 5);
       }
 
-      // Fine wet-sand grain speckles
       const palette = ["#b88d44", "#dfb76c", "#a87e38", "#d4ac62"];
       for (let i = 0; i < 4000; i++) {
         ctx.fillStyle = palette[i % palette.length];
@@ -1166,38 +1232,7 @@
       return mat;
     }
 
-    const sandMat = createSandMaterial();
-    const sandCastleMat = createMoldedSandMaterial();
-
-    // Create high-density ground mesh and displace vertices with getSandHeight
-    const sandMesh = BABYLON.MeshBuilder.CreateGround(
-      "sandGround",
-      {
-        width: WORLD_LIMIT * 2,
-        height: WORLD_LIMIT * 2,
-        subdivisions: 100,
-        updatable: true
-      },
-      scene
-    );
-
-    const sandPositions = sandMesh.getVerticesData(BABYLON.VertexBuffer.PositionKind);
-    const sandNormals = sandMesh.getVerticesData(BABYLON.VertexBuffer.NormalKind);
-    const sandIndices = sandMesh.getIndices();
-
-    for (let i = 0; i < sandPositions.length; i += 3) {
-      sandPositions[i + 1] = getSandHeight(sandPositions[i], sandPositions[i + 2]);
-    }
-    BABYLON.VertexData.ComputeNormals(sandPositions, sandIndices, sandNormals);
-    sandMesh.updateVerticesData(BABYLON.VertexBuffer.PositionKind, sandPositions);
-    sandMesh.updateVerticesData(BABYLON.VertexBuffer.NormalKind, sandNormals);
-    sandMesh.refreshBoundingInfo();
-    sandMesh.material = sandMat;
-    sandMesh.receiveShadows = true;
-    sandMesh.metadata = { isEnvironment: true, isSand: true };
-
-    // Wooden Sandbox Border Walls & Backyard Lawn
-    function buildSandboxFrame() {
+    function createWoodMaterial() {
       const woodTex = new BABYLON.DynamicTexture("woodTex", { width: 256, height: 64 }, scene, true);
       const ctx = woodTex.getContext();
       ctx.fillStyle = "#8c5828";
@@ -1207,14 +1242,52 @@
         ctx.fillRect(0, Math.floor(Math.random() * 64), 256, 2);
       }
       woodTex.update();
-      woodTex.uScale = 5;
+      woodTex.uScale = 6;
 
       const woodMat = new BABYLON.StandardMaterial("woodMat", scene);
       woodMat.diffuseTexture = woodTex;
       woodMat.specularColor = new BABYLON.Color3(0.18, 0.12, 0.08);
+      return woodMat;
+    }
 
-      const wallThickness = 2.4;
-      const wallHeight = 3.5;
+    const sandMat = createSandMaterial();
+    const sandCastleMat = createMoldedSandMaterial();
+    const woodMat = createWoodMaterial();
+    const lawnMat = new BABYLON.StandardMaterial("lawnMat", scene);
+    lawnMat.diffuseColor = new BABYLON.Color3(0.28, 0.48, 0.2);
+    lawnMat.specularColor = BABYLON.Color3.Black();
+
+    // Builds the sand ground, wooden border walls, and corner seats under envRootNode
+    function buildSandboxFrameAndGround() {
+      const sandMesh = BABYLON.MeshBuilder.CreateGround(
+        "sandGround",
+        {
+          width: WORLD_LIMIT * 2,
+          height: WORLD_LIMIT * 2,
+          subdivisions: 110,
+          updatable: true
+        },
+        scene
+      );
+
+      const sandPositions = sandMesh.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+      const sandNormals = sandMesh.getVerticesData(BABYLON.VertexBuffer.NormalKind);
+      const sandIndices = sandMesh.getIndices();
+
+      for (let i = 0; i < sandPositions.length; i += 3) {
+        sandPositions[i + 1] = getSandHeight(sandPositions[i], sandPositions[i + 2]);
+      }
+      BABYLON.VertexData.ComputeNormals(sandPositions, sandIndices, sandNormals);
+      sandMesh.updateVerticesData(BABYLON.VertexBuffer.PositionKind, sandPositions);
+      sandMesh.updateVerticesData(BABYLON.VertexBuffer.NormalKind, sandNormals);
+      sandMesh.refreshBoundingInfo();
+      sandMesh.material = sandMat;
+      sandMesh.receiveShadows = true;
+      sandMesh.metadata = { isEnvironment: true, isSand: true };
+      sandMesh.parent = envRootNode;
+
+      const wallThickness = 2.8;
+      const wallHeight = 3.8;
       const fullSpan = WORLD_LIMIT * 2 + wallThickness * 2;
 
       const sides = [
@@ -1234,10 +1307,10 @@
         wall.material = woodMat;
         wall.receiveShadows = true;
         shadowGen.addShadowCaster(wall);
-        wall.metadata = { isEnvironment: true };
+        wall.metadata = { isEnvironment: true, isWall: true };
+        wall.parent = envRootNode;
       });
 
-      // Corner bench seats on the sandbox frame
       const corners = [
         [-WORLD_LIMIT, -WORLD_LIMIT],
         [WORLD_LIMIT, -WORLD_LIMIT],
@@ -1247,7 +1320,7 @@
       corners.forEach(([cx, cz], idx) => {
         const seat = BABYLON.MeshBuilder.CreateBox(
           "cornerSeat_" + idx,
-          { width: 6.2, height: 0.5, depth: 6.2 },
+          { width: 6.5, height: 0.5, depth: 6.5 },
           scene
         );
         seat.position.set(
@@ -1258,19 +1331,17 @@
         seat.material = woodMat;
         seat.receiveShadows = true;
         shadowGen.addShadowCaster(seat);
-        seat.metadata = { isEnvironment: true };
+        seat.metadata = { isEnvironment: true, isWall: true };
+        seat.parent = envRootNode;
       });
 
-      // Surrounding backyard grass outside the sandbox
-      const lawnMat = new BABYLON.StandardMaterial("lawnMat", scene);
-      lawnMat.diffuseColor = new BABYLON.Color3(0.28, 0.48, 0.2);
-      lawnMat.specularColor = BABYLON.Color3.Black();
-
+      const lawnOffset = WORLD_LIMIT + 72;
+      const lawnSpan = WORLD_LIMIT * 2 + 280;
       const lawnPatches = [
-        { x: 0, z: -115, w: 320, d: 140 },
-        { x: 0, z: 115, w: 320, d: 140 },
-        { x: -115, z: 0, w: 140, d: 100 },
-        { x: 115, z: 0, w: 140, d: 100 }
+        { x: 0, z: -lawnOffset, w: lawnSpan, d: 140 },
+        { x: 0, z: lawnOffset, w: lawnSpan, d: 140 },
+        { x: -lawnOffset, z: 0, w: 140, d: WORLD_LIMIT * 2 + 10 },
+        { x: lawnOffset, z: 0, w: 140, d: WORLD_LIMIT * 2 + 10 }
       ];
       lawnPatches.forEach((lp, idx) => {
         const g = BABYLON.MeshBuilder.CreateGround(
@@ -1281,15 +1352,15 @@
         g.position.set(lp.x, -0.45, lp.z);
         g.material = lawnMat;
         g.isPickable = false;
+        g.parent = envRootNode;
       });
     }
-
-    buildSandboxFrame();
 
     // =========================================================================
     // 5. SANDBOX TOYS (SANDCASTLE, DUMP TRUCK, BUCKETS, LEGO BRICKS, PHYSICS BALL)
     // =========================================================================
     function registerToyObstacle(rootNode, centerX, centerZ, width, depth, height) {
+      rootNode.parent = envRootNode;
       rootNode.getChildMeshes().forEach((m) => {
         m.receiveShadows = true;
         shadowGen.addShadowCaster(m);
@@ -1629,6 +1700,8 @@
       shadowGen.addShadowCaster(mesh);
       mesh.metadata = { isEnvironment: true, isPhysicsBall: true };
 
+      mesh.parent = envRootNode;
+
       physicsBall = {
         mesh,
         radius,
@@ -1636,26 +1709,65 @@
       };
     }
 
-    function populateSandboxWithToys() {
+    function rebuildSandboxEnvironment(newLimit) {
+      const targetLimit = Math.max(50, Math.min(130, Number(newLimit) || 80));
+      if (envRootNode && builtWorldLimit === targetLimit) {
+        if (physicsBall) {
+          const bx = 13;
+          const bz = -5;
+          physicsBall.mesh.position.set(
+            bx,
+            getSandHeight(bx, bz) + physicsBall.radius,
+            bz
+          );
+          physicsBall.velocity.set(0, 0, 0);
+        }
+        return;
+      }
+
+      if (envRootNode) {
+        envRootNode.dispose();
+        envRootNode = null;
+      }
+      obstacles.length = 0;
+      WORLD_LIMIT = targetLimit;
+      builtWorldLimit = targetLimit;
+
+      scene.fogStart = WORLD_LIMIT + 35;
+      scene.fogEnd = WORLD_LIMIT * 2.7;
+      camera.maxZ = WORLD_LIMIT * 3.6;
+
+      envRootNode = new BABYLON.TransformNode("envRoot", scene);
+      buildSandboxFrameAndGround();
+
+      const s = WORLD_LIMIT / 48;
       createSandcastle(0, 2);
-      createToyDumpTruck(-18, 14, 2.6);
+      createToyDumpTruck(-18 * s, 14 * s, 2.6);
 
-      createBeachBucket(15, 12, redToyMat, false, 0.3);
-      createBeachBucket(-14, -13, blueToyMat, true, 1.1);
-      createBeachBucket(22, -16, tealToyMat, false, -0.6);
+      createBeachBucket(15 * s, 12 * s, redToyMat, false, 0.3);
+      createBeachBucket(-14 * s, -13 * s, blueToyMat, true, 1.1);
+      createBeachBucket(22 * s, -16 * s, tealToyMat, false, -0.6);
 
-      createToyBrick(-9, 18, 6.0, 2.1, 3.0, 4, 2, redToyMat, 0.18);
-      createToyBrick(10, 22, 6.0, 2.1, 3.0, 4, 2, blueToyMat, -0.22);
-      createToyBrick(-20, -2, 3.0, 2.3, 6.0, 2, 4, yellowToyMat, 0.12);
-      createToyBrick(20, 1, 3.0, 2.3, 6.0, 2, 4, redToyMat, -0.15);
-      createToyBrick(-7, -18, 6.0, 2.1, 3.0, 4, 2, tealToyMat, -0.1);
-      createToyBrick(9, -17, 6.0, 2.1, 3.0, 4, 2, yellowToyMat, 0.25);
+      createToyBrick(-9 * s, 18 * s, 6.0, 2.1, 3.0, 4, 2, redToyMat, 0.18);
+      createToyBrick(10 * s, 22 * s, 6.0, 2.1, 3.0, 4, 2, blueToyMat, -0.22);
+      createToyBrick(-20 * s, -2 * s, 3.0, 2.3, 6.0, 2, 4, yellowToyMat, 0.12);
+      createToyBrick(20 * s, 1 * s, 3.0, 2.3, 6.0, 2, 4, redToyMat, -0.15);
+      createToyBrick(-7 * s, -18 * s, 6.0, 2.1, 3.0, 4, 2, tealToyMat, -0.1);
+      createToyBrick(9 * s, -17 * s, 6.0, 2.1, 3.0, 4, 2, yellowToyMat, 0.25);
+
+      // Additional outer cover toys for Large and Huge sandboxes
+      if (WORLD_LIMIT >= 70) {
+        createToyBrick(-32 * (s / 1.5), -32 * (s / 1.5), 6.0, 2.2, 3.0, 4, 2, blueToyMat, 0.4);
+        createToyBrick(32 * (s / 1.5), 32 * (s / 1.5), 6.0, 2.2, 3.0, 4, 2, yellowToyMat, -0.4);
+        createBeachBucket(-30 * (s / 1.5), 26 * (s / 1.5), yellowToyMat, true, -0.8);
+        createBeachBucket(30 * (s / 1.5), -26 * (s / 1.5), redToyMat, false, 0.5);
+      }
 
       createPhysicsBeachBall(13, -5, 1.85);
-      createPlasticShovel(-11, 5, tealToyMat, 0.8);
+      createPlasticShovel(-11 * s, 5 * s, tealToyMat, 0.8);
     }
 
-    populateSandboxWithToys();
+    rebuildSandboxEnvironment(WORLD_LIMIT);
 
     // =========================================================================
     // 6. CAPSULE-SCULPTED SOLDIER WITH 2-BONE IK RIFLE ARMS
@@ -2035,12 +2147,15 @@
       hitbox.isPickable = true;
       hitbox.parent = root;
 
-      // Overhead floating health bar for AI teammates & enemies
+      // Overhead floating health bar & multiplayer name tag for teammates/enemies
       let overheadGroup = null;
       let overheadBarFill = null;
+      let namePlane = null;
+      let nameTex = null;
       if (showOverheadBar) {
         overheadGroup = new BABYLON.TransformNode(prefix + "overhead", scene);
-        overheadGroup.position.set(0, 2.42, 0);
+        overheadGroup.position.set(0, 2.45, 0);
+        overheadGroup.billboardMode = BABYLON.TransformNode.BILLBOARDMODE_ALL;
         overheadGroup.parent = root;
 
         const bgPlane = BABYLON.MeshBuilder.CreatePlane(
@@ -2070,6 +2185,32 @@
         overheadBarFill.material = fillMat;
         overheadBarFill.isPickable = false;
         overheadBarFill.parent = overheadGroup;
+
+        // Floating 3D Name Tag above the health bar for Multiplayer Human Players
+        namePlane = BABYLON.MeshBuilder.CreatePlane(
+          prefix + "namePlane",
+          { width: 2.3, height: 0.48 },
+          scene
+        );
+        namePlane.position.set(0, 0.36, 0);
+        namePlane.isPickable = false;
+        namePlane.isVisible = false;
+        namePlane.parent = overheadGroup;
+
+        nameTex = new BABYLON.DynamicTexture(
+          prefix + "nameTex",
+          { width: 320, height: 68 },
+          scene,
+          true
+        );
+        nameTex.hasAlpha = true;
+        const nameMat = new BABYLON.StandardMaterial(prefix + "nameMat", scene);
+        nameMat.diffuseTexture = nameTex;
+        nameMat.emissiveTexture = nameTex;
+        nameMat.useAlphaFromDiffuseTexture = true;
+        nameMat.disableLighting = true;
+        nameMat.backFaceCulling = false;
+        namePlane.material = nameMat;
       }
 
       // Register soldier meshes for shadow casting
@@ -2097,10 +2238,56 @@
         hitbox,
         overheadGroup,
         overheadBarFill,
+        namePlane,
+        nameTex,
         flashTimer: 0,
         recoilTimer: 0,
         flinchTimer: 0
       };
+    }
+
+    // Draws or hides the floating 3D name tag above a soldier's head
+    function updateSoldierOverheadName(soldier) {
+      const m = soldier.model;
+      if (!m || !m.namePlane || !m.nameTex) return;
+
+      if (!soldier.isRemotePlayer) {
+        m.namePlane.isVisible = false;
+        return;
+      }
+
+      m.namePlane.isVisible = true;
+      const ctx = m.nameTex.getContext();
+      ctx.clearRect(0, 0, 320, 68);
+
+      // Rounded dark pill background with team-colored border
+      const isGreen = soldier.team === "green";
+      ctx.fillStyle = "rgba(12, 18, 12, 0.82)";
+      ctx.strokeStyle = isGreen ? "#65ff58" : "#ffd584";
+      ctx.lineWidth = 4;
+
+      const x = 14, y = 8, w = 292, h = 52, r = 24;
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.font = "bold 26px Segoe UI, sans-serif";
+      ctx.fillStyle = isGreen ? "#98ff8c" : "#ffe09e";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const label = (soldier.rawPlayerName || soldier.name || "Player").slice(0, 16);
+      ctx.fillText("★ " + label, 160, 35);
+      m.nameTex.update();
     }
 
     // Positions an IK arm (shoulder sphere, upper arm capsule, elbow sphere, forearm capsule, hand sphere)
@@ -2158,10 +2345,6 @@
 
       if (m.flinchTimer > 0) {
         m.flinchTimer = Math.max(0, m.flinchTimer - dt * 6);
-      }
-
-      if (m.overheadGroup) {
-        m.overheadGroup.lookAt(camera.position);
       }
 
       const rightShoulderPos = new BABYLON.Vector3(0.36, 0.65, -0.02);
@@ -2294,6 +2477,9 @@
     let player = null;
     let configuredFriendlyCount = 3; // Default: 3 Friendly AI + You = 4 Green Total
     let configuredEnemyCount = 4;    // Default: 4 Enemy Tan Soldiers
+    let configuredMapLimit = 80;     // Default: Large (80 -> 160x160)
+    let configuredDurationSec = 300; // Default: 5 Minutes (300s)
+    let matchTimeRemaining = 300;
     let isSetupOpen = true;
 
     // WebSocket Multiplayer State
@@ -2306,6 +2492,7 @@
       roomCode: "SAND1",
       hostId: null,
       roster: null,
+      serverOnlineCount: 0,
       sendTimer: 0,
       hostSendTimer: 0
     };
@@ -2326,40 +2513,42 @@
     ];
 
     function findSafeSpawnPoint(baseX, baseZ) {
-      let x = Math.max(-WORLD_LIMIT + 3, Math.min(WORLD_LIMIT - 3, baseX));
-      let z = Math.max(-WORLD_LIMIT + 3, Math.min(WORLD_LIMIT - 3, baseZ));
+      const bound = WORLD_LIMIT - 3.5;
+      let x = Math.max(-bound, Math.min(bound, baseX));
+      let z = Math.max(-bound, Math.min(bound, baseZ));
 
-      for (let attempt = 0; attempt < 16; attempt++) {
+      for (let attempt = 0; attempt < 20; attempt++) {
         let blocked = false;
         for (const obs of obstacles) {
           if (
-            x > obs.minX - 1.2 &&
-            x < obs.maxX + 1.2 &&
-            z > obs.minZ - 1.2 &&
-            z < obs.maxZ + 1.2
+            x > obs.minX - 1.4 &&
+            x < obs.maxX + 1.4 &&
+            z > obs.minZ - 1.4 &&
+            z < obs.maxZ + 1.4
           ) {
             blocked = true;
             break;
           }
         }
         if (!blocked) break;
-        x += (attempt % 2 === 0 ? 1 : -1) * 3.2;
-        z += (attempt > 6 ? -2.5 : 2.5);
-        x = Math.max(-WORLD_LIMIT + 3, Math.min(WORLD_LIMIT - 3, x));
-        z = Math.max(-WORLD_LIMIT + 3, Math.min(WORLD_LIMIT - 3, z));
+        x += (attempt % 2 === 0 ? 1 : -1) * 3.6;
+        z += (attempt > 6 ? -2.8 : 2.8);
+        x = Math.max(-bound, Math.min(bound, x));
+        z = Math.max(-bound, Math.min(bound, z));
       }
 
       return { x, z };
     }
 
     function getFormationPoint(team, index, totalOnTeam) {
+      const baseZ = Math.max(28, WORLD_LIMIT - 16);
       if (team === "green") {
-        if (index === 0) return findSafeSpawnPoint(0, -30);
+        if (index === 0) return findSafeSpawnPoint(0, -baseZ);
         const i = index - 1;
         const row = Math.floor(i / 4);
         const col = i % 4;
-        const offsetX = (col - 1.5) * 8.5 + (row % 2 === 0 ? 2 : -2);
-        const offsetZ = -28 - row * 5.2;
+        const offsetX = (col - 1.5) * 9.0 + (row % 2 === 0 ? 2 : -2);
+        const offsetZ = -(baseZ - 2) - row * 5.5;
         return findSafeSpawnPoint(offsetX, offsetZ);
       } else {
         const row = Math.floor(index / 4);
@@ -2367,13 +2556,67 @@
         const col = index % 4;
         const spread = Math.max(1, colsInRow - 1);
         const offsetX =
-          colsInRow === 1 ? 0 : ((col / spread) - 0.5) * 32 + (row % 2) * 3;
-        const offsetZ = 27 + row * 5.2;
+          colsInRow === 1 ? 0 : ((col / spread) - 0.5) * 36 + (row % 2) * 3;
+        const offsetZ = (baseZ - 2) + row * 5.5;
         return findSafeSpawnPoint(offsetX, offsetZ);
       }
     }
 
+    // Picks a safe respawn point as far away from living enemies as possible
+    function findFarthestSafeSpawnPoint(team) {
+      const margin = WORLD_LIMIT - 6;
+      const candidates = [];
+
+      for (let i = 0; i < 28; i++) {
+        const angle = (i / 28) * Math.PI * 2;
+        const r = i % 2 === 0 ? margin : margin * 0.68;
+        candidates.push(
+          findSafeSpawnPoint(Math.sin(angle) * r, Math.cos(angle) * r)
+        );
+      }
+
+      const livingEnemies = soldiers.filter((s) => s.alive && s.team !== team);
+      const livingAllies = soldiers.filter((s) => s.alive && s.team === team);
+
+      let bestPt = candidates[0] || { x: 0, z: team === "green" ? -margin : margin };
+      let bestScore = -Infinity;
+
+      for (const pt of candidates) {
+        let minEnemyDist = WORLD_LIMIT * 2;
+        for (const en of livingEnemies) {
+          const d = Math.hypot(pt.x - en.position.x, pt.z - en.position.z);
+          if (d < minEnemyDist) minEnemyDist = d;
+        }
+
+        let minAllyDist = WORLD_LIMIT * 2;
+        for (const al of livingAllies) {
+          const d = Math.hypot(pt.x - al.position.x, pt.z - al.position.z);
+          if (d < minAllyDist) minAllyDist = d;
+        }
+
+        let score = minEnemyDist;
+        if (minAllyDist < 2.2) score -= 40;
+        if ((team === "green" && pt.z < 0) || (team === "tan" && pt.z > 0)) {
+          score += 4;
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestPt = pt;
+        }
+      }
+
+      const yaw = Math.atan2(-bestPt.x, -bestPt.z);
+      return { x: bestPt.x, z: bestPt.z, yaw };
+    }
+
     function spawnAllSoldiers() {
+      const targetWorldLimit =
+        mpState.active && mpState.roster && mpState.roster.worldLimit
+          ? mpState.roster.worldLimit
+          : configuredMapLimit;
+      rebuildSandboxEnvironment(targetWorldLimit);
+
       soldiers.forEach((s) => s.model.root.dispose());
       soldiers.length = 0;
       soldiersById.clear();
@@ -2409,10 +2652,14 @@
           model.root.rotation.y = initialYaw;
 
           let unitName;
+          let rawPlayerName = "";
           if (isLocalPlayer) {
-            unitName = "You";
+            const customName = (document.getElementById("mp-name-input")?.value || "").trim();
+            rawPlayerName = customName || "You";
+            unitName = customName ? `${customName} (You)` : "You";
           } else if (isRemotePlayer) {
-            unitName = remotePlayerInfo.name + " (Player)";
+            rawPlayerName = remotePlayerInfo.name || "Player";
+            unitName = rawPlayerName + " (Player)";
           } else if (team === "green") {
             unitName = "Green " + (CALLSIGNS[i] || "#" + (i + 1));
           } else {
@@ -2423,6 +2670,7 @@
             unitId,
             slotIndex: i,
             name: unitName,
+            rawPlayerName,
             team,
             isPlayer: isLocalPlayer,
             isRemotePlayer,
@@ -2450,6 +2698,9 @@
             health: 100,
             maxHealth: 100,
             alive: true,
+            kills: 0,
+            deaths: 0,
+            respawnTimer: 0,
             fireCooldown: isLocalPlayer ? 0 : 0.6 + (i % 4) * 0.35,
             fireRate: isLocalPlayer ? 0.2 : 0.78 + (i % 3) * 0.15,
             walkCycle: i * 1.3,
@@ -2466,6 +2717,7 @@
           };
 
           model.hitbox.metadata = { soldier: unit };
+          updateSoldierOverheadName(unit);
           animateSoldier(unit, 0.016, false, 0);
           soldiers.push(unit);
           soldiersById.set(unitId, unit);
@@ -2801,7 +3053,9 @@
       const tag = document.activeElement ? document.activeElement.tagName : "";
       if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
       if (e.code in keys) keys[e.code] = true;
-      if (e.code === "KeyR" && gameEnded && !isSetupOpen) handleRetryAction();
+      if (e.code === "KeyR" && (gameEnded || isPlayerKnockedDown) && !isSetupOpen) {
+        handleRetryAction();
+      }
       if (e.code === "KeyM") openSetupModal();
     });
 
@@ -2901,7 +3155,7 @@
       muzzleLight.position.copyFrom(muzzlePos);
       muzzleLight.intensity = 2.2;
 
-      const maxRange = 100;
+      const maxRange = 135;
       const ray = new BABYLON.Ray(muzzlePos, aimDir, maxRange);
 
       const pickInfo = scene.pickWithRay(ray, (mesh) => {
@@ -2925,7 +3179,7 @@
             const target = hitMesh.metadata.soldier;
             hitKind = target.team === "green" ? "green" : "tan";
             target.velocity.addInPlace(aimDir.scale(4.5));
-            applyDamage(target, damageAmount, aimDir);
+            applyDamage(target, damageAmount, aimDir, shooter);
             spawnImpactBurst(
               hitPoint,
               false,
@@ -2937,6 +3191,7 @@
               sendNetMessage({
                 type: "damage_unit",
                 targetUnitId: target.unitId,
+                attackerUnitId: shooter.unitId,
                 amount: damageAmount,
                 shotDir: { x: aimDir.x, y: aimDir.y, z: aimDir.z }
               });
@@ -3214,10 +3469,13 @@
     }
 
     // =========================================================================
-    // 11. HEALTH, SCOREBOARD HUD, TEAM SETUP MODAL & WIN / GAME OVER LOGIC
+    // 11. HEALTH, SCOREBOARD HUD, TEAM SETUP MODAL & TIMED MATCH LOGIC
     // =========================================================================
     const healthValueEl = document.getElementById("health-value");
     const healthBarFillEl = document.getElementById("health-bar-fill");
+    const matchTimerEl = document.getElementById("match-timer");
+    const greenKillsEl = document.getElementById("green-kills");
+    const tanKillsEl = document.getElementById("tan-kills");
     const greenCountEl = document.getElementById("green-count");
     const greenTotalEl = document.getElementById("green-total");
     const tanCountEl = document.getElementById("tan-count");
@@ -3226,6 +3484,8 @@
     const endMessageEl = document.getElementById("end-message");
     const endTitleEl = document.getElementById("end-title");
     const endSubtitleEl = document.getElementById("end-subtitle");
+    const finalScoreboardWrapEl = document.getElementById("final-scoreboard-wrap");
+    const finalScoreboardBodyEl = document.getElementById("final-scoreboard-body");
     const restartBtn = document.getElementById("restart-btn");
     const setupAgainBtn = document.getElementById("setup-again-btn");
 
@@ -3233,8 +3493,8 @@
     const setupModalEl = document.getElementById("setup-modal");
     const friendlyInputEl = document.getElementById("friendly-input");
     const enemyInputEl = document.getElementById("enemy-input");
-    const friendlySummaryEl = document.getElementById("friendly-summary");
-    const enemySummaryEl = document.getElementById("enemy-summary");
+    const mapSizeSelectEl = document.getElementById("map-size-select");
+    const timeLimitSelectEl = document.getElementById("time-limit-select");
     const startMatchBtn = document.getElementById("start-match-btn");
     const hostMpBtn = document.getElementById("host-mp-btn");
     const joinMpBtn = document.getElementById("join-mp-btn");
@@ -3298,8 +3558,20 @@
         .replace(/"/g, "&quot;");
     }
 
+    function formatTimeMMSS(totalSec) {
+      const s = Math.max(0, Math.ceil(totalSec));
+      const mins = Math.floor(s / 60);
+      const secs = s % 60;
+      return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    }
+
+    function getMapSizeLabel(limit) {
+      if (limit <= 65) return "Medium";
+      if (limit >= 95) return "Huge";
+      return "Large";
+    }
+
     function pollServerRoomsPreview() {
-      if (!isSetupOpen) return;
       const rawWs = (mpUrlInputEl.value || "wss://toy-soldiers.duckdns.org").trim();
       const httpBase = rawWs
         .replace(/^wss:/i, "https:")
@@ -3310,13 +3582,24 @@
         .then((r) => r.json())
         .then((data) => {
           if (!data || !Array.isArray(data.rooms)) return;
+
+          // Count total online players across all server rooms for upper-right badge
+          let totalOnline = 0;
+          data.rooms.forEach((rm) => {
+            totalOnline += Array.isArray(rm.players) ? rm.players.length : 0;
+          });
+          mpState.serverOnlineCount = totalOnline;
+          updateMpStatusBadge();
+
+          if (!isSetupOpen) return;
+
           if (data.rooms.length === 0) {
-            mpModalStatusEl.textContent = "Server Online • 0 active matches";
+            mpModalStatusEl.textContent = "0 active";
             mpModalStatusEl.style.color = "#84ff78";
             activeMatchesListEl.innerHTML =
-              'No active matches yet — click <strong>Host Online Match</strong> above to start one!';
+              'No active matches — click <strong>Host Match</strong> above.';
           } else {
-            mpModalStatusEl.textContent = `Server Online • ${data.rooms.length} active match${data.rooms.length === 1 ? "" : "es"}`;
+            mpModalStatusEl.textContent = `${data.rooms.length} active (${totalOnline} online)`;
             mpModalStatusEl.style.color = "#7ad7ff";
 
             activeMatchesListEl.innerHTML = data.rooms
@@ -3324,13 +3607,18 @@
                 const code = escapeHtml(rm.roomCode);
                 const host = escapeHtml(rm.hostName || "Host");
                 const pCount = Array.isArray(rm.players) ? rm.players.length : 1;
+                const mapLbl = getMapSizeLabel(rm.worldLimit || 80);
+                const remStr =
+                  typeof rm.remainingSec === "number"
+                    ? formatTimeMMSS(rm.remainingSec)
+                    : "5:00";
                 return `
                   <div class="match-row">
                     <div class="match-info">
-                      <span class="match-title">Room ${code} &bull; Hosted by ${host}</span>
-                      <span class="match-meta">${rm.greenTotal} Green vs ${rm.tanTotal} Tan &bull; ${pCount} Player${pCount === 1 ? "" : "s"} Online</span>
+                      <span class="match-title">${code} &bull; Host: ${host}</span>
+                      <span class="match-meta">${rm.greenTotal}v${rm.tanTotal} &bull; ${mapLbl} &bull; ${remStr} left &bull; ${pCount} Online</span>
                     </div>
-                    <button type="button" class="join-row-btn" data-room="${code}">Join Match</button>
+                    <button type="button" class="join-row-btn" data-room="${code}">Join</button>
                   </div>
                 `;
               })
@@ -3348,8 +3636,10 @@
           }
         })
         .catch(() => {
-          mpModalStatusEl.textContent = "Server unreachable";
-          mpModalStatusEl.style.color = "#ff9e7b";
+          if (isSetupOpen) {
+            mpModalStatusEl.textContent = "Offline";
+            mpModalStatusEl.style.color = "#ff9e7b";
+          }
         });
     }
     setInterval(pollServerRoomsPreview, 2500);
@@ -3365,13 +3655,13 @@
 
     function updateMpStatusBadge() {
       if (!mpState.active || !mpState.roster) {
-        mpStatusBadgeEl.textContent = "Mode: Solo";
-        mpStatusBadgeEl.style.color = "#b8ffb0";
+        const count = mpState.serverOnlineCount || 0;
+        mpStatusBadgeEl.textContent = `Online: ${count}`;
+        mpStatusBadgeEl.style.color = count > 0 ? "#84ff78" : "#b8ffb0";
         return;
       }
       const pCount = mpState.roster.players ? mpState.roster.players.length : 1;
-      const roleTag = isMultiplayerAuthority() ? "Host" : "Peer";
-      mpStatusBadgeEl.textContent = `Room: ${mpState.roomCode} (${pCount} Online - ${roleTag})`;
+      mpStatusBadgeEl.textContent = `🟢 ${pCount} Online (${mpState.roomCode})`;
       mpStatusBadgeEl.style.color = "#7ad7ff";
     }
 
@@ -3387,11 +3677,18 @@
       updateMpStatusBadge();
     }
 
-    function connectToMultiplayerRoom(mode, customRoomCode) {
-      savePlayerProfileToStorage();
-      refreshSetupSummaries();
+    function readHostSetupInputs() {
       configuredFriendlyCount = clampInt(friendlyInputEl.value, 0, 12, 3);
       configuredEnemyCount = clampInt(enemyInputEl.value, 1, 16, 4);
+      friendlyInputEl.value = configuredFriendlyCount;
+      enemyInputEl.value = configuredEnemyCount;
+      configuredMapLimit = clampInt(mapSizeSelectEl.value, 50, 130, 80);
+      configuredDurationSec = clampInt(timeLimitSelectEl.value, 60, 1800, 300);
+    }
+
+    function connectToMultiplayerRoom(mode, customRoomCode) {
+      savePlayerProfileToStorage();
+      readHostSetupInputs();
 
       const wsUrl = (mpUrlInputEl.value || "wss://toy-soldiers.duckdns.org").trim();
       const playerName = (mpNameInputEl.value || "Soldier").trim() || "Soldier";
@@ -3409,7 +3706,7 @@
       try {
         ws = new WebSocket(wsUrl);
       } catch (err) {
-        mpModalStatusEl.textContent = "Invalid WebSocket URL";
+        mpModalStatusEl.textContent = "Invalid URL";
         mpModalStatusEl.style.color = "#ff7b7b";
         return;
       }
@@ -3426,7 +3723,9 @@
             name: playerName,
             team: chosenTeam,
             greenTotal: configuredFriendlyCount + 1,
-            tanTotal: configuredEnemyCount
+            tanTotal: configuredEnemyCount,
+            worldLimit: configuredMapLimit,
+            durationSec: configuredDurationSec
           })
         );
       });
@@ -3446,22 +3745,23 @@
           mpState.active = false;
           mpState.ws = null;
           updateMpStatusBadge();
-          mpModalStatusEl.textContent = "Disconnected from server";
+          mpModalStatusEl.textContent = "Disconnected";
           mpModalStatusEl.style.color = "#ff9e7b";
         }
       });
 
       ws.addEventListener("error", () => {
-        mpModalStatusEl.textContent = "Could not connect (is node server.js running?)";
+        mpModalStatusEl.textContent = "Connection error";
         mpModalStatusEl.style.color = "#ff7b7b";
       });
     }
 
-    // Restores a single soldier (local or remote) to full health & upright pose at (x, y, z)
+    // Restores a single soldier (local, remote, or AI) to full health & upright pose at (x, y, z)
     function respawnSingleSoldier(unit, x, y, z, yaw) {
       if (!unit) return;
       unit.health = unit.maxHealth;
       unit.alive = true;
+      unit.respawnTimer = 0;
       unit.fallProgress = 0;
       unit.moveBlend = 0;
       unit.velocity.set(0, 0, 0);
@@ -3484,22 +3784,20 @@
         unit.model.overheadBarFill.scaling.x = 1;
       }
 
+      updateSoldierOverheadName(unit);
       animateSoldier(unit, 0.016, false, 0);
       updateHUD();
     }
 
-    // Respawns ONLY the local player in multiplayer without resetting the match for others
+    // Respawns ONLY the local player at a safe location far from enemies, without freezing/resetting others
     function respawnLocalPlayer() {
       if (!player) return;
-      const teamCount = soldiers.filter((s) => s.team === player.team).length || 4;
-      const pt = getFormationPoint(player.team, player.slotIndex || 0, teamCount);
-      const y = getSandHeight(pt.x, pt.z);
-      const yaw = player.team === "green" ? 0 : Math.PI;
+      const sp = findFarthestSafeSpawnPoint(player.team);
+      const y = getSandHeight(sp.x, sp.z);
 
-      respawnSingleSoldier(player, pt.x, y, pt.z, yaw);
+      respawnSingleSoldier(player, sp.x, y, sp.z, sp.yaw);
 
-      gameEnded = false;
-      matchVictory = false;
+      isPlayerKnockedDown = false;
       document.body.classList.remove("modal-open");
       endMessageEl.style.display = "none";
 
@@ -3507,15 +3805,18 @@
         sendNetMessage({
           type: "respawn_unit",
           unitId: player.unitId,
-          x: pt.x,
+          team: player.team,
+          isAI: false,
+          x: sp.x,
           y,
-          z: pt.z,
-          yaw
+          z: sp.z,
+          yaw: sp.yaw
         });
       }
 
       tryLockPointer();
     }
+
     function syncRosterHumanFlags(roster) {
       if (!roster || !Array.isArray(roster.players)) return;
       const humanMap = new Map();
@@ -3525,16 +3826,22 @@
         if (s.unitId === mpState.myUnitId) {
           s.isPlayer = true;
           s.isRemotePlayer = false;
+          const customName = (mpNameInputEl.value || "").trim();
+          s.rawPlayerName = customName || "You";
+          s.name = customName ? `${customName} (You)` : "You";
           player = s;
         } else if (humanMap.has(s.unitId)) {
           const info = humanMap.get(s.unitId);
           s.isPlayer = false;
           s.isRemotePlayer = true;
-          s.name = info.name + " (Player)";
+          s.rawPlayerName = info.name || "Player";
+          s.name = s.rawPlayerName + " (Player)";
         } else {
           s.isPlayer = false;
           s.isRemotePlayer = false;
+          s.rawPlayerName = "";
         }
+        updateSoldierOverheadName(s);
       });
       updateHUD();
     }
@@ -3550,14 +3857,26 @@
           mpState.roomCode = msg.roster.roomCode;
           mpState.hostId = msg.roster.hostId;
 
+          if (msg.roster.worldLimit) {
+            configuredMapLimit = msg.roster.worldLimit;
+          }
+          if (msg.roster.durationSec) {
+            configuredDurationSec = msg.roster.durationSec;
+          }
+
           setupModalEl.style.display = "none";
           isSetupOpen = false;
           document.body.classList.remove("modal-open");
           updateMpStatusBadge();
           resetGame();
+
+          if (typeof msg.roster.remainingSec === "number") {
+            matchTimeRemaining = Math.max(1, msg.roster.remainingSec);
+          }
+
           const pCount = msg.roster.players ? msg.roster.players.length : 1;
           showMpToast(
-            `Joined Room ${mpState.roomCode} as ${msg.team.toUpperCase()} (${pCount} player${pCount === 1 ? "" : "s"} online)`,
+            `Joined Room ${mpState.roomCode} as ${msg.team.toUpperCase()} (${pCount} online)`,
             "#84ff78"
           );
           tryLockPointer();
@@ -3572,12 +3891,12 @@
           if (msg.event === "player_joined" && msg.player) {
             const tColor = msg.player.team === "green" ? "#84ff78" : "#ffd584";
             showMpToast(
-              `🔔 ${msg.player.name} joined ${msg.player.team.toUpperCase()} TEAM! (${msg.roster.players.length} online)`,
+              `🔔 ${msg.player.name} joined ${msg.player.team.toUpperCase()}! (${msg.roster.players.length} online)`,
               tColor
             );
           } else if (msg.event === "player_left" && msg.player) {
             showMpToast(
-              `${msg.player.name} left the room (${msg.roster.players.length} online)`,
+              `${msg.player.name} left (${msg.roster.players.length} online)`,
               "#ff9e7b"
             );
           }
@@ -3594,7 +3913,10 @@
         case "remote_player_state": {
           const unit = soldiersById.get(msg.unitId);
           if (!unit || unit.isPlayer) return;
-          unit.isRemotePlayer = true;
+          if (!unit.isRemotePlayer) {
+            unit.isRemotePlayer = true;
+            updateSoldierOverheadName(unit);
+          }
           unit.netTargetPos.set(msg.x, msg.y, msg.z);
           unit.yaw = msg.yaw;
           unit.pitch = msg.pitch;
@@ -3605,17 +3927,25 @@
 
         case "world_state": {
           if (isMultiplayerAuthority()) return;
+          if (typeof msg.timeRemaining === "number") {
+            matchTimeRemaining = msg.timeRemaining;
+          }
           if (Array.isArray(msg.aiUnits)) {
             msg.aiUnits.forEach((u) => {
               const unit = soldiersById.get(u.unitId);
-              if (!unit || unit.isPlayer || unit.isRemotePlayer) return;
+              if (!unit) return;
+              if (typeof u.kills === "number") unit.kills = u.kills;
+              if (typeof u.deaths === "number") unit.deaths = u.deaths;
+              if (unit.isPlayer || unit.isRemotePlayer) return;
               unit.netTargetPos.set(u.x, u.y, u.z);
               unit.yaw = u.yaw;
               unit.pitch = u.pitch;
               unit.moveBlend = u.moveBlend;
               unit.strideDir = u.strideDir || 0;
-              if (typeof u.health === "number" && u.health < unit.health) {
-                applyDamage(unit, unit.health - u.health, null);
+              if (typeof u.health === "number" && u.health < unit.health && unit.alive) {
+                applyDamage(unit, unit.health - u.health, null, null);
+              } else if (u.alive && !unit.alive) {
+                respawnSingleSoldier(unit, u.x, u.y, u.z, u.yaw);
               }
             });
           }
@@ -3664,13 +3994,16 @@
         case "unit_damaged": {
           const target = soldiersById.get(msg.targetUnitId);
           if (!target) return;
+          const attacker = msg.attackerUnitId
+            ? soldiersById.get(msg.attackerUnitId)
+            : null;
           const dir = msg.shotDir
             ? new BABYLON.Vector3(msg.shotDir.x, msg.shotDir.y, msg.shotDir.z)
             : null;
           if (dir) {
             target.velocity.addInPlace(dir.scale(4.5));
           }
-          applyDamage(target, msg.amount, dir);
+          applyDamage(target, msg.amount, dir, attacker);
           break;
         }
 
@@ -3678,7 +4011,7 @@
           const target = soldiersById.get(msg.unitId);
           if (!target) return;
           respawnSingleSoldier(target, msg.x, msg.y, msg.z, msg.yaw);
-          if (msg.playerName) {
+          if (msg.playerName && !msg.isAI) {
             const tColor = msg.team === "green" ? "#84ff78" : "#ffd584";
             showMpToast(`🔄 ${msg.playerName} respawned!`, tColor);
           }
@@ -3697,10 +4030,13 @@
         case "match_restarted": {
           mpState.roster = msg.roster;
           mpState.hostId = msg.roster.hostId;
+          if (msg.roster.worldLimit) configuredMapLimit = msg.roster.worldLimit;
+          if (msg.roster.durationSec) configuredDurationSec = msg.roster.durationSec;
           updateMpStatusBadge();
           isSetupOpen = false;
           setupModalEl.style.display = "none";
           resetGame();
+          showMpToast("🔄 New round started! All soldiers respawned.", "#84ff78");
           break;
         }
       }
@@ -3712,39 +4048,26 @@
       return Math.max(min, Math.min(max, n));
     }
 
-    function refreshSetupSummaries() {
-      const fCount = clampInt(friendlyInputEl.value, 0, 12, 3);
-      const eCount = clampInt(enemyInputEl.value, 1, 16, 4);
-      friendlyInputEl.value = fCount;
-      enemyInputEl.value = eCount;
-      friendlySummaryEl.textContent =
-        fCount === 0
-          ? "Solo mission (Just You)"
-          : `You + ${fCount} Friendly = ${fCount + 1} Green Total`;
-      enemySummaryEl.textContent =
-        eCount === 1
-          ? "1 Bad Guy to eliminate"
-          : `${eCount} Bad Guys to eliminate`;
-    }
-
     document.getElementById("friendly-minus").addEventListener("click", () => {
       friendlyInputEl.value = clampInt(friendlyInputEl.value, 0, 12, 3) - 1;
-      refreshSetupSummaries();
+      readHostSetupInputs();
     });
     document.getElementById("friendly-plus").addEventListener("click", () => {
       friendlyInputEl.value = clampInt(friendlyInputEl.value, 0, 12, 3) + 1;
-      refreshSetupSummaries();
+      readHostSetupInputs();
     });
     document.getElementById("enemy-minus").addEventListener("click", () => {
       enemyInputEl.value = clampInt(enemyInputEl.value, 1, 16, 4) - 1;
-      refreshSetupSummaries();
+      readHostSetupInputs();
     });
     document.getElementById("enemy-plus").addEventListener("click", () => {
       enemyInputEl.value = clampInt(enemyInputEl.value, 1, 16, 4) + 1;
-      refreshSetupSummaries();
+      readHostSetupInputs();
     });
-    friendlyInputEl.addEventListener("change", refreshSetupSummaries);
-    enemyInputEl.addEventListener("change", refreshSetupSummaries);
+    friendlyInputEl.addEventListener("change", readHostSetupInputs);
+    enemyInputEl.addEventListener("change", readHostSetupInputs);
+    mapSizeSelectEl.addEventListener("change", readHostSetupInputs);
+    timeLimitSelectEl.addEventListener("change", readHostSetupInputs);
 
     function tryLockPointer() {
       if (
@@ -3753,9 +4076,7 @@
       ) {
         try {
           canvas.requestPointerLock();
-        } catch (err) {
-          // Ignore pointer lock errors on mobile/touch browsers
-        }
+        } catch (err) {}
       }
     }
 
@@ -3768,7 +4089,7 @@
       resetJoystick();
       endMessageEl.style.display = "none";
       setupModalEl.style.display = "block";
-      refreshSetupSummaries();
+      readHostSetupInputs();
       pollServerRoomsPreview();
       if (document.pointerLockElement && document.exitPointerLock) {
         document.exitPointerLock();
@@ -3778,9 +4099,7 @@
     startMatchBtn.addEventListener("click", () => {
       savePlayerProfileToStorage();
       disconnectMultiplayer();
-      refreshSetupSummaries();
-      configuredFriendlyCount = clampInt(friendlyInputEl.value, 0, 12, 3);
-      configuredEnemyCount = clampInt(enemyInputEl.value, 1, 16, 4);
+      readHostSetupInputs();
       setupModalEl.style.display = "none";
       isSetupOpen = false;
       document.body.classList.remove("modal-open");
@@ -3796,16 +4115,15 @@
       connectToMultiplayerRoom("join_room", mpRoomInputEl.value);
     });
 
-    let matchVictory = false;
-
     function handleRetryAction() {
-      // In Multiplayer, if the local player was knocked down (not a full team victory),
-      // respawn ONLY this player without resetting the match for everyone else!
-      if (mpState.active && !matchVictory) {
+      // If the match is still running (timer > 0) and only the player was knocked down,
+      // respawn ONLY this player at a safe spot far from enemies without resetting the match!
+      if (!gameEnded && isPlayerKnockedDown) {
         respawnLocalPlayer();
         return;
       }
 
+      // Otherwise the match timer ended -> start a brand-new round and respawn all AI & players on both sides
       isSetupOpen = false;
       document.body.classList.remove("modal-open");
       setupModalEl.style.display = "none";
@@ -3815,7 +4133,9 @@
         sendNetMessage({
           type: "restart_match",
           greenTotal: gTotal,
-          tanTotal: tTotal
+          tanTotal: tTotal,
+          worldLimit: configuredMapLimit,
+          durationSec: configuredDurationSec
         });
       }
       resetGame();
@@ -3823,10 +4143,9 @@
     }
 
     restartBtn.addEventListener("click", handleRetryAction);
-
     setupAgainBtn.addEventListener("click", openSetupModal);
 
-    function applyDamage(target, amount, shotDir) {
+    function applyDamage(target, amount, shotDir, attacker) {
       if (!target.alive || gameEnded || isSetupOpen) return;
 
       target.health = Math.max(0, target.health - amount);
@@ -3841,6 +4160,15 @@
 
       if (target.health <= 0) {
         target.alive = false;
+        target.deaths = (target.deaths || 0) + 1;
+        if (attacker && attacker !== target) {
+          attacker.kills = (attacker.kills || 0) + 1;
+        }
+        // AI soldiers auto-respawn after 3 seconds while the match timer is active
+        if (!target.isPlayer && !target.isRemotePlayer) {
+          target.respawnTimer = 3.0;
+        }
+
         target.model.hitbox.isPickable = false;
         if (target.model.overheadGroup) {
           target.model.overheadGroup.setEnabled(false);
@@ -3853,10 +4181,15 @@
           );
           target.fallDir = BABYLON.Vector3.Dot(shotDir, forward) >= 0 ? 1 : -1;
         }
+
+        // If the local player was knocked down while the match is still running,
+        // show the Respawn prompt for this player ONLY (gameEnded remains false so the battle never freezes!)
+        if (target.isPlayer && !gameEnded) {
+          showPlayerRespawnOverlay();
+        }
       }
 
       updateHUD();
-      checkMatchOutcome();
     }
 
     function updateHUD() {
@@ -3870,11 +4203,20 @@
       else if (hp > 25) healthBarFillEl.style.backgroundColor = "#f0ad4e";
       else healthBarFillEl.style.backgroundColor = "#d9534f";
 
+      if (matchTimerEl) {
+        matchTimerEl.textContent = formatTimeMMSS(matchTimeRemaining);
+      }
+
       const greenAll = soldiers.filter((s) => s.team === "green");
       const tanAll = soldiers.filter((s) => s.team === "tan");
       const greenAlive = greenAll.filter((s) => s.alive).length;
       const tanAlive = tanAll.filter((s) => s.alive).length;
 
+      const greenKills = greenAll.reduce((acc, s) => acc + (s.kills || 0), 0);
+      const tanKills = tanAll.reduce((acc, s) => acc + (s.kills || 0), 0);
+
+      if (greenKillsEl) greenKillsEl.textContent = greenKills;
+      if (tanKillsEl) tanKillsEl.textContent = tanKills;
       greenCountEl.textContent = greenAlive;
       greenTotalEl.textContent = greenAll.length;
       tanCountEl.textContent = tanAlive;
@@ -3893,7 +4235,7 @@
           const label = tm.alive ? tm.name : tm.name + " (DOWN)";
           return `
             <div class="squad-row">
-              <span>${label}</span>
+              <span>${escapeHtml(label)}</span>
               <div class="mini-bar-bg">
                 <div class="mini-bar-fill" style="width:${pct}%;background:${color};"></div>
               </div>
@@ -3902,7 +4244,6 @@
         })
         .join("");
 
-      // Render Online Human Players Roster when in Multiplayer Mode
       if (mpState.active && mpState.roster && Array.isArray(mpState.roster.players)) {
         onlineRosterPanelEl.style.display = "block";
         onlineRosterListEl.innerHTML = mpState.roster.players
@@ -3910,7 +4251,7 @@
             const badgeColor = p.team === "green" ? "#7dff70" : "#ffd584";
             const youTag = p.id === mpState.clientId ? " (YOU)" : "";
             const hostTag = p.id === mpState.hostId ? " ★" : "";
-            return `<div style="color:${badgeColor}; margin-top:2px;">● ${p.name}${youTag}${hostTag} — ${p.team.toUpperCase()}</div>`;
+            return `<div style="color:${badgeColor}; margin-top:2px;">● ${escapeHtml(p.name)}${youTag}${hostTag} — ${p.team.toUpperCase()}</div>`;
           })
           .join("");
       } else {
@@ -3918,25 +4259,9 @@
       }
     }
 
-    function checkMatchOutcome() {
-      if (gameEnded || !player) return;
-
-      const myTeam = player.team || "green";
-      const enemyTeam = myTeam === "green" ? "tan" : "green";
-      const enemiesAlive = soldiers.filter((s) => s.team === enemyTeam && s.alive).length;
-      if (enemiesAlive === 0) {
-        endGame(true);
-        return;
-      }
-
-      if (!player.alive) {
-        endGame(false);
-      }
-    }
-
-    function endGame(victory) {
-      gameEnded = true;
-      matchVictory = Boolean(victory);
+    // Shows a personal Respawn prompt when the local player is knocked down (without freezing the match!)
+    function showPlayerRespawnOverlay() {
+      isPlayerKnockedDown = true;
       document.body.classList.add("modal-open");
       isMouseDown = false;
       isMobileFiring = false;
@@ -3945,37 +4270,91 @@
         document.exitPointerLock();
       }
 
-      const myTeamLabel = player && player.team === "tan" ? "Tan" : "Green";
-      const enemyTeamLabel = myTeamLabel === "Green" ? "Tan" : "Green";
+      endTitleEl.textContent = "KNOCKED DOWN!";
+      endTitleEl.style.color = "#ff856b";
+      endSubtitleEl.textContent =
+        "The battle is still raging — respawn at a safe location far from enemies.";
+      finalScoreboardWrapEl.style.display = "none";
+      restartBtn.textContent = "Respawn Soldier (R)";
+      endMessageEl.style.display = "block";
+    }
 
-      if (victory) {
-        endTitleEl.textContent = "VICTORY!";
-        endTitleEl.style.color = "#8df57e";
-        endSubtitleEl.textContent =
-          `Your ${myTeamLabel} Squad eliminated all opposing ${enemyTeamLabel} Soldiers!`;
-        restartBtn.textContent = mpState.active ? "New Round (R)" : "Play Again (R)";
-      } else if (mpState.active) {
-        endTitleEl.textContent = "KNOCKED DOWN!";
-        endTitleEl.style.color = "#ff856b";
-        endSubtitleEl.textContent =
-          "The battle is still going! Respawn your soldier without resetting the match.";
-        restartBtn.textContent = "Respawn Soldier (R)";
-      } else {
-        endTitleEl.textContent = "GAME OVER";
-        endTitleEl.style.color = "#ff6b6b";
-        endSubtitleEl.textContent =
-          "Your soldier was knocked down in the sandbox battle.";
-        restartBtn.textContent = "Play Again (R)";
+    // Ends the match when the countdown timer hits 0:00 and displays the Kills & Deaths Scoreboard
+    function endMatchByTimeLimit() {
+      if (gameEnded) return;
+      gameEnded = true;
+      isPlayerKnockedDown = false;
+      document.body.classList.add("modal-open");
+      isMouseDown = false;
+      isMobileFiring = false;
+      mobileFireBtnEl.classList.remove("active");
+      if (document.pointerLockElement && document.exitPointerLock) {
+        document.exitPointerLock();
       }
+
+      const greenKills = soldiers
+        .filter((s) => s.team === "green")
+        .reduce((acc, s) => acc + (s.kills || 0), 0);
+      const tanKills = soldiers
+        .filter((s) => s.team === "tan")
+        .reduce((acc, s) => acc + (s.kills || 0), 0);
+
+      if (greenKills > tanKills) {
+        endTitleEl.textContent = "GREEN TEAM WINS!";
+        endTitleEl.style.color = "#8df57e";
+      } else if (tanKills > greenKills) {
+        endTitleEl.textContent = "TAN TEAM WINS!";
+        endTitleEl.style.color = "#ffd584";
+      } else {
+        endTitleEl.textContent = "DRAW MATCH!";
+        endTitleEl.style.color = "#ffffff";
+      }
+      endSubtitleEl.textContent = `Final Score — Green: ${greenKills} Kills  |  Tan: ${tanKills} Kills`;
+
+      // Sort participants: Human players first, then by Kills desc, Deaths asc
+      const sorted = [...soldiers].sort((a, b) => {
+        const aHuman = a.isPlayer || a.isRemotePlayer ? 1 : 0;
+        const bHuman = b.isPlayer || b.isRemotePlayer ? 1 : 0;
+        if (bHuman !== aHuman) return bHuman - aHuman;
+        if ((b.kills || 0) !== (a.kills || 0)) return (b.kills || 0) - (a.kills || 0);
+        return (a.deaths || 0) - (b.deaths || 0);
+      });
+
+      finalScoreboardBodyEl.innerHTML = sorted
+        .map((s) => {
+          const teamColor = s.team === "green" ? "#7dff70" : "#ffd584";
+          const rowStyle = s.isPlayer
+            ? "background: rgba(90, 210, 80, 0.18); font-weight: bold;"
+            : s.isRemotePlayer
+            ? "background: rgba(122, 215, 255, 0.12); font-weight: bold;"
+            : "";
+          return `
+            <tr style="${rowStyle}">
+              <td>${escapeHtml(s.name)}</td>
+              <td style="color:${teamColor}; font-weight:bold;">${s.team.toUpperCase()}</td>
+              <td>${s.kills || 0}</td>
+              <td>${s.deaths || 0}</td>
+            </tr>
+          `;
+        })
+        .join("");
+
+      finalScoreboardWrapEl.style.display = "block";
+      restartBtn.textContent = "New Round (R)";
       endMessageEl.style.display = "block";
     }
 
     function resetGame() {
       gameEnded = false;
-      matchVictory = false;
+      isPlayerKnockedDown = false;
+      matchTimeRemaining =
+        mpState.active && mpState.roster && mpState.roster.durationSec
+          ? mpState.roster.durationSec
+          : configuredDurationSec;
       if (!isSetupOpen) {
         document.body.classList.remove("modal-open");
       }
+      finalScoreboardWrapEl.style.display = "none";
       endMessageEl.style.display = "none";
       spawnAllSoldiers();
     }
@@ -4131,7 +4510,7 @@
       animateSoldier(ai, dt, isMoving, ai.strafeDir * 0.5);
 
       if (ai.fireCooldown > 0) ai.fireCooldown -= dt;
-      if (ai.fireCooldown <= 0 && horizDist < 58 && canSee) {
+      if (ai.fireCooldown <= 0 && horizDist < 75 && canSee) {
         const muzzlePos = getMuzzleWorldPosition(ai);
         const spread = ai.team === "green" ? 1.2 : 1.5;
         const aimPos = new BABYLON.Vector3(
@@ -4185,6 +4564,17 @@
 
       // Update dynamic physics beach ball
       updatePhysicsBeachBall(dt);
+
+      // ----- MATCH COUNTDOWN TIMER -----
+      if (!gameEnded && !isSetupOpen) {
+        matchTimeRemaining = Math.max(0, matchTimeRemaining - dt);
+        if (matchTimerEl) {
+          matchTimerEl.textContent = formatTimeMMSS(matchTimeRemaining);
+        }
+        if (matchTimeRemaining <= 0) {
+          endMatchByTimeLimit();
+        }
+      }
 
       // ----- PLAYER UPDATE -----
       if (player) {
@@ -4270,7 +4660,7 @@
         }
       }
 
-      // ----- REMOTE PLAYERS & AI SQUADS UPDATE -----
+      // ----- REMOTE PLAYERS & AI SQUADS UPDATE (WITH AUTO-RESPAWN) -----
       const isHost = isMultiplayerAuthority();
       for (const s of soldiers) {
         if (s.isPlayer) continue;
@@ -4293,6 +4683,29 @@
           continue;
         }
 
+        // Auto-respawn dead AI bots while the match timer is running
+        if (!s.alive && !gameEnded && !isSetupOpen && matchTimeRemaining > 0) {
+          s.respawnTimer -= dt;
+          if (s.respawnTimer <= 0) {
+            const sp = findFarthestSafeSpawnPoint(s.team);
+            const y = getSandHeight(sp.x, sp.z);
+            respawnSingleSoldier(s, sp.x, y, sp.z, sp.yaw);
+            if (mpState.active) {
+              sendNetMessage({
+                type: "respawn_unit",
+                unitId: s.unitId,
+                team: s.team,
+                isAI: true,
+                x: sp.x,
+                y,
+                z: sp.z,
+                yaw: sp.yaw
+              });
+            }
+            continue;
+          }
+        }
+
         // Local or Host-simulated AI Soldier
         if ((gameEnded || isSetupOpen) && s.alive) {
           s.moveBlend = Math.max(0, s.moveBlend - dt * 4);
@@ -4303,26 +4716,27 @@
         }
       }
 
-      // If we are the Multiplayer Room Host, broadcast AI states & beach ball at ~20 Hz
+      // If we are the Multiplayer Room Host, broadcast AI states, Kills/Deaths, timer & beach ball at ~20 Hz
       if (mpState.active && isHost && !isSetupOpen) {
         mpState.hostSendTimer += dt;
         if (mpState.hostSendTimer >= 0.05) {
           mpState.hostSendTimer = 0;
           const aiUnits = [];
           for (const s of soldiers) {
-            if (!s.isPlayer && !s.isRemotePlayer) {
-              aiUnits.push({
-                unitId: s.unitId,
-                x: s.position.x,
-                y: s.position.y,
-                z: s.position.z,
-                yaw: s.yaw,
-                pitch: s.pitch,
-                moveBlend: s.moveBlend,
-                strideDir: s.strafeDir * 0.5,
-                health: s.health
-              });
-            }
+            aiUnits.push({
+              unitId: s.unitId,
+              x: s.position.x,
+              y: s.position.y,
+              z: s.position.z,
+              yaw: s.yaw,
+              pitch: s.pitch,
+              moveBlend: s.moveBlend,
+              strideDir: s.strafeDir * 0.5,
+              health: s.health,
+              alive: s.alive,
+              kills: s.kills || 0,
+              deaths: s.deaths || 0
+            });
           }
           const ball = physicsBall
             ? {
@@ -4336,13 +4750,14 @@
             : null;
           sendNetMessage({
             type: "host_world_state",
+            timeRemaining: matchTimeRemaining,
             aiUnits,
             ball
           });
         }
       }
 
-      // ----- THIRD-PERSON FOLLOW CAMERA (ADAPTS TO PORTRAIT & LANDSCAPE) -----
+      // ----- THIRD-PERSON FOLLOW CAMERA (WITH WALL & TOY ANTI-CLIPPING) -----
       if (player) {
         const isPortrait = window.innerWidth < window.innerHeight;
         camera.fov = isPortrait ? 1.24 : 1.02;
@@ -4361,15 +4776,61 @@
           -Math.sin(player.yaw)
         );
 
-        const desiredCamPos = player.position
+        const headOrigin = new BABYLON.Vector3(
+          player.position.x,
+          player.position.y + 1.65,
+          player.position.z
+        );
+
+        const idealCamPos = player.position
           .subtract(forward.scale(camDistance))
           .add(right.scale(shoulderOffset));
+        idealCamPos.y = player.position.y + camHeight + Math.sin(player.pitch) * 2.2;
+
+        // Prevent camera from clipping outside the wooden sandbox walls or inside toys
+        const camVec = idealCamPos.subtract(headOrigin);
+        const camLen = camVec.length();
+        let safeFraction = 1.0;
+        const wallBound = WORLD_LIMIT - 1.1;
+
+        if (Math.abs(camVec.x) > 0.001) {
+          if (idealCamPos.x > wallBound) {
+            safeFraction = Math.min(safeFraction, (wallBound - headOrigin.x) / camVec.x);
+          } else if (idealCamPos.x < -wallBound) {
+            safeFraction = Math.min(safeFraction, (-wallBound - headOrigin.x) / camVec.x);
+          }
+        }
+        if (Math.abs(camVec.z) > 0.001) {
+          if (idealCamPos.z > wallBound) {
+            safeFraction = Math.min(safeFraction, (wallBound - headOrigin.z) / camVec.z);
+          } else if (idealCamPos.z < -wallBound) {
+            safeFraction = Math.min(safeFraction, (-wallBound - headOrigin.z) / camVec.z);
+          }
+        }
+
+        if (camLen > 0.05) {
+          const camRay = new BABYLON.Ray(headOrigin, camVec.scale(1 / camLen), camLen);
+          const camHit = scene.pickWithRay(camRay, (mesh) => {
+            return Boolean(
+              mesh.metadata &&
+                mesh.metadata.isEnvironment &&
+                !mesh.metadata.isSand &&
+                !mesh.metadata.isPhysicsBall
+            );
+          });
+          if (camHit && camHit.hit && camHit.distance < camLen) {
+            safeFraction = Math.min(
+              safeFraction,
+              Math.max(0.15, (camHit.distance - 0.45) / camLen)
+            );
+          }
+        }
+
+        safeFraction = Math.max(0.15, Math.min(1.0, safeFraction));
+        const desiredCamPos = headOrigin.add(camVec.scale(safeFraction));
 
         const sandUnderCam = getSandHeight(desiredCamPos.x, desiredCamPos.z);
-        desiredCamPos.y = Math.max(
-          sandUnderCam + 0.85,
-          player.position.y + camHeight + Math.sin(player.pitch) * 2.2
-        );
+        desiredCamPos.y = Math.max(sandUnderCam + 0.85, desiredCamPos.y);
 
         camera.position.copyFrom(desiredCamPos);
 

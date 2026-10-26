@@ -69,15 +69,20 @@ function sanitizeCode(raw) {
   return cleaned || "SAND";
 }
 
-function getOrCreateRoom(roomCode, greenTotal, tanTotal, hostName) {
+function getOrCreateRoom(roomCode, greenTotal, tanTotal, hostName, worldLimit, durationSec) {
   let room = rooms.get(roomCode);
   if (!room) {
+    const dur = Math.max(60, Math.min(1800, Number(durationSec) || 300));
+    const lim = Math.max(50, Math.min(130, Number(worldLimit) || 80));
     room = {
       code: roomCode,
       hostId: null,
       hostName: hostName || "Host",
       greenTotal: Math.max(1, Math.min(13, greenTotal || 4)),
       tanTotal: Math.max(1, Math.min(16, tanTotal || 4)),
+      worldLimit: lim,
+      durationSec: dur,
+      matchEndTime: Date.now() + dur * 1000,
       clients: new Map(), // Map<clientId, ClientInfo>
       matchId: 1
     };
@@ -104,12 +109,16 @@ function serializeRoster(room) {
       alive: c.alive
     });
   }
+  const remainingSec = Math.max(0, Math.round((room.matchEndTime - Date.now()) / 1000));
   return {
     roomCode: room.code,
     hostId: room.hostId,
     hostName: room.hostName || "Host",
     greenTotal: room.greenTotal,
     tanTotal: room.tanTotal,
+    worldLimit: room.worldLimit,
+    durationSec: room.durationSec,
+    remainingSec,
     matchId: room.matchId,
     players
   };
@@ -165,8 +174,17 @@ wss.on("connection", (ws) => {
         const name = String(msg.name || "Soldier").slice(0, 18);
         const requestedGreen = Number(msg.greenTotal) || 4;
         const requestedTan = Number(msg.tanTotal) || 4;
+        const requestedLimit = Number(msg.worldLimit) || 80;
+        const requestedDuration = Number(msg.durationSec) || 300;
 
-        const room = getOrCreateRoom(roomCode, requestedGreen, requestedTan, name);
+        const room = getOrCreateRoom(
+          roomCode,
+          requestedGreen,
+          requestedTan,
+          name,
+          requestedLimit,
+          requestedDuration
+        );
 
         // If this device clicked Host (or room had no host), apply their match settings
         if (isHosting || !room.hostId) {
@@ -174,6 +192,9 @@ wss.on("connection", (ws) => {
           room.hostName = name;
           room.greenTotal = Math.max(1, Math.min(13, requestedGreen));
           room.tanTotal = Math.max(1, Math.min(16, requestedTan));
+          room.worldLimit = Math.max(50, Math.min(130, requestedLimit));
+          room.durationSec = Math.max(60, Math.min(1800, requestedDuration));
+          room.matchEndTime = Date.now() + room.durationSec * 1000;
         }
 
         const slotIndex = assignSlotForPlayer(room, team);
@@ -307,6 +328,7 @@ wss.on("connection", (ws) => {
           {
             type: "unit_damaged",
             targetUnitId: msg.targetUnitId,
+            attackerUnitId: msg.attackerUnitId || null,
             amount: Number(msg.amount) || 0,
             shotDir: msg.shotDir || null
           },
@@ -331,30 +353,35 @@ wss.on("connection", (ws) => {
         break;
       }
 
-      // Individual player respawns their own soldier without resetting the match
+      // Individual player (or Host auto-respawning AI) respawns a single soldier without resetting the match
       case "respawn_unit": {
         if (!currentRoom) return;
         const c = currentRoom.clients.get(clientId);
         if (!c) return;
 
-        c.health = 100;
-        c.alive = true;
-        c.x = Number(msg.x) || 0;
-        c.y = Number(msg.y) || 0;
-        c.z = Number(msg.z) || (c.team === "green" ? -30 : 28);
-        c.yaw = Number(msg.yaw) || (c.team === "green" ? 0 : Math.PI);
+        const targetUnitId = msg.unitId || c.unitId;
+        const isSelf = targetUnitId === c.unitId;
+        if (isSelf) {
+          c.health = 100;
+          c.alive = true;
+          c.x = Number(msg.x) || 0;
+          c.y = Number(msg.y) || 0;
+          c.z = Number(msg.z) || 0;
+          c.yaw = Number(msg.yaw) || 0;
+        }
 
         broadcastToRoom(
           currentRoom,
           {
             type: "unit_respawned",
-            unitId: c.unitId,
-            playerName: c.name,
-            team: c.team,
-            x: c.x,
-            y: c.y,
-            z: c.z,
-            yaw: c.yaw
+            unitId: targetUnitId,
+            playerName: isSelf ? c.name : null,
+            team: msg.team || c.team,
+            isAI: Boolean(msg.isAI),
+            x: Number(msg.x) || 0,
+            y: Number(msg.y) || 0,
+            z: Number(msg.z) || 0,
+            yaw: Number(msg.yaw) || 0
           },
           clientId
         );
@@ -370,6 +397,13 @@ wss.on("connection", (ws) => {
         if (msg.tanTotal) {
           currentRoom.tanTotal = Math.max(1, Math.min(16, Number(msg.tanTotal)));
         }
+        if (msg.worldLimit) {
+          currentRoom.worldLimit = Math.max(50, Math.min(130, Number(msg.worldLimit)));
+        }
+        if (msg.durationSec) {
+          currentRoom.durationSec = Math.max(60, Math.min(1800, Number(msg.durationSec)));
+        }
+        currentRoom.matchEndTime = Date.now() + currentRoom.durationSec * 1000;
         currentRoom.matchId++;
 
         for (const c of currentRoom.clients.values()) {
