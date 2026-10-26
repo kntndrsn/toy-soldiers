@@ -90,27 +90,27 @@
       color: #ffd584;
     }
 
-    /* Health & Squad Status (Bottom Left) */
+    /* Health Status (Bottom Left) */
     #status-panel {
       position: absolute;
       bottom: 20px;
       left: 20px;
-      background: rgba(20, 25, 18, 0.68);
-      padding: 14px 18px;
+      background: rgba(20, 25, 18, 0.72);
+      padding: 10px 14px;
       border-radius: 8px;
-      min-width: 245px;
+      min-width: 190px;
       border: 1px solid rgba(255, 255, 255, 0.2);
     }
 
     #health-label {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: bold;
-      margin-bottom: 6px;
+      margin-bottom: 5px;
     }
 
     #health-bar-bg {
       width: 100%;
-      height: 16px;
+      height: 13px;
       background: rgba(255, 255, 255, 0.2);
       border: 1px solid rgba(255, 255, 255, 0.5);
       border-radius: 4px;
@@ -122,35 +122,6 @@
       height: 100%;
       background: #3bd13b;
       transition: width 0.15s ease, background-color 0.15s ease;
-    }
-
-    #squad-list {
-      margin-top: 10px;
-      font-size: 12.5px;
-      color: #d6f5d0;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .squad-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .mini-bar-bg {
-      width: 90px;
-      height: 7px;
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 3px;
-      overflow: hidden;
-    }
-
-    .mini-bar-fill {
-      height: 100%;
-      background: #67e85f;
-      width: 100%;
     }
 
     /* Center Crosshair */
@@ -608,7 +579,6 @@
       height: 10px;
     }
 
-    body.touch-enabled #squad-list,
     body.touch-enabled #online-roster-panel,
     body.touch-enabled #instructions {
       display: none !important;
@@ -717,7 +687,6 @@
     /* Responsive Layout for Mobile Portrait & Mobile Landscape */
     @media (max-width: 900px), (max-height: 540px) {
       #instructions,
-      #squad-list,
       #online-roster-panel {
         display: none !important;
       }
@@ -921,7 +890,6 @@
       <div id="health-bar-bg">
         <div id="health-bar-fill"></div>
       </div>
-      <div id="squad-list"></div>
       <div id="online-roster-panel">
         <div id="online-roster-title">ONLINE PLAYERS IN ROOM</div>
         <div id="online-roster-list"></div>
@@ -1803,13 +1771,253 @@
 
       createPhysicsBeachBall(13, -5, 1.85);
       createPlasticShovel(-11 * s, 5 * s, tealToyMat, 0.8);
+
+      // Freeze static environment world matrices so Babylon skips matrix recomputation every frame
+      envRootNode.getChildMeshes().forEach((m) => {
+        if (!m.metadata || !m.metadata.isPhysicsBall) {
+          m.computeWorldMatrix(true);
+          m.freezeWorldMatrix();
+        }
+      });
     }
 
     rebuildSandboxEnvironment(WORLD_LIMIT);
 
     // =========================================================================
-    // 6. CAPSULE-SCULPTED SOLDIER WITH 2-BONE IK RIFLE ARMS
+    // 6. HARDWARE-INSTANCED & MERGED SOLDIER BUILDER + 2-BONE IK RIFLE ARMS
     // =========================================================================
+    // Shared materials for overhead health bars (avoids creating 2 materials per bot)
+    const sharedHpBgMat = new BABYLON.StandardMaterial("sharedHpBgMat", scene);
+    sharedHpBgMat.emissiveColor = new BABYLON.Color3(0.08, 0.08, 0.08);
+    sharedHpBgMat.disableLighting = true;
+    sharedHpBgMat.freeze();
+
+    const sharedHpGreenMat = new BABYLON.StandardMaterial("sharedHpGreenMat", scene);
+    sharedHpGreenMat.emissiveColor = new BABYLON.Color3(0.32, 0.98, 0.28);
+    sharedHpGreenMat.disableLighting = true;
+    sharedHpGreenMat.freeze();
+
+    const sharedHpTanMat = new BABYLON.StandardMaterial("sharedHpTanMat", scene);
+    sharedHpTanMat.emissiveColor = new BABYLON.Color3(1.0, 0.72, 0.26);
+    sharedHpTanMat.disableLighting = true;
+    sharedHpTanMat.freeze();
+
+    // Builds merged master template meshes per team so hundreds of soldiers render via hardware instancing
+    function buildTeamSoldierTemplates(teamName, bodyMat, darkMat) {
+      const p = "tpl_" + teamName + "_";
+
+      function prep(m) {
+        m.computeWorldMatrix(true);
+        return m;
+      }
+
+      function finalizeTemplate(m, mat) {
+        m.material = mat;
+        m.receiveShadows = true;
+        m.isPickable = false;
+        m.isVisible = false;
+        return m;
+      }
+
+      // 1. Hips
+      const hips = BABYLON.MeshBuilder.CreateCapsule(
+        p + "hips",
+        { radius: 0.21, height: 0.56, orientation: BABYLON.Vector3.Right(), tessellation: 10 },
+        scene
+      );
+      hips.scaling.set(1.0, 0.9, 0.85);
+      const hipsTpl = finalizeTemplate(BABYLON.Mesh.MergeMeshes([prep(hips)], true, true), bodyMat);
+
+      // 2. Thigh (baked y = -0.22 offset relative to hipJoint)
+      const thigh = BABYLON.MeshBuilder.CreateCapsule(
+        p + "thigh",
+        { radius: 0.135, height: 0.62, tessellation: 10 },
+        scene
+      );
+      thigh.position.y = -0.22;
+      const thighTpl = finalizeTemplate(BABYLON.Mesh.MergeMeshes([prep(thigh)], true, true), bodyMat);
+
+      // 3. Shin (baked y = -0.21 offset relative to kneeJoint)
+      const shin = BABYLON.MeshBuilder.CreateCapsule(
+        p + "shin",
+        { radius: 0.11, height: 0.58, tessellation: 10 },
+        scene
+      );
+      shin.position.y = -0.21;
+      const shinTpl = finalizeTemplate(BABYLON.Mesh.MergeMeshes([prep(shin)], true, true), bodyMat);
+
+      // 4. Boot (baked offset relative to kneeJoint)
+      const boot = BABYLON.MeshBuilder.CreateCapsule(
+        p + "boot",
+        { radius: 0.11, height: 0.4, orientation: BABYLON.Vector3.Forward(), tessellation: 10 },
+        scene
+      );
+      boot.scaling.set(1.05, 0.72, 1.0);
+      boot.position.set(0, -0.43, 0.06);
+      const bootTpl = finalizeTemplate(BABYLON.Mesh.MergeMeshes([prep(boot)], true, true), darkMat);
+
+      // 5. Merged Torso (Abdomen + Chest -> 1 draw call)
+      const abdomen = BABYLON.MeshBuilder.CreateCapsule(
+        p + "abdomen",
+        { radius: 0.25, height: 0.68, tessellation: 10 },
+        scene
+      );
+      abdomen.scaling.set(1.15, 1.0, 0.78);
+      abdomen.position.y = 0.32;
+
+      const chest = BABYLON.MeshBuilder.CreateCapsule(
+        p + "chest",
+        { radius: 0.24, height: 0.76, orientation: BABYLON.Vector3.Right(), tessellation: 10 },
+        scene
+      );
+      chest.scaling.set(1.0, 1.15, 0.85);
+      chest.position.y = 0.56;
+
+      const torsoTpl = finalizeTemplate(
+        BABYLON.Mesh.MergeMeshes([prep(abdomen), prep(chest)], true, true),
+        bodyMat
+      );
+
+      // 6. Merged Belt + Field Pack (-> 1 draw call)
+      const belt = BABYLON.MeshBuilder.CreateCylinder(
+        p + "belt",
+        { diameterTop: 0.62, diameterBottom: 0.6, height: 0.13, tessellation: 10 },
+        scene
+      );
+      belt.scaling.set(1.12, 1.0, 0.82);
+      belt.position.y = 0.05;
+
+      const pack = BABYLON.MeshBuilder.CreateBox(
+        p + "pack",
+        { width: 0.46, height: 0.48, depth: 0.22 },
+        scene
+      );
+      pack.position.set(0, 0.48, -0.27);
+
+      const gearTpl = finalizeTemplate(
+        BABYLON.Mesh.MergeMeshes([prep(belt), prep(pack)], true, true),
+        darkMat
+      );
+
+      // 7. Merged Neck + Head (-> 1 draw call)
+      const neck = BABYLON.MeshBuilder.CreateCylinder(
+        p + "neck",
+        { diameter: 0.22, height: 0.18, tessellation: 10 },
+        scene
+      );
+      neck.position.y = 0.05;
+
+      const head = BABYLON.MeshBuilder.CreateCapsule(
+        p + "head",
+        { radius: 0.2, height: 0.46, tessellation: 10 },
+        scene
+      );
+      head.position.y = 0.23;
+
+      const headTpl = finalizeTemplate(
+        BABYLON.Mesh.MergeMeshes([prep(neck), prep(head)], true, true),
+        bodyMat
+      );
+
+      // 8. Merged M1 Helmet + Visor Rim (-> 1 draw call)
+      const helmet = BABYLON.MeshBuilder.CreateSphere(
+        p + "helmet",
+        { diameterX: 0.54, diameterY: 0.48, diameterZ: 0.58, slice: 0.58, segments: 10 },
+        scene
+      );
+      helmet.position.set(0, 0.24, -0.01);
+      helmet.rotation.x = -0.12;
+
+      const helmetRim = BABYLON.MeshBuilder.CreateTorus(
+        p + "helmetRim",
+        { diameter: 0.52, thickness: 0.045, tessellation: 12 },
+        scene
+      );
+      helmetRim.scaling.set(1.0, 1.0, 1.08);
+      helmetRim.position.set(0, 0.27, -0.01);
+      helmetRim.rotation.x = -0.12;
+
+      const helmetTpl = finalizeTemplate(
+        BABYLON.Mesh.MergeMeshes([prep(helmet), prep(helmetRim)], true, true),
+        darkMat
+      );
+
+      // 9. IK Arm Segment Templates (Joint Spheres + Upper/Forearm Capsules)
+      const shoulderBallTpl = finalizeTemplate(
+        BABYLON.MeshBuilder.CreateSphere(p + "shoulder", { diameter: 0.22, segments: 8 }, scene),
+        bodyMat
+      );
+      const elbowAndHandTpl = finalizeTemplate(
+        BABYLON.MeshBuilder.CreateSphere(p + "joint", { diameter: 0.17, segments: 8 }, scene),
+        bodyMat
+      );
+      const rUpperArmTpl = finalizeTemplate(
+        BABYLON.MeshBuilder.CreateCapsule(p + "rUpper", { radius: 0.095, height: 0.34 + 0.14, tessellation: 8 }, scene),
+        bodyMat
+      );
+      const rForearmTpl = finalizeTemplate(
+        BABYLON.MeshBuilder.CreateCapsule(p + "rFore", { radius: 0.082, height: 0.34 + 0.12, tessellation: 8 }, scene),
+        bodyMat
+      );
+      const lUpperArmTpl = finalizeTemplate(
+        BABYLON.MeshBuilder.CreateCapsule(p + "lUpper", { radius: 0.095, height: 0.40 + 0.14, tessellation: 8 }, scene),
+        bodyMat
+      );
+      const lForearmTpl = finalizeTemplate(
+        BABYLON.MeshBuilder.CreateCapsule(p + "lFore", { radius: 0.082, height: 0.40 + 0.12, tessellation: 8 }, scene),
+        bodyMat
+      );
+
+      // 10. Merged Full M16 Rifle (6 parts -> 1 instanced draw call!)
+      const stock = BABYLON.MeshBuilder.CreateBox(p + "stock", { width: 0.07, height: 0.15, depth: 0.38 }, scene);
+      stock.position.set(0, -0.02, -0.14);
+      const receiver = BABYLON.MeshBuilder.CreateBox(p + "receiver", { width: 0.09, height: 0.15, depth: 0.42 }, scene);
+      receiver.position.set(0, 0.02, 0.18);
+      const pistolGrip = BABYLON.MeshBuilder.CreateBox(p + "pistolGrip", { width: 0.065, height: 0.18, depth: 0.09 }, scene);
+      pistolGrip.position.set(0, -0.1, 0.04);
+      pistolGrip.rotation.x = 0.32;
+      const magazine = BABYLON.MeshBuilder.CreateBox(p + "mag", { width: 0.065, height: 0.24, depth: 0.11 }, scene);
+      magazine.position.set(0, -0.13, 0.24);
+      magazine.rotation.x = -0.22;
+      const handguard = BABYLON.MeshBuilder.CreateCylinder(p + "handguard", { diameter: 0.095, height: 0.38, tessellation: 8 }, scene);
+      handguard.rotation.x = Math.PI / 2;
+      handguard.position.set(0, 0.035, 0.54);
+      const barrel = BABYLON.MeshBuilder.CreateCylinder(p + "barrel", { diameter: 0.048, height: 0.46, tessellation: 8 }, scene);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0.045, 0.8);
+
+      const rifleTpl = finalizeTemplate(
+        BABYLON.Mesh.MergeMeshes(
+          [prep(stock), prep(receiver), prep(pistolGrip), prep(magazine), prep(handguard), prep(barrel)],
+          true,
+          true
+        ),
+        darkMat
+      );
+
+      return {
+        hipsTpl,
+        thighTpl,
+        shinTpl,
+        bootTpl,
+        torsoTpl,
+        gearTpl,
+        headTpl,
+        helmetTpl,
+        shoulderBallTpl,
+        elbowAndHandTpl,
+        rUpperArmTpl,
+        rForearmTpl,
+        lUpperArmTpl,
+        lForearmTpl,
+        rifleTpl
+      };
+    }
+
+    const soldierTemplates = {
+      green: buildTeamSoldierTemplates("green", greenPlasticMat, greenDarkPlasticMat),
+      tan: buildTeamSoldierTemplates("tan", tanPlasticMat, tanDarkPlasticMat)
+    };
     // Aligns a vertical (+Y) capsule mesh so it spans from point pA to point pB
     function orientCapsuleBetween(mesh, pA, pB) {
       mesh.position.set(
@@ -1866,12 +2074,22 @@
         .add(v.scale(upperLen * sinAlpha));
     }
 
-    // Built facing +Z in Babylon's left-handed coordinate system
+    // Built facing +Z in Babylon's left-handed coordinate system using hardware-instanced meshes
     function createPlasticSoldier(team, soldierIndex, showOverheadBar) {
       const isGreen = team === "green";
-      const bodyMat = isGreen ? greenPlasticMat : tanPlasticMat;
-      const darkMat = isGreen ? greenDarkPlasticMat : tanDarkPlasticMat;
+      const tpls = isGreen ? soldierTemplates.green : soldierTemplates.tan;
       const prefix = team + "_" + soldierIndex + "_";
+      const castShadows = soldierIndex < 16;
+
+      function spawnInst(tpl, name, parentNode) {
+        const inst = tpl.createInstance(prefix + name);
+        inst.parent = parentNode;
+        inst.isPickable = false;
+        if (castShadows) {
+          shadowGen.addShadowCaster(inst);
+        }
+        return inst;
+      }
 
       const root = new BABYLON.TransformNode(prefix + "root", scene);
 
@@ -1880,53 +2098,22 @@
       pelvis.position.y = 0.96;
       pelvis.parent = root;
 
-      const hipMesh = BABYLON.MeshBuilder.CreateCapsule(
-        prefix + "hips",
-        { radius: 0.21, height: 0.56, orientation: BABYLON.Vector3.Right(), tessellation: 12 },
-        scene
-      );
-      hipMesh.scaling.set(1.0, 0.9, 0.85);
-      hipMesh.material = bodyMat;
-      hipMesh.parent = pelvis;
+      spawnInst(tpls.hipsTpl, "hips", pelvis);
 
-      // Sculpted 2-Segment Human Leg (Thigh Capsule -> Knee -> Calf Capsule -> Boot)
+      // Sculpted 2-Segment Human Leg (Instanced Thigh -> Knee -> Instanced Shin & Boot)
       function createLeg(sideSign, sideName) {
         const hipJoint = new BABYLON.TransformNode(prefix + sideName + "Hip", scene);
         hipJoint.position.set(sideSign * 0.19, -0.04, 0);
         hipJoint.parent = pelvis;
 
-        const thigh = BABYLON.MeshBuilder.CreateCapsule(
-          prefix + sideName + "Thigh",
-          { radius: 0.135, height: 0.62, tessellation: 12 },
-          scene
-        );
-        thigh.position.y = -0.22;
-        thigh.material = bodyMat;
-        thigh.parent = hipJoint;
+        spawnInst(tpls.thighTpl, sideName + "Thigh", hipJoint);
 
         const kneeJoint = new BABYLON.TransformNode(prefix + sideName + "Knee", scene);
         kneeJoint.position.y = -0.44;
         kneeJoint.parent = hipJoint;
 
-        const shin = BABYLON.MeshBuilder.CreateCapsule(
-          prefix + sideName + "Shin",
-          { radius: 0.11, height: 0.58, tessellation: 12 },
-          scene
-        );
-        shin.position.y = -0.21;
-        shin.material = bodyMat;
-        shin.parent = kneeJoint;
-
-        // Sculpted Combat Boot (ankle + rounded boot toe pointing +Z)
-        const boot = BABYLON.MeshBuilder.CreateCapsule(
-          prefix + sideName + "Boot",
-          { radius: 0.11, height: 0.4, orientation: BABYLON.Vector3.Forward(), tessellation: 12 },
-          scene
-        );
-        boot.scaling.set(1.05, 0.72, 1.0);
-        boot.position.set(0, -0.43, 0.06);
-        boot.material = darkMat;
-        boot.parent = kneeJoint;
+        spawnInst(tpls.shinTpl, sideName + "Shin", kneeJoint);
+        spawnInst(tpls.bootTpl, sideName + "Boot", kneeJoint);
 
         return { hipJoint, kneeJoint };
       }
@@ -1934,141 +2121,31 @@
       const leftLeg = createLeg(-1, "left");
       const rightLeg = createLeg(1, "right");
 
-      // Spine / Upper Body Pivot
+      // Spine / Upper Body Pivot (Instanced Merged Torso + Instanced Merged Belt/Pack)
       const spine = new BABYLON.TransformNode(prefix + "spine", scene);
       spine.position.y = 0.08;
       spine.parent = pelvis;
 
-      // Tactical Webbing Belt & Canteen Pouches
-      const belt = BABYLON.MeshBuilder.CreateCylinder(
-        prefix + "belt",
-        { diameterTop: 0.62, diameterBottom: 0.6, height: 0.13, tessellation: 14 },
-        scene
-      );
-      belt.scaling.set(1.12, 1.0, 0.82);
-      belt.position.y = 0.05;
-      belt.material = darkMat;
-      belt.parent = spine;
+      spawnInst(tpls.torsoTpl, "torso", spine);
+      spawnInst(tpls.gearTpl, "gear", spine);
 
-      // Lower & Upper Sculpted Torso
-      const abdomen = BABYLON.MeshBuilder.CreateCapsule(
-        prefix + "abdomen",
-        { radius: 0.25, height: 0.68, tessellation: 14 },
-        scene
-      );
-      abdomen.scaling.set(1.15, 1.0, 0.78);
-      abdomen.position.y = 0.32;
-      abdomen.material = bodyMat;
-      abdomen.parent = spine;
-
-      const chest = BABYLON.MeshBuilder.CreateCapsule(
-        prefix + "chest",
-        { radius: 0.24, height: 0.76, orientation: BABYLON.Vector3.Right(), tessellation: 14 },
-        scene
-      );
-      chest.scaling.set(1.0, 1.15, 0.85);
-      chest.position.y = 0.56;
-      chest.material = bodyMat;
-      chest.parent = spine;
-
-      // Field Pack on back (-Z)
-      const pack = BABYLON.MeshBuilder.CreateBox(
-        prefix + "pack",
-        { width: 0.46, height: 0.48, depth: 0.22 },
-        scene
-      );
-      pack.position.set(0, 0.48, -0.27);
-      pack.material = darkMat;
-      pack.parent = spine;
-
-      // Neck & Head Pivot
+      // Neck & Head Pivot (Instanced Merged Head/Neck + Instanced Merged M1 Helmet)
       const headPivot = new BABYLON.TransformNode(prefix + "headPivot", scene);
       headPivot.position.y = 0.82;
       headPivot.parent = spine;
 
-      const neck = BABYLON.MeshBuilder.CreateCylinder(
-        prefix + "neck",
-        { diameter: 0.22, height: 0.18, tessellation: 12 },
-        scene
-      );
-      neck.position.y = 0.05;
-      neck.material = bodyMat;
-      neck.parent = headPivot;
+      spawnInst(tpls.headTpl, "head", headPivot);
+      spawnInst(tpls.helmetTpl, "helmet", headPivot);
 
-      const head = BABYLON.MeshBuilder.CreateCapsule(
-        prefix + "head",
-        { radius: 0.2, height: 0.46, tessellation: 14 },
-        scene
-      );
-      head.position.y = 0.23;
-      head.material = bodyMat;
-      head.parent = headPivot;
-
-      // Classic M1 Army Helmet (curved dome + visor rim)
-      const helmet = BABYLON.MeshBuilder.CreateSphere(
-        prefix + "helmet",
-        { diameterX: 0.54, diameterY: 0.48, diameterZ: 0.58, slice: 0.58, segments: 14 },
-        scene
-      );
-      helmet.position.set(0, 0.24, -0.01);
-      helmet.rotation.x = -0.12;
-      helmet.material = darkMat;
-      helmet.parent = headPivot;
-
-      const helmetRim = BABYLON.MeshBuilder.CreateTorus(
-        prefix + "helmetRim",
-        { diameter: 0.52, thickness: 0.045, tessellation: 16 },
-        scene
-      );
-      helmetRim.scaling.set(1.0, 1.0, 1.08);
-      helmetRim.position.set(0, 0.27, -0.01);
-      helmetRim.rotation.x = -0.12;
-      helmetRim.material = darkMat;
-      helmetRim.parent = headPivot;
-
-      // IK-driven 2-Segment Arms (parented directly to spine so capsules connect Shoulder -> Elbow -> Rifle Grip)
-      function createIKArm(sideName, upperLen, foreLen) {
-        const shoulderJoint = BABYLON.MeshBuilder.CreateSphere(
-          prefix + sideName + "Shoulder",
-          { diameter: 0.22, segments: 10 },
-          scene
-        );
-        shoulderJoint.material = bodyMat;
-        shoulderJoint.parent = spine;
-
-        const upperArm = BABYLON.MeshBuilder.CreateCapsule(
-          prefix + sideName + "UpperArm",
-          { radius: 0.095, height: upperLen + 0.14, tessellation: 12 },
-          scene
-        );
+      // IK-driven 2-Segment Arms using hardware instances
+      function createIKArm(sideName, upperLen, foreLen, upperTpl, foreTpl) {
+        const shoulderJoint = spawnInst(tpls.shoulderBallTpl, sideName + "Shoulder", spine);
+        const upperArm = spawnInst(upperTpl, sideName + "UpperArm", spine);
         upperArm.rotationQuaternion = new BABYLON.Quaternion();
-        upperArm.material = bodyMat;
-        upperArm.parent = spine;
-
-        const elbowJoint = BABYLON.MeshBuilder.CreateSphere(
-          prefix + sideName + "Elbow",
-          { diameter: 0.17, segments: 10 },
-          scene
-        );
-        elbowJoint.material = bodyMat;
-        elbowJoint.parent = spine;
-
-        const forearm = BABYLON.MeshBuilder.CreateCapsule(
-          prefix + sideName + "Forearm",
-          { radius: 0.082, height: foreLen + 0.12, tessellation: 12 },
-          scene
-        );
+        const elbowJoint = spawnInst(tpls.elbowAndHandTpl, sideName + "Elbow", spine);
+        const forearm = spawnInst(foreTpl, sideName + "Forearm", spine);
         forearm.rotationQuaternion = new BABYLON.Quaternion();
-        forearm.material = bodyMat;
-        forearm.parent = spine;
-
-        const hand = BABYLON.MeshBuilder.CreateSphere(
-          prefix + sideName + "Hand",
-          { diameter: 0.17, segments: 10 },
-          scene
-        );
-        hand.material = bodyMat;
-        hand.parent = spine;
+        const hand = spawnInst(tpls.elbowAndHandTpl, sideName + "Hand", spine);
 
         return {
           shoulderJoint,
@@ -2081,78 +2158,16 @@
         };
       }
 
-      const rightArm = createIKArm("right", 0.34, 0.34);
-      const leftArm = createIKArm("left", 0.40, 0.40);
+      const rightArm = createIKArm("right", 0.34, 0.34, tpls.rUpperArmTpl, tpls.rForearmTpl);
+      const leftArm = createIKArm("left", 0.40, 0.40, tpls.lUpperArmTpl, tpls.lForearmTpl);
 
-      // Detailed M16-style Plastic Rifle tucked into the right shoulder pocket
+      // Detailed M16-style Plastic Rifle (Single instanced mesh!)
       const weaponMount = new BABYLON.TransformNode(prefix + "weaponMount", scene);
       weaponMount.position.set(0.18, 0.54, 0.22);
       weaponMount.rotation.y = -0.06;
       weaponMount.parent = spine;
 
-      // Buttstock resting against right shoulder pocket
-      const stock = BABYLON.MeshBuilder.CreateBox(
-        prefix + "stock",
-        { width: 0.07, height: 0.15, depth: 0.38 },
-        scene
-      );
-      stock.position.set(0, -0.02, -0.14);
-      stock.material = darkMat;
-      stock.parent = weaponMount;
-
-      // Upper & Lower Receiver
-      const receiver = BABYLON.MeshBuilder.CreateBox(
-        prefix + "receiver",
-        { width: 0.09, height: 0.15, depth: 0.42 },
-        scene
-      );
-      receiver.position.set(0, 0.02, 0.18);
-      receiver.material = darkMat;
-      receiver.parent = weaponMount;
-
-      // Angled Pistol Grip (where Right Hand locks)
-      const pistolGrip = BABYLON.MeshBuilder.CreateBox(
-        prefix + "pistolGrip",
-        { width: 0.065, height: 0.18, depth: 0.09 },
-        scene
-      );
-      pistolGrip.position.set(0, -0.1, 0.04);
-      pistolGrip.rotation.x = 0.32;
-      pistolGrip.material = darkMat;
-      pistolGrip.parent = weaponMount;
-
-      // Curved Magazine
-      const magazine = BABYLON.MeshBuilder.CreateBox(
-        prefix + "mag",
-        { width: 0.065, height: 0.24, depth: 0.11 },
-        scene
-      );
-      magazine.position.set(0, -0.13, 0.24);
-      magazine.rotation.x = -0.22;
-      magazine.material = darkMat;
-      magazine.parent = weaponMount;
-
-      // Barrel Handguard (where Left Hand cradles from underneath)
-      const handguard = BABYLON.MeshBuilder.CreateCylinder(
-        prefix + "handguard",
-        { diameter: 0.095, height: 0.38, tessellation: 10 },
-        scene
-      );
-      handguard.rotation.x = Math.PI / 2;
-      handguard.position.set(0, 0.035, 0.54);
-      handguard.material = darkMat;
-      handguard.parent = weaponMount;
-
-      // Rifle Barrel & Front Sight
-      const barrel = BABYLON.MeshBuilder.CreateCylinder(
-        prefix + "barrel",
-        { diameter: 0.048, height: 0.46, tessellation: 10 },
-        scene
-      );
-      barrel.rotation.x = Math.PI / 2;
-      barrel.position.set(0, 0.045, 0.8);
-      barrel.material = darkMat;
-      barrel.parent = weaponMount;
+      spawnInst(tpls.rifleTpl, "rifle", weaponMount);
 
       // Exact 3D grip anchor nodes on the rifle for Right Hand (trigger) & Left Hand (forend)
       const triggerGripNode = new BABYLON.TransformNode(prefix + "triggerGrip", scene);
@@ -2165,7 +2180,7 @@
 
       const muzzleFlash = BABYLON.MeshBuilder.CreateSphere(
         prefix + "muzzleFlash",
-        { diameterX: 0.26, diameterY: 0.26, diameterZ: 0.42, segments: 8 },
+        { diameterX: 0.26, diameterY: 0.26, diameterZ: 0.42, segments: 6 },
         scene
       );
       muzzleFlash.position.set(0, 0.045, 1.08);
@@ -2174,10 +2189,10 @@
       muzzleFlash.isPickable = false;
       muzzleFlash.parent = weaponMount;
 
-      // Invisible hitbox cylinder for crisp raycast bullet detection
+      // Lightweight hitbox cylinder for raycast bullet detection
       const hitbox = BABYLON.MeshBuilder.CreateCylinder(
         prefix + "hitbox",
-        { diameter: 0.92, height: 2.05, tessellation: 10 },
+        { diameter: 0.92, height: 2.05, tessellation: 8 },
         scene
       );
       hitbox.position.y = 1.02;
@@ -2185,11 +2200,9 @@
       hitbox.isPickable = true;
       hitbox.parent = root;
 
-      // Overhead floating health bar & multiplayer name tag for teammates/enemies
+      // Overhead floating health bar (uses shared materials; 3D name tag is created lazily only for human players)
       let overheadGroup = null;
       let overheadBarFill = null;
-      let namePlane = null;
-      let nameTex = null;
       if (showOverheadBar) {
         overheadGroup = new BABYLON.TransformNode(prefix + "overhead", scene);
         overheadGroup.position.set(0, 2.45, 0);
@@ -2201,10 +2214,7 @@
           { width: 0.96, height: 0.13 },
           scene
         );
-        const bgMat = new BABYLON.StandardMaterial(prefix + "hpBgMat", scene);
-        bgMat.emissiveColor = new BABYLON.Color3(0.08, 0.08, 0.08);
-        bgMat.disableLighting = true;
-        bgPlane.material = bgMat;
+        bgPlane.material = sharedHpBgMat;
         bgPlane.isPickable = false;
         bgPlane.parent = overheadGroup;
 
@@ -2215,55 +2225,13 @@
         );
         overheadBarFill.setPivotPoint(new BABYLON.Vector3(-0.45, 0, 0));
         overheadBarFill.position.set(0, 0, -0.01);
-        const fillMat = new BABYLON.StandardMaterial(prefix + "hpFillMat", scene);
-        fillMat.emissiveColor = isGreen
-          ? new BABYLON.Color3(0.32, 0.98, 0.28)
-          : new BABYLON.Color3(1.0, 0.72, 0.26);
-        fillMat.disableLighting = true;
-        overheadBarFill.material = fillMat;
+        overheadBarFill.material = isGreen ? sharedHpGreenMat : sharedHpTanMat;
         overheadBarFill.isPickable = false;
         overheadBarFill.parent = overheadGroup;
-
-        // Floating 3D Name Tag above the health bar for Multiplayer Human Players
-        namePlane = BABYLON.MeshBuilder.CreatePlane(
-          prefix + "namePlane",
-          { width: 2.3, height: 0.48 },
-          scene
-        );
-        namePlane.position.set(0, 0.36, 0);
-        namePlane.isPickable = false;
-        namePlane.isVisible = false;
-        namePlane.parent = overheadGroup;
-
-        nameTex = new BABYLON.DynamicTexture(
-          prefix + "nameTex",
-          { width: 320, height: 68 },
-          scene,
-          true
-        );
-        nameTex.hasAlpha = true;
-        const nameMat = new BABYLON.StandardMaterial(prefix + "nameMat", scene);
-        nameMat.diffuseTexture = nameTex;
-        nameMat.emissiveTexture = nameTex;
-        nameMat.useAlphaFromDiffuseTexture = true;
-        nameMat.disableLighting = true;
-        nameMat.backFaceCulling = false;
-        namePlane.material = nameMat;
       }
 
-      // Register soldier meshes for shadow casting (cap at first 16 per team so 100+ bot stress tests stay fast)
-      const castShadows = soldierIndex < 16;
-      pelvis.getChildMeshes().forEach((m) => {
-        if (m !== muzzleFlash) {
-          m.receiveShadows = true;
-          if (castShadows) {
-            shadowGen.addShadowCaster(m);
-          }
-          m.isPickable = false;
-        }
-      });
-
       return {
+        prefix,
         root,
         pelvis,
         spine,
@@ -2279,29 +2247,54 @@
         hitbox,
         overheadGroup,
         overheadBarFill,
-        namePlane,
-        nameTex,
+        namePlane: null,
+        nameTex: null,
         flashTimer: 0,
         recoilTimer: 0,
         flinchTimer: 0
       };
     }
 
-    // Draws or hides the floating 3D name tag above a soldier's head
+    // Lazily creates & draws the floating 3D name tag ONLY for human multiplayer players
     function updateSoldierOverheadName(soldier) {
       const m = soldier.model;
-      if (!m || !m.namePlane || !m.nameTex) return;
+      if (!m || !m.overheadGroup) return;
 
       if (!soldier.isRemotePlayer) {
-        m.namePlane.isVisible = false;
+        if (m.namePlane) m.namePlane.isVisible = false;
         return;
+      }
+
+      if (!m.namePlane || !m.nameTex) {
+        m.namePlane = BABYLON.MeshBuilder.CreatePlane(
+          m.prefix + "namePlane",
+          { width: 2.3, height: 0.48 },
+          scene
+        );
+        m.namePlane.position.set(0, 0.36, 0);
+        m.namePlane.isPickable = false;
+        m.namePlane.parent = m.overheadGroup;
+
+        m.nameTex = new BABYLON.DynamicTexture(
+          m.prefix + "nameTex",
+          { width: 320, height: 68 },
+          scene,
+          true
+        );
+        m.nameTex.hasAlpha = true;
+        const nameMat = new BABYLON.StandardMaterial(m.prefix + "nameMat", scene);
+        nameMat.diffuseTexture = m.nameTex;
+        nameMat.emissiveTexture = m.nameTex;
+        nameMat.useAlphaFromDiffuseTexture = true;
+        nameMat.disableLighting = true;
+        nameMat.backFaceCulling = false;
+        m.namePlane.material = nameMat;
       }
 
       m.namePlane.isVisible = true;
       const ctx = m.nameTex.getContext();
       ctx.clearRect(0, 0, 320, 68);
 
-      // Rounded dark pill background with team-colored border
       const isGreen = soldier.team === "green";
       ctx.fillStyle = "rgba(12, 18, 12, 0.82)";
       ctx.strokeStyle = isGreen ? "#65ff58" : "#ffd584";
@@ -3352,6 +3345,19 @@
 
     const tracers = [];
     const impactParticles = [];
+    const burstMaterialCache = new Map();
+
+    function getBurstMaterial(colorHex) {
+      let mat = burstMaterialCache.get(colorHex);
+      if (!mat) {
+        mat = new BABYLON.StandardMaterial("burst_" + colorHex, scene);
+        mat.emissiveColor = BABYLON.Color3.FromHexString(colorHex);
+        mat.disableLighting = true;
+        mat.freeze();
+        burstMaterialCache.set(colorHex, mat);
+      }
+      return mat;
+    }
 
     function spawnTracer(startPoint, endPoint, color3) {
       const line = BABYLON.MeshBuilder.CreateLines(
@@ -3366,10 +3372,9 @@
 
     // Spawns physical sand splashes or plastic sparks on bullet impact
     function spawnImpactBurst(point, isSand, colorHex) {
-      const count = isSand ? 7 : 5;
-      const mat = new BABYLON.StandardMaterial("burstMat", scene);
-      mat.emissiveColor = BABYLON.Color3.FromHexString(colorHex);
-      mat.disableLighting = true;
+      if (impactParticles.length > 85) return; // Cap active particles during massive bot battles
+      const count = isSand ? 6 : 4;
+      const mat = getBurstMaterial(colorHex);
 
       for (let i = 0; i < count; i++) {
         const p = BABYLON.MeshBuilder.CreateBox(
@@ -3390,7 +3395,7 @@
           mesh: p,
           velocity: vel,
           life: 0.35 + Math.random() * 0.2,
-          mat: i === 0 ? mat : null
+          mat: null
         });
       }
     }
@@ -3741,7 +3746,7 @@
     const greenTotalEl = document.getElementById("green-total");
     const tanCountEl = document.getElementById("tan-count");
     const tanTotalEl = document.getElementById("tan-total");
-    const squadListEl = document.getElementById("squad-list");
+    // Remove squadListEl and teammate health summary list from updateHUD
     const endMessageEl = document.getElementById("end-message");
     const endTitleEl = document.getElementById("end-title");
     const endSubtitleEl = document.getElementById("end-subtitle");
@@ -4662,28 +4667,6 @@
       tanCountEl.textContent = tanAlive;
       tanTotalEl.textContent = tanAll.length;
 
-      const myTeam = player.team || "green";
-      const teammates = soldiers.filter((s) => s.team === myTeam && !s.isPlayer);
-      squadListEl.innerHTML = teammates
-        .map((tm) => {
-          const pct = Math.max(0, Math.round(tm.health));
-          const color = tm.alive
-            ? myTeam === "green"
-              ? "#67e85f"
-              : "#ffd584"
-            : "#666666";
-          const label = tm.alive ? tm.name : tm.name + " (DOWN)";
-          return `
-            <div class="squad-row">
-              <span>${escapeHtml(label)}</span>
-              <div class="mini-bar-bg">
-                <div class="mini-bar-fill" style="width:${pct}%;background:${color};"></div>
-              </div>
-            </div>
-          `;
-        })
-        .join("");
-
       if (mpState.active && mpState.roster && Array.isArray(mpState.roster.players)) {
         onlineRosterPanelEl.style.display = "block";
         onlineRosterListEl.innerHTML = mpState.roster.players
@@ -4845,18 +4828,26 @@
         return;
       }
 
-      // Locate closest living opponent
-      let nearestTarget = null;
-      let nearestDist = Infinity;
-
-      for (const other of soldiers) {
-        if (!other.alive || other.team === ai.team) continue;
-        const d = BABYLON.Vector3.Distance(ai.position, other.position);
-        if (d < nearestDist) {
-          nearestDist = d;
-          nearestTarget = other;
+      // Cache closest living opponent for 0.25s to avoid O(N^2) target scans every frame
+      ai.targetSearchTimer = (ai.targetSearchTimer || 0) - dt;
+      if (ai.targetSearchTimer <= 0 || !ai.cachedTarget || !ai.cachedTarget.alive) {
+        ai.targetSearchTimer = 0.22 + (ai.slotIndex % 5) * 0.03;
+        let nearest = null;
+        let nearestDistSq = Infinity;
+        for (const other of soldiers) {
+          if (!other.alive || other.team === ai.team) continue;
+          const dx0 = ai.position.x - other.position.x;
+          const dz0 = ai.position.z - other.position.z;
+          const dSq = dx0 * dx0 + dz0 * dz0;
+          if (dSq < nearestDistSq) {
+            nearestDistSq = dSq;
+            nearest = other;
+          }
         }
+        ai.cachedTarget = nearest;
       }
+
+      const nearestTarget = ai.cachedTarget;
 
       if (!nearestTarget) {
         ai.moveBlend = Math.max(0, ai.moveBlend - dt * 4);
