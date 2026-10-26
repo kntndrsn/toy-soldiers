@@ -7,8 +7,118 @@ const PORT = process.env.PORT || 3000;
 const INDEX_PATH = path.join(__dirname, "index.html");
 
 // ============================================================================
-// 1. HTTP SERVER (Serves index.html, /rooms, and /health)
+// 1. DDoS PROTECTION, RATE LIMITING & PERFORMANCE PROFILER STATE
 // ============================================================================
+const MAX_WS_PAYLOAD_BYTES = 16 * 1024; // 16 KB max frame size
+const MAX_CONN_PER_IP = Number(process.env.MAX_CONN_PER_IP) || 24;
+const MAX_WS_MSGS_PER_SEC = Number(process.env.MAX_WS_MSGS_PER_SEC) || 100;
+const MAX_WS_BYTES_PER_SEC = Number(process.env.MAX_WS_BYTES_PER_SEC) || 96 * 1024;
+const MAX_ROOM_ACTIONS_PER_10S = 10;
+const MAX_HTTP_REQ_PER_10S = 120;
+const IP_BAN_DURATION_MS = 30 * 1000;
+
+// Map<ip, { connCount, httpCount, httpWindowStart, bannedUntil, violations }>
+const ipSecurityState = new Map();
+
+const ddosTelemetry = {
+  droppedMessages: 0,
+  rateLimitedClients: 0,
+  blockedConnections: 0,
+  httpRateLimited: 0,
+  malformedPackets: 0
+};
+
+function getClientIp(req) {
+  const xff = req && req.headers && req.headers["x-forwarded-for"];
+  if (typeof xff === "string" && xff.length > 0) {
+    return xff.split(",")[0].trim();
+  }
+  return (req && req.socket && req.socket.remoteAddress) || "127.0.0.1";
+}
+
+function getIpRecord(ip) {
+  let rec = ipSecurityState.get(ip);
+  if (!rec) {
+    rec = {
+      connCount: 0,
+      httpCount: 0,
+      httpWindowStart: Date.now(),
+      bannedUntil: 0,
+      violations: 0
+    };
+    ipSecurityState.set(ip, rec);
+  }
+  return rec;
+}
+
+function isIpBanned(ip) {
+  const rec = ipSecurityState.get(ip);
+  if (!rec) return false;
+  if (rec.bannedUntil > Date.now()) return true;
+  return false;
+}
+
+function checkHttpRateLimit(ip) {
+  const now = Date.now();
+  const rec = getIpRecord(ip);
+  if (rec.bannedUntil > now) {
+    ddosTelemetry.httpRateLimited++;
+    return false;
+  }
+  if (now - rec.httpWindowStart > 10000) {
+    rec.httpWindowStart = now;
+    rec.httpCount = 0;
+  }
+  rec.httpCount++;
+  if (rec.httpCount > MAX_HTTP_REQ_PER_10S) {
+    ddosTelemetry.httpRateLimited++;
+    rec.violations++;
+    if (rec.violations >= 6) {
+      rec.bannedUntil = now + IP_BAN_DURATION_MS;
+    }
+    return false;
+  }
+  return true;
+}
+
+// Performance Profiling State (consumed by /api/perf and /perf dashboard)
+const perfMetrics = {
+  startTime: Date.now(),
+  tickHistoryMs: [], // rolling last 120 ticks
+  inboundPktsSec: 0,
+  outboundPktsSec: 0,
+  inboundBytesSec: 0,
+  outboundBytesSec: 0,
+  _inPktsAccum: 0,
+  _outPktsAccum: 0,
+  _inBytesAccum: 0,
+  _outBytesAccum: 0,
+  _lastRateSampleTime: Date.now(),
+  totalInboundPkts: 0,
+  totalOutboundPkts: 0,
+  msgStats: new Map(), // Map<msgType, { count, totalMs, maxMs }>
+  clientProfiles: new Map(), // Map<clientId, ClientPerfSnapshot>
+  history: [] // rolling 60s of 1s snapshots
+};
+
+function recordMsgProfile(type, durationMs) {
+  let st = perfMetrics.msgStats.get(type);
+  if (!st) {
+    st = { count: 0, totalMs: 0, maxMs: 0 };
+    perfMetrics.msgStats.set(type, st);
+  }
+  st.count += 1;
+  st.totalMs += durationMs;
+  if (durationMs > st.maxMs) st.maxMs = durationMs;
+}
+
+function percentile(arr, p) {
+  if (!arr || arr.length === 0) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.floor(sorted.length * p));
+  return sorted[idx];
+}
+
 function getRoomsSummary() {
   const summary = [];
   for (const room of rooms.values()) {
@@ -17,22 +127,642 @@ function getRoomsSummary() {
   return summary;
 }
 
+function getTakenPlayerNames() {
+  const names = [];
+  const seen = new Set();
+  for (const room of rooms.values()) {
+    for (const c of room.clients.values()) {
+      const clean = String(c.name || "").trim();
+      const lower = clean.toLowerCase();
+      if (clean && !seen.has(lower)) {
+        seen.add(lower);
+        names.push(clean);
+      }
+    }
+  }
+  return names;
+}
+
+function buildPerfApiPayload() {
+  const now = Date.now();
+  const mem = process.memoryUsage();
+  const ticks = perfMetrics.tickHistoryMs;
+  const avgTick =
+    ticks.length > 0
+      ? ticks.reduce((a, b) => a + b, 0) / ticks.length
+      : lastServerTickMs;
+  const p95Tick = percentile(ticks, 0.95);
+  const maxTick = ticks.length > 0 ? Math.max(...ticks) : lastServerTickMs;
+
+  let totalOnlinePlayers = 0;
+  let totalSimulatedUnits = 0;
+  const roomDetails = [];
+  for (const room of rooms.values()) {
+    const pCount = room.clients.size;
+    const uCount = room.greenTotal + room.tanTotal;
+    totalOnlinePlayers += pCount;
+    totalSimulatedUnits += uCount;
+    roomDetails.push({
+      roomCode: room.code,
+      mapType: room.mapType || "sandbox",
+      worldLimit: room.worldLimit,
+      hardcoreMode: Boolean(room.hardcoreMode),
+      hasPassword: Boolean(room.password),
+      playersOnline: pCount,
+      greenTotal: room.greenTotal,
+      tanTotal: room.tanTotal,
+      totalUnits: uCount,
+      remainingSec: Math.round(Math.max(0, (room.matchEndTime - now) / 1000))
+    });
+  }
+
+  // Prune stale client profiles (> 15s old)
+  for (const [cid, prof] of perfMetrics.clientProfiles.entries()) {
+    if (now - prof.updatedAt > 15000) {
+      perfMetrics.clientProfiles.delete(cid);
+    }
+  }
+
+  const clientList = Array.from(perfMetrics.clientProfiles.values());
+  const avgClientFps =
+    clientList.length > 0
+      ? Number((clientList.reduce((acc, c) => acc + (c.fps || 0), 0) / clientList.length).toFixed(1))
+      : null;
+  const minClientFps =
+    clientList.length > 0
+      ? Number(Math.min(...clientList.map((c) => c.fps || 60)).toFixed(1))
+      : null;
+  const avgClientFrameMs =
+    clientList.length > 0
+      ? Number((clientList.reduce((acc, c) => acc + (c.frameMs || 0), 0) / clientList.length).toFixed(2))
+      : null;
+
+  const messageProfiling = {};
+  for (const [type, st] of perfMetrics.msgStats.entries()) {
+    messageProfiling[type] = {
+      count: st.count,
+      avgMs: Number((st.totalMs / Math.max(1, st.count)).toFixed(4)),
+      maxMs: Number(st.maxMs.toFixed(4)),
+      totalMs: Number(st.totalMs.toFixed(2))
+    };
+  }
+
+  let activeIpBans = 0;
+  for (const rec of ipSecurityState.values()) {
+    if (rec.bannedUntil > now) activeIpBans++;
+  }
+
+  // Automated scaling & bottleneck diagnostics for AI / developer consumption
+  const recommendations = [];
+  if (p95Tick > 10) {
+    recommendations.push(
+      `High server tick p95 (${p95Tick.toFixed(2)}ms): consider reducing host_world_state broadcast rate or room count.`
+    );
+  }
+  if (avgClientFps !== null && avgClientFps < 45) {
+    recommendations.push(
+      `Low average client FPS (${avgClientFps}): inspect clientProfiles renderMs/aiMs/physicsMs breakdown.`
+    );
+  }
+  if (perfMetrics.outboundBytesSec > 512 * 1024) {
+    recommendations.push(
+      `High outbound bandwidth (${(perfMetrics.outboundBytesSec / 1024).toFixed(1)} KB/s): quantize or delta-compress world_state updates.`
+    );
+  }
+  if (recommendations.length === 0) {
+    recommendations.push("All server and client performance metrics are within healthy scaling thresholds.");
+  }
+
+  return {
+    ok: true,
+    timestamp: new Date(now).toISOString(),
+    uptimeSec: Math.round((now - perfMetrics.startTime) / 1000),
+    server: {
+      tickLastMs: Number(lastServerTickMs.toFixed(3)),
+      tickAvgMs: Number(avgTick.toFixed(3)),
+      tickP95Ms: Number(p95Tick.toFixed(3)),
+      tickMaxMs: Number(maxTick.toFixed(3)),
+      rssMB: Number((mem.rss / (1024 * 1024)).toFixed(1)),
+      heapUsedMB: Number((mem.heapUsed / (1024 * 1024)).toFixed(1)),
+      heapTotalMB: Number((mem.heapTotal / (1024 * 1024)).toFixed(1))
+    },
+    network: {
+      inboundPktPerSec: perfMetrics.inboundPktsSec,
+      outboundPktPerSec: perfMetrics.outboundPktsSec,
+      inboundKBPerSec: Number((perfMetrics.inboundBytesSec / 1024).toFixed(2)),
+      outboundKBPerSec: Number((perfMetrics.outboundBytesSec / 1024).toFixed(2)),
+      totalInboundPkts: perfMetrics.totalInboundPkts,
+      totalOutboundPkts: perfMetrics.totalOutboundPkts
+    },
+    ddosProtection: {
+      maxPayloadBytes: MAX_WS_PAYLOAD_BYTES,
+      maxConnPerIp: MAX_CONN_PER_IP,
+      maxMsgsPerSec: MAX_WS_MSGS_PER_SEC,
+      maxBytesPerSec: MAX_WS_BYTES_PER_SEC,
+      droppedMessages: ddosTelemetry.droppedMessages,
+      rateLimitedClients: ddosTelemetry.rateLimitedClients,
+      blockedConnections: ddosTelemetry.blockedConnections,
+      httpRateLimited: ddosTelemetry.httpRateLimited,
+      malformedPackets: ddosTelemetry.malformedPackets,
+      activeIpBans
+    },
+    scalingSummary: {
+      activeRooms: rooms.size,
+      totalOnlinePlayers,
+      totalSimulatedUnits,
+      reportedClients: clientList.length,
+      avgClientFps,
+      minClientFps,
+      avgClientFrameMs,
+      recommendations
+    },
+    messageProfiling,
+    rooms: roomDetails,
+    clientProfiles: clientList,
+    history: perfMetrics.history
+  };
+}
+
+function renderPerfDashboardHtml() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Toy Soldiers — Performance & Scaling Profiler</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #0d120e;
+      color: #e4f0e2;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 18px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(132, 255, 120, 0.25);
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 22px;
+      color: #84ff78;
+    }
+    .btn {
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: 1px solid rgba(122, 215, 255, 0.45);
+      background: rgba(25, 42, 30, 0.85);
+      color: #ffffff;
+      font-weight: bold;
+      font-size: 13px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .btn:hover { background: rgba(40, 70, 48, 0.95); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .card {
+      background: rgba(22, 30, 22, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .card-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #9ab098;
+      margin-bottom: 6px;
+    }
+    .card-value {
+      font-size: 24px;
+      font-weight: bold;
+      color: #84ff78;
+      font-family: Consolas, monospace;
+    }
+    .card-sub {
+      font-size: 12px;
+      color: #b8c8b6;
+      margin-top: 4px;
+      font-family: Consolas, monospace;
+    }
+    .panel {
+      background: rgba(22, 30, 22, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .panel h2 {
+      margin: 0 0 10px 0;
+      font-size: 15px;
+      color: #7ad7ff;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      font-family: Consolas, monospace;
+    }
+    th, td {
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    th {
+      color: #9ab098;
+      font-size: 11.5px;
+      text-transform: uppercase;
+    }
+    .rec-item {
+      padding: 8px 12px;
+      background: rgba(132, 255, 120, 0.08);
+      border-left: 3px solid #84ff78;
+      border-radius: 4px;
+      margin-bottom: 6px;
+      font-size: 13.5px;
+    }
+    canvas.chart {
+      width: 100%;
+      height: 150px;
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 6px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>Toy Soldiers — Performance & Scaling Profiler</h1>
+      <div style="font-size: 12.5px; color: #9ab098;">Live Server, Network, DDoS & Client Frame Breakdown &bull; AI JSON Endpoint: <code>/api/perf</code></div>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button class="btn" id="copy-json-btn" type="button">Copy AI JSON (/api/perf)</button>
+      <a class="btn" href="/api/perf" target="_blank">Raw JSON</a>
+      <a class="btn" href="/">Back to Game</a>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-label">Client FPS (Avg / Min)</div>
+      <div class="card-value" id="kpi-fps">--</div>
+      <div class="card-sub" id="kpi-framems">Frame: -- ms</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Server Tick (Avg / P95)</div>
+      <div class="card-value" id="kpi-tick">--</div>
+      <div class="card-sub" id="kpi-mem">RSS: -- MB &bull; Heap: -- MB</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Network Throughput</div>
+      <div class="card-value" id="kpi-net">--</div>
+      <div class="card-sub" id="kpi-bw">In: -- KB/s &bull; Out: -- KB/s</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Active Rooms & Units</div>
+      <div class="card-value" id="kpi-rooms">0 Rooms</div>
+      <div class="card-sub" id="kpi-units">0 Players &bull; 0 Units</div>
+    </div>
+    <div class="card">
+      <div class="card-label">DDoS / Rate Limiter</div>
+      <div class="card-value" id="kpi-ddos">0 Dropped</div>
+      <div class="card-sub" id="kpi-bans">Blocked: 0 &bull; Active Bans: 0</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Scaling Diagnostics & Recommendations</h2>
+    <div id="recommendations-box">Loading...</div>
+  </div>
+
+  <div class="panel">
+    <h2>Live History (Last 60 Seconds — Client FPS & Server Outbound KB/s)</h2>
+    <canvas id="history-chart" class="chart" width="900" height="150"></canvas>
+  </div>
+
+  <div class="panel">
+    <h2>Client Render & Simulation Breakdown</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Client</th>
+          <th>Mode / Room</th>
+          <th>Map</th>
+          <th>Units</th>
+          <th>FPS</th>
+          <th>Frame (ms)</th>
+          <th>Render (ms)</th>
+          <th>Physics (ms)</th>
+          <th>AI (ms)</th>
+          <th>Anim/IK (ms)</th>
+        </tr>
+      </thead>
+      <tbody id="clients-tbody">
+        <tr><td colspan="10">No active client profiles reported yet. Open the game to stream telemetry.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>Server WebSocket Message Handler Profiling</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Message Type</th>
+          <th>Total Count</th>
+          <th>Avg Exec (ms)</th>
+          <th>Max Exec (ms)</th>
+          <th>Total CPU (ms)</th>
+        </tr>
+      </thead>
+      <tbody id="msg-tbody">
+        <tr><td colspan="5">No WebSocket messages recorded yet.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>Active Multiplayer Rooms</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Room Code</th>
+          <th>Map</th>
+          <th>Hardcore</th>
+          <th>Password</th>
+          <th>Players Online</th>
+          <th>Total Units</th>
+          <th>Time Left</th>
+        </tr>
+      </thead>
+      <tbody id="rooms-tbody">
+        <tr><td colspan="7">No active multiplayer rooms.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    let latestPerfData = null;
+
+    function drawChart(history) {
+      const canvas = document.getElementById("history-chart");
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.strokeStyle = "rgba(255,255,255,0.08)";
+      ctx.beginPath();
+      ctx.moveTo(0, h * 0.5);
+      ctx.lineTo(w, h * 0.5);
+      ctx.stroke();
+
+      if (!Array.isArray(history) || history.length < 2) return;
+
+      // Plot FPS (green, 0-120 scale)
+      ctx.strokeStyle = "#84ff78";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      history.forEach((pt, i) => {
+        const x = (i / (history.length - 1)) * (w - 20) + 10;
+        const fps = pt.avgClientFps !== null ? pt.avgClientFps : 60;
+        const y = h - Math.min(1, Math.max(0, fps / 120)) * (h - 20) - 10;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      // Plot Outbound KB/s (blue, 0-200 KB/s scale)
+      ctx.strokeStyle = "#7ad7ff";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      history.forEach((pt, i) => {
+        const x = (i / (history.length - 1)) * (w - 20) + 10;
+        const kb = pt.outboundKBPerSec || 0;
+        const y = h - Math.min(1, Math.max(0, kb / 200)) * (h - 20) - 10;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    }
+
+    async function refreshPerf() {
+      try {
+        const res = await fetch("/api/perf");
+        const data = await res.json();
+        latestPerfData = data;
+
+        const sc = data.scalingSummary || {};
+        const sv = data.server || {};
+        const nw = data.network || {};
+        const dd = data.ddosProtection || {};
+
+        document.getElementById("kpi-fps").textContent =
+          sc.avgClientFps !== null ? sc.avgClientFps + " / " + sc.minClientFps + " FPS" : "No Clients";
+        document.getElementById("kpi-framems").textContent =
+          "Avg Frame: " + (sc.avgClientFrameMs !== null ? sc.avgClientFrameMs + " ms" : "--");
+
+        document.getElementById("kpi-tick").textContent =
+          sv.tickAvgMs + " / " + sv.tickP95Ms + " ms";
+        document.getElementById("kpi-mem").textContent =
+          "RSS: " + sv.rssMB + " MB • Heap: " + sv.heapUsedMB + " MB";
+
+        document.getElementById("kpi-net").textContent =
+          (nw.inboundPktPerSec + nw.outboundPktPerSec) + " pkt/s";
+        document.getElementById("kpi-bw").textContent =
+          "In: " + nw.inboundKBPerSec + " KB/s • Out: " + nw.outboundKBPerSec + " KB/s";
+
+        document.getElementById("kpi-rooms").textContent = sc.activeRooms + " Rooms";
+        document.getElementById("kpi-units").textContent =
+          sc.totalOnlinePlayers + " Players • " + sc.totalSimulatedUnits + " Units";
+
+        document.getElementById("kpi-ddos").textContent = dd.droppedMessages + " Dropped";
+        document.getElementById("kpi-bans").textContent =
+          "Blocked: " + dd.blockedConnections + " • Active Bans: " + dd.activeIpBans;
+
+        const recBox = document.getElementById("recommendations-box");
+        recBox.innerHTML = (sc.recommendations || [])
+          .map((r) => '<div class="rec-item">' + r + "</div>")
+          .join("");
+
+        const cBody = document.getElementById("clients-tbody");
+        if (Array.isArray(data.clientProfiles) && data.clientProfiles.length > 0) {
+          cBody.innerHTML = data.clientProfiles
+            .map(
+              (c) =>
+                "<tr>" +
+                "<td>" + (c.clientId || "local") + "</td>" +
+                "<td>" + (c.mode || "solo") + (c.roomCode ? " (" + c.roomCode + ")" : "") + "</td>" +
+                "<td>" + (c.mapType === "shoebox" ? "Shoebox" : "Sandbox") + "</td>" +
+                "<td>" + (c.aliveUnits || 0) + "/" + (c.totalUnits || 0) + "</td>" +
+                "<td style='color:#84ff78;font-weight:bold;'>" + (c.fps || 0) + "</td>" +
+                "<td>" + (c.frameMs || 0) + "</td>" +
+                "<td>" + (c.renderMs || 0) + "</td>" +
+                "<td>" + (c.physicsMs || 0) + "</td>" +
+                "<td>" + (c.aiMs || 0) + "</td>" +
+                "<td>" + (c.animMs || 0) + "</td>" +
+                "</tr>"
+            )
+            .join("");
+        } else {
+          cBody.innerHTML = '<tr><td colspan="10">No active client profiles reported in the last 15s.</td></tr>';
+        }
+
+        const mBody = document.getElementById("msg-tbody");
+        const mEntries = Object.entries(data.messageProfiling || {});
+        if (mEntries.length > 0) {
+          mBody.innerHTML = mEntries
+            .map(
+              ([k, v]) =>
+                "<tr><td>" + k + "</td><td>" + v.count + "</td><td>" + v.avgMs + "</td><td>" + v.maxMs + "</td><td>" + v.totalMs + "</td></tr>"
+            )
+            .join("");
+        }
+
+        const rBody = document.getElementById("rooms-tbody");
+        if (Array.isArray(data.rooms) && data.rooms.length > 0) {
+          rBody.innerHTML = data.rooms
+            .map(
+              (r) =>
+                "<tr>" +
+                "<td>" + r.roomCode + "</td>" +
+                "<td>" + (r.mapType === "shoebox" ? "Shoebox" : "Sandbox") + "</td>" +
+                "<td>" + (r.hardcoreMode ? "Yes" : "No") + "</td>" +
+                "<td>" + (r.hasPassword ? "🔒 Protected" : "Open") + "</td>" +
+                "<td>" + r.playersOnline + "</td>" +
+                "<td>" + r.totalUnits + " (" + r.greenTotal + "v" + r.tanTotal + ")</td>" +
+                "<td>" + r.remainingSec + "s</td>" +
+                "</tr>"
+            )
+            .join("");
+        } else {
+          rBody.innerHTML = '<tr><td colspan="7">No active multiplayer rooms.</td></tr>';
+        }
+
+        drawChart(data.history || []);
+      } catch (err) {}
+    }
+
+    document.getElementById("copy-json-btn").addEventListener("click", () => {
+      if (!latestPerfData) return;
+      navigator.clipboard.writeText(JSON.stringify(latestPerfData, null, 2));
+      const btn = document.getElementById("copy-json-btn");
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = "Copy AI JSON (/api/perf)"; }, 1500);
+    });
+
+    refreshPerf();
+    setInterval(refreshPerf, 1000);
+  </script>
+</body>
+</html>`;
+}
+
 const server = http.createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.url === "/health" || req.url === "/rooms") {
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  const clientIp = getClientIp(req);
+  if (!checkHttpRateLimit(clientIp)) {
+    res.writeHead(429, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: false, error: "Too many requests. Please slow down." }));
+    return;
+  }
+
+  const cleanUrl = (req.url || "/").split("?")[0];
+
+  if (cleanUrl === "/health" || cleanUrl === "/rooms") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(
       JSON.stringify({
         ok: true,
         roomCount: rooms.size,
+        takenNames: getTakenPlayerNames(),
         rooms: getRoomsSummary()
       })
     );
     return;
   }
 
-  if (req.url === "/" || req.url.startsWith("/index.html") || req.url.startsWith("/?")) {
+  // AI & Developer Performance Profiling JSON API
+  if (cleanUrl === "/api/perf" || cleanUrl === "/perf.json") {
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache"
+    });
+    res.end(JSON.stringify(buildPerfApiPayload(), null, 2));
+    return;
+  }
+
+  // Client Performance Telemetry Ingestion Endpoint (supports both Solo & Multiplayer profiling)
+  if (cleanUrl === "/api/perf/client" && req.method === "POST") {
+    let body = "";
+    req.on("data", (chunk) => {
+      if (body.length < 8192) body += chunk;
+    });
+    req.on("end", () => {
+      try {
+        const data = JSON.parse(body);
+        const cid = String(data.clientId || "solo_" + clientIp).slice(0, 28);
+        perfMetrics.clientProfiles.set(cid, {
+          clientId: cid,
+          mode: data.mode === "multiplayer" ? "multiplayer" : "solo",
+          roomCode: data.roomCode ? String(data.roomCode).slice(0, 12) : null,
+          mapType: data.mapType === "shoebox" ? "shoebox" : "sandbox",
+          fps: Number(Number(data.fps || 0).toFixed(1)),
+          frameMs: Number(Number(data.frameMs || 0).toFixed(2)),
+          renderMs: Number(Number(data.renderMs || 0).toFixed(2)),
+          physicsMs: Number(Number(data.physicsMs || 0).toFixed(2)),
+          aiMs: Number(Number(data.aiMs || 0).toFixed(2)),
+          animMs: Number(Number(data.animMs || 0).toFixed(2)),
+          aliveUnits: Number(data.aliveUnits) || 0,
+          totalUnits: Number(data.totalUnits) || 0,
+          updatedAt: Date.now()
+        });
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+      } catch {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false }));
+      }
+    });
+    return;
+  }
+
+  // Live Performance & Scaling Dashboard Web Page
+  if (cleanUrl === "/perf" || cleanUrl === "/perf.html") {
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-cache"
+    });
+    res.end(renderPerfDashboardHtml());
+    return;
+  }
+
+  if (cleanUrl === "/" || cleanUrl === "/index.html") {
     fs.readFile(INDEX_PATH, (err, content) => {
       if (err) {
         res.writeHead(500, { "Content-Type": "text/plain" });
@@ -53,20 +783,61 @@ const server = http.createServer((req, res) => {
 });
 
 // ============================================================================
-// 2. WEBSOCKET MULTIPLAYER ROOM SERVER
+// 2. WEBSOCKET MULTIPLAYER ROOM SERVER (WITH DDoS & PASSWORD PROTECTION)
 // ============================================================================
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({
+  server,
+  maxPayload: MAX_WS_PAYLOAD_BYTES
+});
 
 // Map<roomCode, RoomState>
 const rooms = new Map();
 let nextClientId = 1;
 
-function sanitizeCode(raw) {
-  const cleaned = String(raw || "SAND")
+function safeSend(ws, payload) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const data = typeof payload === "string" ? payload : JSON.stringify(payload);
+  try {
+    ws.send(data);
+    perfMetrics._outPktsAccum += 1;
+    perfMetrics._outBytesAccum += data.length;
+    perfMetrics.totalOutboundPkts += 1;
+  } catch {
+    // Ignore transient send errors on closing sockets so one bad socket cannot disrupt other rooms
+  }
+}
+
+function sanitizeCode(raw, mapType = "sandbox") {
+  const fallbackPrefix = mapType === "shoebox" ? "SHOE" : "SAND";
+  const cleaned = String(raw || "")
     .toUpperCase()
     .replace(/[^A-Z0-9_-]/g, "")
     .slice(0, 12);
-  return cleaned || "SAND";
+  return cleaned || `${fallbackPrefix}${Math.floor(100 + Math.random() * 900)}`;
+}
+
+function allocateUniqueRoomCode(requestedRaw, mapType = "sandbox") {
+  const prefix = mapType === "shoebox" ? "SHOE" : "SAND";
+  const cleaned = sanitizeCode(requestedRaw, mapType);
+  // If the requested code matches the selected map prefix and is unused, keep it
+  const matchesMapPrefix = cleaned.startsWith(prefix);
+  if (cleaned && cleaned !== "SAND1" && cleaned !== "SHOE1" && matchesMapPrefix && !rooms.has(cleaned)) {
+    return cleaned;
+  }
+  if (cleaned && !cleaned.startsWith("SAND") && !cleaned.startsWith("SHOE") && !rooms.has(cleaned)) {
+    return cleaned;
+  }
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const candidate = `${prefix}${Math.floor(100 + Math.random() * 900)}`;
+    if (!rooms.has(candidate)) {
+      return candidate;
+    }
+  }
+  let seq = 1;
+  while (rooms.has(`${prefix}${seq}`)) {
+    seq++;
+  }
+  return `${prefix}${seq}`;
 }
 
 function getUnitStat(room, unitId) {
@@ -107,7 +878,17 @@ function resetRoomMatchState(room) {
   }
 }
 
-function getOrCreateRoom(roomCode, greenTotal, tanTotal, hostName, worldLimit, durationSec, mapType, hardcoreMode) {
+function getOrCreateRoom(
+  roomCode,
+  greenTotal,
+  tanTotal,
+  hostName,
+  worldLimit,
+  durationSec,
+  mapType,
+  hardcoreMode,
+  password
+) {
   let room = rooms.get(roomCode);
   if (!room) {
     const dur = Math.max(60, Math.min(1800, Number(durationSec) || 300));
@@ -119,6 +900,7 @@ function getOrCreateRoom(roomCode, greenTotal, tanTotal, hostName, worldLimit, d
       code: roomCode,
       hostId: null,
       hostName: hostName || "Host",
+      password: String(password || "").trim().slice(0, 32),
       greenTotal: Math.max(1, Math.floor(Number(greenTotal) || 4)),
       tanTotal: Math.max(1, Math.floor(Number(tanTotal) || 4)),
       mapType: resolvedMap,
@@ -160,6 +942,7 @@ function serializeRoster(room) {
     roomCode: room.code,
     hostId: room.hostId,
     hostName: room.hostName || "Host",
+    hasPassword: Boolean(room.password),
     greenTotal: room.greenTotal,
     tanTotal: room.tanTotal,
     mapType: room.mapType || "sandbox",
@@ -178,7 +961,7 @@ function broadcastToRoom(room, payload, excludeClientId = null) {
   const data = typeof payload === "string" ? payload : JSON.stringify(payload);
   for (const client of room.clients.values()) {
     if (client.id !== excludeClientId && client.ws.readyState === WebSocket.OPEN) {
-      client.ws.send(data);
+      safeSend(client.ws, data);
     }
   }
 }
@@ -197,35 +980,143 @@ function assignSlotForPlayer(room, team) {
   return slot;
 }
 
-wss.on("connection", (ws) => {
+wss.on("connection", (ws, req) => {
+  const clientIp = getClientIp(req);
+  const ipRec = getIpRecord(clientIp);
+
+  // DDoS Check 1: Reject banned IPs or excessive concurrent connections per IP
+  if (isIpBanned(clientIp) || ipRec.connCount >= MAX_CONN_PER_IP) {
+    ddosTelemetry.blockedConnections++;
+    try {
+      ws.close(1008, "Connection rate limit exceeded");
+    } catch {}
+    return;
+  }
+
+  ipRec.connCount++;
   const clientId = "p_" + nextClientId++;
   let currentRoom = null;
 
+  // Per-client sliding-window rate limiter state
+  const rateState = {
+    windowStart: Date.now(),
+    msgCount: 0,
+    byteCount: 0,
+    roomActionWindowStart: Date.now(),
+    roomActions: 0,
+    violations: 0
+  };
+
   ws.on("message", (rawMessage) => {
-    let msg;
-    try {
-      msg = JSON.parse(rawMessage.toString());
-    } catch {
+    const now = Date.now();
+    const rawStr = typeof rawMessage === "string" ? rawMessage : rawMessage.toString();
+    const byteLen = rawStr.length;
+
+    // DDoS Check 2: Payload size & per-second message/bandwidth rate limit
+    if (byteLen > MAX_WS_PAYLOAD_BYTES) {
+      ddosTelemetry.droppedMessages++;
+      rateState.violations++;
       return;
     }
+
+    if (now - rateState.windowStart >= 1000) {
+      rateState.windowStart = now;
+      rateState.msgCount = 0;
+      rateState.byteCount = 0;
+    }
+
+    rateState.msgCount += 1;
+    rateState.byteCount += byteLen;
+    perfMetrics._inPktsAccum += 1;
+    perfMetrics._inBytesAccum += byteLen;
+    perfMetrics.totalInboundPkts += 1;
+
+    if (
+      rateState.msgCount > MAX_WS_MSGS_PER_SEC ||
+      rateState.byteCount > MAX_WS_BYTES_PER_SEC
+    ) {
+      ddosTelemetry.droppedMessages++;
+      if (rateState.msgCount === MAX_WS_MSGS_PER_SEC + 1) {
+        ddosTelemetry.rateLimitedClients++;
+        rateState.violations++;
+        ipRec.violations++;
+      }
+      // Disconnect & temporarily ban extreme flooders
+      if (rateState.msgCount > MAX_WS_MSGS_PER_SEC * 2 || rateState.violations >= 5) {
+        ipRec.bannedUntil = now + IP_BAN_DURATION_MS;
+        ddosTelemetry.blockedConnections++;
+        try {
+          ws.close(1008, "Rate limit exceeded");
+        } catch {}
+      }
+      return;
+    }
+
+    let msg;
+    try {
+      msg = JSON.parse(rawStr);
+    } catch {
+      ddosTelemetry.malformedPackets++;
+      rateState.violations++;
+      if (rateState.violations >= 5) {
+        ipRec.bannedUntil = now + IP_BAN_DURATION_MS;
+        try {
+          ws.close(1008, "Malformed packets");
+        } catch {}
+      }
+      return;
+    }
+
+    if (!msg || typeof msg.type !== "string") return;
+    const handlerStart = process.hrtime.bigint();
 
     switch (msg.type) {
       // Host creates/configures a room (settings come from the Host device)
       // or Joiner joins an existing room (inherits the Host's room settings)
       case "host_room":
       case "join_room": {
-        if (currentRoom) {
-          removeClientFromRoom(currentRoom, clientId);
+        if (now - rateState.roomActionWindowStart > 10000) {
+          rateState.roomActionWindowStart = now;
+          rateState.roomActions = 0;
+        }
+        rateState.roomActions++;
+        if (rateState.roomActions > MAX_ROOM_ACTIONS_PER_10S) {
+          ddosTelemetry.droppedMessages++;
+          break;
         }
 
         const isHosting = msg.type === "host_room";
-        const roomCode = sanitizeCode(msg.roomCode);
-        const team = msg.team === "tan" ? "tan" : "green";
-        const name = String(msg.name || "Soldier").slice(0, 18);
-        const requestedGreen = Number(msg.greenTotal) || 4;
-        const requestedTan = Number(msg.tanTotal) || 4;
         const requestedMapType =
           msg.mapType === "shoebox" || Number(msg.worldLimit) <= 50 ? "shoebox" : "sandbox";
+        const suppliedPassword = String(msg.password || "").trim().slice(0, 32);
+
+        // If joining an existing room, verify password BEFORE leaving currentRoom or mutating state
+        if (!isHosting) {
+          const targetCode = sanitizeCode(msg.roomCode, requestedMapType);
+          const existingRoom = rooms.get(targetCode);
+          if (existingRoom && existingRoom.password && existingRoom.password !== suppliedPassword) {
+            safeSend(ws, {
+              type: "join_error",
+              reason: "bad_password",
+              roomCode: targetCode,
+              message: `Incorrect password for room ${targetCode}.`
+            });
+            break;
+          }
+        }
+
+        if (currentRoom) {
+          removeClientFromRoom(currentRoom, clientId);
+          currentRoom = null;
+        }
+
+        const roomCode = isHosting
+          ? allocateUniqueRoomCode(msg.roomCode, requestedMapType)
+          : sanitizeCode(msg.roomCode, requestedMapType);
+        const team = msg.team === "tan" ? "tan" : "green";
+        const name = String(msg.name || "Washington").slice(0, 18);
+        const requestedGreen = Number(msg.greenTotal) || 4;
+        const requestedTan = Number(msg.tanTotal) || 4;
         const requestedLimit =
           requestedMapType === "shoebox" ? 28 : Number(msg.worldLimit) || 80;
         const requestedHardcore = Boolean(msg.hardcoreMode);
@@ -239,13 +1130,17 @@ wss.on("connection", (ws) => {
           requestedLimit,
           requestedDuration,
           requestedMapType,
-          requestedHardcore
+          requestedHardcore,
+          isHosting ? suppliedPassword : ""
         );
 
         // If this device clicked Host (or room had no host), apply their match settings & reset round
         if (isHosting || !room.hostId) {
           room.hostId = clientId;
           room.hostName = name;
+          if (isHosting) {
+            room.password = suppliedPassword;
+          }
           room.greenTotal = Math.max(1, Math.floor(requestedGreen));
           room.tanTotal = Math.max(1, Math.floor(requestedTan));
           room.mapType = requestedMapType;
@@ -293,17 +1188,15 @@ wss.on("connection", (ws) => {
         );
 
         // Send welcome packet to joining/hosting client
-        ws.send(
-          JSON.stringify({
-            type: "room_joined",
-            clientId,
-            unitId,
-            team,
-            slotIndex,
-            isHost: room.hostId === clientId,
-            roster: serializeRoster(room)
-          })
-        );
+        safeSend(ws, {
+          type: "room_joined",
+          clientId,
+          unitId,
+          team,
+          slotIndex,
+          isHost: room.hostId === clientId,
+          roster: serializeRoster(room)
+        });
 
         // Notify everyone else in the room
         broadcastToRoom(
@@ -321,9 +1214,9 @@ wss.on("connection", (ws) => {
 
       // Live transform/animation update from a human player (~25 Hz)
       case "player_state": {
-        if (!currentRoom) return;
+        if (!currentRoom) break;
         const c = currentRoom.clients.get(clientId);
-        if (!c) return;
+        if (!c) break;
 
         c.x = Number(msg.x) || 0;
         c.y = Number(msg.y) || 0;
@@ -352,8 +1245,8 @@ wss.on("connection", (ws) => {
 
       // Room Host broadcasts AI soldier states & dynamic beach ball state (~12-20 Hz)
       case "host_world_state": {
-        if (!currentRoom || currentRoom.hostId !== clientId) return;
-        if (currentRoom.clients.size <= 1) return; // Skip serialization if host is the only player in room
+        if (!currentRoom || currentRoom.hostId !== clientId) break;
+        if (currentRoom.clients.size <= 1) break; // Skip serialization if host is the only player in room
         const remainingSec = Math.max(0, (currentRoom.matchEndTime - Date.now()) / 1000);
         broadcastToRoom(
           currentRoom,
@@ -372,7 +1265,7 @@ wss.on("connection", (ws) => {
 
       // Weapon fired (renders tracer & muzzle flash on all clients)
       case "fire_shot": {
-        if (!currentRoom) return;
+        if (!currentRoom) break;
         broadcastToRoom(
           currentRoom,
           {
@@ -390,15 +1283,15 @@ wss.on("connection", (ws) => {
 
       // Authoritative damage & Kill/Death tracking across all clients in the room
       case "damage_unit": {
-        if (!currentRoom || currentRoom.matchEnded) return;
+        if (!currentRoom || currentRoom.matchEnded) break;
         const targetUnitId = String(msg.targetUnitId || "");
         const attackerUnitId = msg.attackerUnitId ? String(msg.attackerUnitId) : null;
         const rawAmount = Math.max(0, Number(msg.amount) || 0);
         const amount = currentRoom.hardcoreMode ? Math.max(rawAmount, 100) : rawAmount;
-        if (!targetUnitId || amount <= 0) return;
+        if (!targetUnitId || amount <= 0) break;
 
         const targetStat = getUnitStat(currentRoom, targetUnitId);
-        if (!targetStat.alive) return; // Already eliminated; ignore duplicate hit packets
+        if (!targetStat.alive) break; // Already eliminated; ignore duplicate hit packets
 
         targetStat.health = Math.max(0, targetStat.health - amount);
         let killed = false;
@@ -438,7 +1331,7 @@ wss.on("connection", (ws) => {
 
       // Beach ball impulse (kicked or shot)
       case "ball_impulse": {
-        if (!currentRoom) return;
+        if (!currentRoom) break;
         broadcastToRoom(
           currentRoom,
           {
@@ -454,9 +1347,9 @@ wss.on("connection", (ws) => {
 
       // Individual player (or Host auto-respawning AI) respawns a single soldier without resetting the match
       case "respawn_unit": {
-        if (!currentRoom || currentRoom.matchEnded) return;
+        if (!currentRoom || currentRoom.matchEnded) break;
         const c = currentRoom.clients.get(clientId);
-        if (!c) return;
+        if (!c) break;
 
         const targetUnitId = msg.unitId || c.unitId;
         const targetStat = getUnitStat(currentRoom, targetUnitId);
@@ -492,45 +1385,66 @@ wss.on("connection", (ws) => {
         break;
       }
 
-      // Ping / Pong + Server Performance Telemetry
+      // Ping / Pong + Server & Client Performance Telemetry
       case "ping": {
+        if (msg.clientPerf && typeof msg.clientPerf === "object") {
+          const cp = msg.clientPerf;
+          perfMetrics.clientProfiles.set(clientId, {
+            clientId,
+            mode: "multiplayer",
+            roomCode: currentRoom ? currentRoom.code : null,
+            mapType: currentRoom ? currentRoom.mapType : cp.mapType || "sandbox",
+            fps: Number(Number(cp.fps || 0).toFixed(1)),
+            frameMs: Number(Number(cp.frameMs || 0).toFixed(2)),
+            renderMs: Number(Number(cp.renderMs || 0).toFixed(2)),
+            physicsMs: Number(Number(cp.physicsMs || 0).toFixed(2)),
+            aiMs: Number(Number(cp.aiMs || 0).toFixed(2)),
+            animMs: Number(Number(cp.animMs || 0).toFixed(2)),
+            aliveUnits: Number(cp.aliveUnits) || 0,
+            totalUnits: Number(cp.totalUnits) || 0,
+            updatedAt: now
+          });
+        }
         const memMB = Math.round(process.memoryUsage().rss / (1024 * 1024));
-        ws.send(
-          JSON.stringify({
-            type: "pong",
-            clientTime: msg.clientTime,
-            serverTickMs: Number(lastServerTickMs.toFixed(2)),
-            serverMemMB: memMB
-          })
-        );
+        safeSend(ws, {
+          type: "pong",
+          clientTime: msg.clientTime,
+          serverTickMs: Number(lastServerTickMs.toFixed(2)),
+          serverMemMB: memMB
+        });
         break;
       }
 
-      // Restart match for everyone in the room
+      // Restart match for everyone in the room (only the room Host can alter room settings)
       case "restart_match": {
-        if (!currentRoom) return;
-        if (msg.greenTotal) {
-          currentRoom.greenTotal = Math.max(1, Math.floor(Number(msg.greenTotal)));
-        }
-        if (msg.tanTotal) {
-          currentRoom.tanTotal = Math.max(1, Math.floor(Number(msg.tanTotal)));
-        }
-        if (msg.mapType === "shoebox" || msg.mapType === "sandbox") {
-          currentRoom.mapType = msg.mapType;
-        }
-        if (msg.worldLimit) {
-          if (currentRoom.mapType === "shoebox" || Number(msg.worldLimit) <= 50) {
-            currentRoom.mapType = "shoebox";
-            currentRoom.worldLimit = 28;
-          } else {
-            currentRoom.worldLimit = Math.max(50, Math.min(130, Number(msg.worldLimit)));
+        if (!currentRoom) break;
+        const isRoomHost = currentRoom.hostId === clientId;
+        if (!isRoomHost && !currentRoom.matchEnded) break;
+
+        if (isRoomHost) {
+          if (msg.greenTotal) {
+            currentRoom.greenTotal = Math.max(1, Math.floor(Number(msg.greenTotal)));
           }
-        }
-        if (typeof msg.hardcoreMode === "boolean") {
-          currentRoom.hardcoreMode = msg.hardcoreMode;
-        }
-        if (msg.durationSec) {
-          currentRoom.durationSec = Math.max(60, Math.min(1800, Number(msg.durationSec)));
+          if (msg.tanTotal) {
+            currentRoom.tanTotal = Math.max(1, Math.floor(Number(msg.tanTotal)));
+          }
+          if (msg.mapType === "shoebox" || msg.mapType === "sandbox") {
+            currentRoom.mapType = msg.mapType;
+          }
+          if (msg.worldLimit) {
+            if (currentRoom.mapType === "shoebox" || Number(msg.worldLimit) <= 50) {
+              currentRoom.mapType = "shoebox";
+              currentRoom.worldLimit = 28;
+            } else {
+              currentRoom.worldLimit = Math.max(50, Math.min(130, Number(msg.worldLimit)));
+            }
+          }
+          if (typeof msg.hardcoreMode === "boolean") {
+            currentRoom.hardcoreMode = msg.hardcoreMode;
+          }
+          if (msg.durationSec) {
+            currentRoom.durationSec = Math.max(60, Math.min(1800, Number(msg.durationSec)));
+          }
         }
         resetRoomMatchState(currentRoom);
         currentRoom.matchId++;
@@ -542,13 +1456,22 @@ wss.on("connection", (ws) => {
         break;
       }
     }
+
+    const handlerEnd = process.hrtime.bigint();
+    recordMsgProfile(msg.type, Number(handlerEnd - handlerStart) / 1e6);
   });
 
   ws.on("close", () => {
+    ipRec.connCount = Math.max(0, ipRec.connCount - 1);
+    perfMetrics.clientProfiles.delete(clientId);
     if (currentRoom) {
       removeClientFromRoom(currentRoom, clientId);
       currentRoom = null;
     }
+  });
+
+  ws.on("error", () => {
+    // Prevent unhandled socket error events from crashing the server process
   });
 });
 
@@ -585,7 +1508,7 @@ function removeClientFromRoom(room, clientId) {
 }
 
 // ============================================================================
-// 3. SERVER-AUTHORITATIVE MATCH TIMER & SCOREBOARD SYNC LOOP
+// 3. SERVER-AUTHORITATIVE MATCH TIMER, SCOREBOARD SYNC & TELEMETRY LOOP
 // ============================================================================
 let tickCounter = 0;
 let lastServerTickMs = 0.1;
@@ -633,6 +1556,44 @@ setInterval(() => {
 
   const tickEnd = process.hrtime.bigint();
   lastServerTickMs = Number(tickEnd - tickStart) / 1e6;
+  perfMetrics.tickHistoryMs.push(lastServerTickMs);
+  if (perfMetrics.tickHistoryMs.length > 120) {
+    perfMetrics.tickHistoryMs.shift();
+  }
+
+  // Once per second: sample packet/bandwidth rates & append to 60s rolling history
+  if (tickCounter % 4 === 0) {
+    const elapsedSec = Math.max(0.1, (now - perfMetrics._lastRateSampleTime) / 1000);
+    perfMetrics.inboundPktsSec = Math.round(perfMetrics._inPktsAccum / elapsedSec);
+    perfMetrics.outboundPktsSec = Math.round(perfMetrics._outPktsAccum / elapsedSec);
+    perfMetrics.inboundBytesSec = Math.round(perfMetrics._inBytesAccum / elapsedSec);
+    perfMetrics.outboundBytesSec = Math.round(perfMetrics._outBytesAccum / elapsedSec);
+    perfMetrics._inPktsAccum = 0;
+    perfMetrics._outPktsAccum = 0;
+    perfMetrics._inBytesAccum = 0;
+    perfMetrics._outBytesAccum = 0;
+    perfMetrics._lastRateSampleTime = now;
+
+    const clientList = Array.from(perfMetrics.clientProfiles.values());
+    const avgClientFps =
+      clientList.length > 0
+        ? Number((clientList.reduce((acc, c) => acc + (c.fps || 0), 0) / clientList.length).toFixed(1))
+        : null;
+
+    perfMetrics.history.push({
+      t: now,
+      tickMs: Number(lastServerTickMs.toFixed(3)),
+      rssMB: Number((process.memoryUsage().rss / (1024 * 1024)).toFixed(1)),
+      inboundPktPerSec: perfMetrics.inboundPktsSec,
+      outboundPktPerSec: perfMetrics.outboundPktsSec,
+      outboundKBPerSec: Number((perfMetrics.outboundBytesSec / 1024).toFixed(2)),
+      activeRooms: rooms.size,
+      avgClientFps
+    });
+    if (perfMetrics.history.length > 60) {
+      perfMetrics.history.shift();
+    }
+  }
 }, 250);
 
 server.listen(PORT, () => {
