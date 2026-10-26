@@ -5971,6 +5971,52 @@
           break;
         }
 
+        case "room_tick": {
+          if (Array.isArray(msg.players)) {
+            for (let i = 0; i < msg.players.length; i++) {
+              const p = msg.players[i];
+              const unit = soldiersById.get(p.unitId);
+              if (!unit || unit.isPlayer) continue;
+              if (!unit.isRemotePlayer) {
+                unit.isRemotePlayer = true;
+                updateSoldierOverheadName(unit);
+              }
+              unit.netTargetPos.set(p.x, p.y, p.z);
+              unit.yaw = p.yaw;
+              unit.pitch = p.pitch;
+              unit.moveBlend = p.moveBlend;
+              unit.strideDir = p.strideDir || 0;
+            }
+          }
+          if (Array.isArray(msg.shots)) {
+            for (let i = 0; i < msg.shots.length; i++) {
+              const s = msg.shots[i];
+              if (s.shooterClientId === mpState.clientId || s.shooterUnitId === mpState.myUnitId) {
+                continue;
+              }
+              handleNetworkMessage({
+                type: "remote_shot",
+                shooterUnitId: s.shooterUnitId,
+                team: s.team,
+                muzzlePos: s.muzzlePos,
+                hitPoint: s.hitPoint,
+                hitKind: s.hitKind
+              });
+            }
+          }
+          if (msg.world) {
+            handleNetworkMessage({
+              type: "world_state",
+              remainingSec: msg.world.remainingSec,
+              matchEnded: msg.world.matchEnded,
+              aiPacked: msg.world.aiPacked,
+              aiUnits: msg.world.aiUnits,
+              ball: msg.world.ball
+            });
+          }
+          break;
+        }
+
         case "world_state": {
           if (typeof msg.remainingSec === "number") {
             syncMatchTimerFromServer(msg.remainingSec);

@@ -276,10 +276,10 @@ export function runPlayerSession() {
         wsMessagesSent.add(1);
       }, 1200);
 
-      // Keep each VU session open for 15s before cycling
+      // Keep each VU session open across the full ramp so rooms stay populated
       socket.setTimeout(function () {
         socket.close();
-      }, 15000);
+      }, totalRampDurationSec * 1000);
     });
 
     socket.on("message", function (raw) {
