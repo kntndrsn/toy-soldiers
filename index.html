@@ -2,12 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Plastic Army Men - 4v4 Backyard Sandbox Shooter</title>
   <style>
     * {
       box-sizing: border-box;
       user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
     }
 
     html, body {
@@ -16,6 +18,7 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
+      touch-action: none;
       background: #7ec8f2;
       font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     }
@@ -25,6 +28,7 @@
       height: 100%;
       display: block;
       outline: none;
+      touch-action: none;
     }
 
     /* HUD Overlay */
@@ -320,18 +324,249 @@
       border: 1px solid rgba(255, 255, 255, 0.35);
       border-radius: 6px;
     }
+
+    /* Top-Right Action Bar (Teams & Mobile HUD Toggle) */
+    #top-right-bar {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      display: flex;
+      gap: 8px;
+      pointer-events: auto;
+    }
+
+    .hud-chip-btn {
+      padding: 8px 13px;
+      font-size: 13px;
+      font-weight: bold;
+      color: #ffffff;
+      background: rgba(20, 25, 18, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 999px;
+      cursor: pointer;
+      backdrop-filter: blur(3px);
+    }
+
+    .hud-chip-btn:hover {
+      background: rgba(45, 58, 42, 0.85);
+    }
+
+    /* =====================================================================
+       CALL OF DUTY MOBILE-STYLE TOUCH CONTROLS (LEFT STICK + RIGHT AIM/FIRE)
+       ===================================================================== */
+    #mobile-controls {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      display: none;
+      z-index: 5;
+    }
+
+    body.touch-enabled #mobile-controls {
+      display: block;
+    }
+
+    /* Left half of screen: movement thumbstick touch zone */
+    #left-touch-zone {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 50%;
+      height: 82%;
+      pointer-events: auto;
+      touch-action: none;
+    }
+
+    /* Right half of screen: swipe to aim/look touch zone */
+    #right-touch-zone {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      width: 50%;
+      height: 82%;
+      pointer-events: auto;
+      touch-action: none;
+    }
+
+    /* Virtual Left Joystick Base & Knob */
+    #joystick-base {
+      position: absolute;
+      left: 42px;
+      bottom: 38px;
+      width: 126px;
+      height: 126px;
+      border-radius: 50%;
+      background: radial-gradient(
+        circle,
+        rgba(255, 255, 255, 0.08) 0%,
+        rgba(20, 30, 20, 0.42) 100%
+      );
+      border: 2.5px solid rgba(152, 255, 140, 0.55);
+      box-shadow: 0 0 18px rgba(0, 0, 0, 0.45);
+      pointer-events: none;
+      transition: opacity 0.15s ease;
+    }
+
+    /* Directional chevrons on joystick ring */
+    #joystick-base::before {
+      content: "▲";
+      position: absolute;
+      top: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      color: rgba(152, 255, 140, 0.65);
+    }
+
+    #joystick-knob {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 54px;
+      height: 54px;
+      margin-left: -27px;
+      margin-top: -27px;
+      border-radius: 50%;
+      background: radial-gradient(
+        circle at 35% 35%,
+        rgba(170, 255, 160, 0.92),
+        rgba(52, 148, 42, 0.88)
+      );
+      border: 2px solid #ffffff;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.55);
+      pointer-events: none;
+    }
+
+    /* CoD-Style Right Thumb Fire Button (Hold to shoot + drag to aim!) */
+    #mobile-fire-btn {
+      position: absolute;
+      right: 42px;
+      bottom: 38px;
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      background: radial-gradient(
+        circle at 35% 35%,
+        rgba(255, 110, 75, 0.92),
+        rgba(195, 32, 24, 0.88)
+      );
+      border: 3.5px solid rgba(255, 230, 180, 0.92);
+      box-shadow: 0 0 22px rgba(220, 45, 30, 0.6), inset 0 0 12px rgba(255, 255, 255, 0.35);
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: 900;
+      letter-spacing: 0.8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      touch-action: none;
+      cursor: pointer;
+    }
+
+    #mobile-fire-btn.active {
+      transform: scale(0.93);
+      background: radial-gradient(
+        circle at 35% 35%,
+        rgba(255, 175, 85, 0.98),
+        rgba(225, 50, 30, 0.95)
+      );
+      box-shadow: 0 0 30px rgba(255, 140, 50, 0.9);
+    }
+
+    #mobile-fire-btn span {
+      font-size: 11px;
+      opacity: 0.9;
+      margin-top: 2px;
+    }
+
+    /* Secondary Jump / Hop Button near Right Thumb */
+    #mobile-jump-btn {
+      position: absolute;
+      right: 152px;
+      bottom: 48px;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: rgba(30, 40, 30, 0.72);
+      border: 2px solid rgba(152, 255, 140, 0.75);
+      color: #d8ffd2;
+      font-size: 12px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      touch-action: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    }
+
+    #mobile-jump-btn.active {
+      transform: scale(0.92);
+      background: rgba(65, 145, 55, 0.88);
+    }
+
+    /* When touch controls are active, move Health/Squad panel above the left stick */
+    body.touch-enabled #status-panel {
+      bottom: auto;
+      top: 16px;
+      left: 16px;
+      padding: 10px 14px;
+      min-width: 195px;
+    }
+
+    body.touch-enabled #instructions {
+      display: none;
+    }
+
+    @media (max-width: 768px) {
+      #scoreboard {
+        top: 12px;
+        padding: 7px 14px;
+        font-size: 12.5px;
+        gap: 10px;
+      }
+
+      #setup-modal {
+        min-width: 300px;
+        width: 90%;
+        padding: 20px 20px;
+      }
+    }
   </style>
 </head>
 <body>
   <canvas id="renderCanvas"></canvas>
 
+  <!-- Call of Duty Mobile-Style Touch Overlay -->
+  <div id="mobile-controls">
+    <div id="left-touch-zone">
+      <div id="joystick-base">
+        <div id="joystick-knob"></div>
+      </div>
+    </div>
+
+    <div id="right-touch-zone"></div>
+
+    <div id="mobile-jump-btn">HOP</div>
+    <div id="mobile-fire-btn">
+      FIRE
+      <span>AIM</span>
+    </div>
+  </div>
+
   <!-- On-Screen HUD -->
   <div id="hud">
     <div id="instructions">
       <strong>BACKYARD SANDBOX BATTLE</strong><br />
-      <strong>WASD</strong> : Move Green Soldier &nbsp;|&nbsp; <strong>Shift</strong> : Hop<br />
-      <strong>Mouse</strong> : Aim / Look (Click canvas to lock cursor)<br />
-      <strong>Left-Click / Space</strong> : Fire Rifle &nbsp;|&nbsp; <strong>M</strong> : Team Setup
+      <strong>WASD / Left Stick</strong> : Move Green Soldier &nbsp;|&nbsp; <strong>Shift / Hop</strong> : Jump<br />
+      <strong>Mouse / Right Thumb</strong> : Aim &nbsp;|&nbsp; <strong>Click / Fire Btn</strong> : Shoot
+    </div>
+
+    <div id="top-right-bar">
+      <button id="toggle-touch-btn" class="hud-chip-btn" type="button">Touch UI</button>
+      <button id="open-teams-btn" class="hud-chip-btn" type="button">Teams (M)</button>
     </div>
 
     <div id="scoreboard">
@@ -1927,7 +2162,7 @@
     }
 
     // =========================================================================
-    // 8. INPUT CONTROLS
+    // 8. INPUT CONTROLS (DESKTOP KEYBOARD/MOUSE + COD MOBILE DUAL-THUMB TOUCH)
     // =========================================================================
     const keys = {
       KeyW: false,
@@ -1941,6 +2176,294 @@
     let isMouseDown = false;
     let gameEnded = false;
 
+    // Mobile Dual-Thumb State
+    let moveStickX = 0; // -1 (left) to +1 (right)
+    let moveStickY = 0; // -1 (backward) to +1 (forward)
+    let isMobileFiring = false;
+    let isMobileJumping = false;
+
+    const joystickBaseEl = document.getElementById("joystick-base");
+    const joystickKnobEl = document.getElementById("joystick-knob");
+    const leftTouchZoneEl = document.getElementById("left-touch-zone");
+    const rightTouchZoneEl = document.getElementById("right-touch-zone");
+    const mobileFireBtnEl = document.getElementById("mobile-fire-btn");
+    const mobileJumpBtnEl = document.getElementById("mobile-jump-btn");
+    const toggleTouchBtnEl = document.getElementById("toggle-touch-btn");
+    const openTeamsBtnEl = document.getElementById("open-teams-btn");
+
+    function enableTouchUI(enable) {
+      if (enable) {
+        document.body.classList.add("touch-enabled");
+      } else {
+        document.body.classList.remove("touch-enabled");
+      }
+    }
+
+    // Auto-enable touch controls on mobile/tablet devices
+    if (
+      "ontouchstart" in window ||
+      navigator.maxTouchPoints > 0 ||
+      window.matchMedia("(pointer: coarse)").matches
+    ) {
+      enableTouchUI(true);
+    }
+
+    window.addEventListener(
+      "touchstart",
+      () => {
+        enableTouchUI(true);
+      },
+      { once: true, passive: true }
+    );
+
+    toggleTouchBtnEl.addEventListener("click", () => {
+      enableTouchUI(!document.body.classList.contains("touch-enabled"));
+    });
+
+    openTeamsBtnEl.addEventListener("click", () => {
+      openSetupModal();
+    });
+
+    // ----- LEFT THUMB: VIRTUAL ANALOG JOYSTICK (MOVEMENT) -----
+    let leftTouchId = null;
+    let stickCenterX = 105;
+    let stickCenterY = window.innerHeight - 101;
+    const STICK_MAX_RADIUS = 44;
+
+    function updateJoystickFromPoint(clientX, clientY) {
+      const dx = clientX - stickCenterX;
+      const dy = clientY - stickCenterY;
+      const dist = Math.hypot(dx, dy);
+      const clampedDist = Math.min(dist, STICK_MAX_RADIUS);
+      const angle = Math.atan2(dy, dx);
+
+      const offsetX = Math.cos(angle) * clampedDist;
+      const offsetY = Math.sin(angle) * clampedDist;
+
+      joystickKnobEl.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+
+      // Normalize to -1..+1 (screen -Y is forward +1)
+      moveStickX = offsetX / STICK_MAX_RADIUS;
+      moveStickY = -offsetY / STICK_MAX_RADIUS;
+    }
+
+    function resetJoystick() {
+      leftTouchId = null;
+      moveStickX = 0;
+      moveStickY = 0;
+      joystickKnobEl.style.transform = "translate(0px, 0px)";
+      joystickBaseEl.style.left = "42px";
+      joystickBaseEl.style.bottom = "38px";
+      joystickBaseEl.style.top = "auto";
+    }
+
+    leftTouchZoneEl.addEventListener(
+      "touchstart",
+      (e) => {
+        if (gameEnded || isSetupOpen) return;
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const t = e.changedTouches[i];
+          if (leftTouchId === null) {
+            leftTouchId = t.identifier;
+            // Reposition floating joystick base under left thumb
+            const zoneRect = leftTouchZoneEl.getBoundingClientRect();
+            const clampedX = Math.max(75, Math.min(window.innerWidth * 0.42, t.clientX));
+            const clampedY = Math.max(
+              zoneRect.top + 75,
+              Math.min(window.innerHeight - 75, t.clientY)
+            );
+            stickCenterX = clampedX;
+            stickCenterY = clampedY;
+            joystickBaseEl.style.left = `${clampedX - 63}px`;
+            joystickBaseEl.style.top = `${clampedY - zoneRect.top - 63}px`;
+            joystickBaseEl.style.bottom = "auto";
+            updateJoystickFromPoint(t.clientX, t.clientY);
+          }
+        }
+      },
+      { passive: false }
+    );
+
+    leftTouchZoneEl.addEventListener(
+      "touchmove",
+      (e) => {
+        if (leftTouchId === null) return;
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const t = e.changedTouches[i];
+          if (t.identifier === leftTouchId) {
+            updateJoystickFromPoint(t.clientX, t.clientY);
+          }
+        }
+      },
+      { passive: false }
+    );
+
+    function handleLeftTouchEnd(e) {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === leftTouchId) {
+          resetJoystick();
+        }
+      }
+    }
+    leftTouchZoneEl.addEventListener("touchend", handleLeftTouchEnd);
+    leftTouchZoneEl.addEventListener("touchcancel", handleLeftTouchEnd);
+
+    // ----- RIGHT THUMB: FREE LOOK / AIM ZONE -----
+    let lookTouchId = null;
+    let lastLookX = 0;
+    let lastLookY = 0;
+    const TOUCH_LOOK_SENSITIVITY = 0.0048;
+
+    function applyTouchAimDelta(dx, dy) {
+      if (gameEnded || isSetupOpen || !player) return;
+      player.yaw += dx * TOUCH_LOOK_SENSITIVITY;
+      player.pitch = Math.max(
+        -0.42,
+        Math.min(0.65, player.pitch + dy * TOUCH_LOOK_SENSITIVITY)
+      );
+    }
+
+    rightTouchZoneEl.addEventListener(
+      "touchstart",
+      (e) => {
+        if (gameEnded || isSetupOpen) return;
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const t = e.changedTouches[i];
+          if (lookTouchId === null) {
+            lookTouchId = t.identifier;
+            lastLookX = t.clientX;
+            lastLookY = t.clientY;
+          }
+        }
+      },
+      { passive: false }
+    );
+
+    rightTouchZoneEl.addEventListener(
+      "touchmove",
+      (e) => {
+        if (lookTouchId === null) return;
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const t = e.changedTouches[i];
+          if (t.identifier === lookTouchId) {
+            applyTouchAimDelta(t.clientX - lastLookX, t.clientY - lastLookY);
+            lastLookX = t.clientX;
+            lastLookY = t.clientY;
+          }
+        }
+      },
+      { passive: false }
+    );
+
+    function handleRightTouchEnd(e) {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === lookTouchId) {
+          lookTouchId = null;
+        }
+      }
+    }
+    rightTouchZoneEl.addEventListener("touchend", handleRightTouchEnd);
+    rightTouchZoneEl.addEventListener("touchcancel", handleRightTouchEnd);
+
+    // ----- COD MOBILE-STYLE RIGHT FIRE BUTTON (SHOOT + DRAG TO AIM!) -----
+    let fireTouchId = null;
+    let lastFireX = 0;
+    let lastFireY = 0;
+
+    mobileFireBtnEl.addEventListener(
+      "touchstart",
+      (e) => {
+        if (gameEnded || isSetupOpen) return;
+        e.preventDefault();
+        e.stopPropagation();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const t = e.changedTouches[i];
+          if (fireTouchId === null) {
+            fireTouchId = t.identifier;
+            lastFireX = t.clientX;
+            lastFireY = t.clientY;
+            isMobileFiring = true;
+            mobileFireBtnEl.classList.add("active");
+          }
+        }
+      },
+      { passive: false }
+    );
+
+    mobileFireBtnEl.addEventListener(
+      "touchmove",
+      (e) => {
+        if (fireTouchId === null) return;
+        e.preventDefault();
+        e.stopPropagation();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const t = e.changedTouches[i];
+          if (t.identifier === fireTouchId) {
+            // Dragging thumb while holding Fire button aims simultaneously like CoD Mobile!
+            applyTouchAimDelta(t.clientX - lastFireX, t.clientY - lastFireY);
+            lastFireX = t.clientX;
+            lastFireY = t.clientY;
+          }
+        }
+      },
+      { passive: false }
+    );
+
+    function handleFireTouchEnd(e) {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === fireTouchId) {
+          fireTouchId = null;
+          isMobileFiring = false;
+          mobileFireBtnEl.classList.remove("active");
+        }
+      }
+    }
+    mobileFireBtnEl.addEventListener("touchend", handleFireTouchEnd);
+    mobileFireBtnEl.addEventListener("touchcancel", handleFireTouchEnd);
+
+    // Also support clicking the mobile fire button with mouse when testing Touch UI on desktop
+    mobileFireBtnEl.addEventListener("mousedown", (e) => {
+      e.stopPropagation();
+      if (!gameEnded && !isSetupOpen) {
+        isMobileFiring = true;
+        mobileFireBtnEl.classList.add("active");
+      }
+    });
+    window.addEventListener("mouseup", () => {
+      isMobileFiring = false;
+      mobileFireBtnEl.classList.remove("active");
+    });
+
+    // ----- MOBILE HOP / JUMP BUTTON -----
+    mobileJumpBtnEl.addEventListener(
+      "touchstart",
+      (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        isMobileJumping = true;
+        mobileJumpBtnEl.classList.add("active");
+      },
+      { passive: false }
+    );
+    mobileJumpBtnEl.addEventListener("touchend", () => {
+      isMobileJumping = false;
+      mobileJumpBtnEl.classList.remove("active");
+    });
+    mobileJumpBtnEl.addEventListener("mousedown", (e) => {
+      e.stopPropagation();
+      isMobileJumping = true;
+      mobileJumpBtnEl.classList.add("active");
+    });
+    mobileJumpBtnEl.addEventListener("mouseup", () => {
+      isMobileJumping = false;
+      mobileJumpBtnEl.classList.remove("active");
+    });
+
+    // ----- DESKTOP KEYBOARD & MOUSE -----
     window.addEventListener("keydown", (e) => {
       if (e.code in keys) keys[e.code] = true;
       if (e.code === "KeyR" && gameEnded && !isSetupOpen) resetGame();
@@ -1952,13 +2475,16 @@
     });
 
     canvas.addEventListener("click", () => {
-      if (!gameEnded && !isSetupOpen && document.pointerLockElement !== canvas) {
+      const isTouchMode = document.body.classList.contains("touch-enabled");
+      if (!gameEnded && !isSetupOpen && !isTouchMode && document.pointerLockElement !== canvas) {
         canvas.requestPointerLock();
       }
     });
 
     window.addEventListener("mousedown", (e) => {
-      if (e.button === 0 && !gameEnded && !isSetupOpen) isMouseDown = true;
+      if (e.button === 0 && !gameEnded && !isSetupOpen && e.target === canvas) {
+        isMouseDown = true;
+      }
     });
 
     window.addEventListener("mouseup", (e) => {
@@ -1967,12 +2493,14 @@
 
     window.addEventListener("mousemove", (e) => {
       if (gameEnded || isSetupOpen || !player) return;
-      const sensitivity = 0.0026;
-      player.yaw += e.movementX * sensitivity;
-      player.pitch = Math.max(
-        -0.42,
-        Math.min(0.65, player.pitch + e.movementY * sensitivity)
-      );
+      if (document.pointerLockElement === canvas || isMouseDown) {
+        const sensitivity = 0.0026;
+        player.yaw += e.movementX * sensitivity;
+        player.pitch = Math.max(
+          -0.42,
+          Math.min(0.65, player.pitch + e.movementY * sensitivity)
+        );
+      }
     });
 
     // =========================================================================
@@ -2375,13 +2903,29 @@
     friendlyInputEl.addEventListener("change", refreshSetupSummaries);
     enemyInputEl.addEventListener("change", refreshSetupSummaries);
 
+    function tryLockPointer() {
+      if (
+        !document.body.classList.contains("touch-enabled") &&
+        typeof canvas.requestPointerLock === "function"
+      ) {
+        try {
+          canvas.requestPointerLock();
+        } catch (err) {
+          // Ignore pointer lock errors on mobile/touch browsers
+        }
+      }
+    }
+
     function openSetupModal() {
       isSetupOpen = true;
       isMouseDown = false;
+      isMobileFiring = false;
+      mobileFireBtnEl.classList.remove("active");
+      resetJoystick();
       endMessageEl.style.display = "none";
       setupModalEl.style.display = "block";
       refreshSetupSummaries();
-      if (document.pointerLockElement) {
+      if (document.pointerLockElement && document.exitPointerLock) {
         document.exitPointerLock();
       }
     }
@@ -2393,14 +2937,14 @@
       setupModalEl.style.display = "none";
       isSetupOpen = false;
       resetGame();
-      canvas.requestPointerLock();
+      tryLockPointer();
     });
 
     restartBtn.addEventListener("click", () => {
       isSetupOpen = false;
       setupModalEl.style.display = "none";
       resetGame();
-      canvas.requestPointerLock();
+      tryLockPointer();
     });
 
     setupAgainBtn.addEventListener("click", openSetupModal);
@@ -2671,6 +3215,8 @@
 
           const moveVec = new BABYLON.Vector3(0, 0, 0);
           let strideDir = 0;
+
+          // Combine Keyboard WASD + Mobile Left Virtual Thumbstick
           if (keys.KeyW) moveVec.addInPlace(forward);
           if (keys.KeyS) moveVec.subtractInPlace(forward);
           if (keys.KeyD) {
@@ -2682,15 +3228,22 @@
             strideDir -= 1;
           }
 
-          // Hop / Jump with Shift
-          if ((keys.ShiftLeft || keys.ShiftRight) && player.isGrounded) {
+          if (Math.abs(moveStickX) > 0.06 || Math.abs(moveStickY) > 0.06) {
+            moveVec.addInPlace(forward.scale(moveStickY));
+            moveVec.addInPlace(right.scale(moveStickX));
+            strideDir = moveStickX;
+          }
+
+          // Hop / Jump with Shift or Mobile Hop button
+          if ((keys.ShiftLeft || keys.ShiftRight || isMobileJumping) && player.isGrounded) {
             player.velocity.y = 7.8;
             player.isGrounded = false;
           }
 
-          const isMoving = moveVec.lengthSquared() > 0;
+          const moveMag = Math.min(1, moveVec.length());
+          const isMoving = moveMag > 0.05;
           if (isMoving) {
-            moveVec.normalize().scaleInPlace(player.speed * dt);
+            moveVec.normalize().scaleInPlace(player.speed * moveMag * dt);
             player.position.addInPlace(moveVec);
             player.moveBlend = Math.min(1, player.moveBlend + dt * 6);
           } else {
@@ -2701,7 +3254,7 @@
           animateSoldier(player, dt, isMoving, strideDir);
 
           if (player.fireCooldown > 0) player.fireCooldown -= dt;
-          if ((isMouseDown || keys.Space) && player.fireCooldown <= 0) {
+          if ((isMouseDown || keys.Space || isMobileFiring) && player.fireCooldown <= 0) {
             firePlayerWeapon();
           }
         } else {
