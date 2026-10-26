@@ -861,7 +861,8 @@
     </div>
 
     <div id="top-right-bar">
-      <span id="mp-status-badge" class="hud-chip-btn" style="pointer-events: none; border-color: rgba(152, 255, 140, 0.45); color: #b8ffb0;">Mode: Solo</span>
+      <span id="mp-status-badge" class="hud-chip-btn" style="pointer-events: none; border-color: rgba(152, 255, 140, 0.45); color: #b8ffb0;">Online: 0</span>
+      <button id="toggle-sound-btn" class="hud-chip-btn" type="button">🔊 Sound</button>
       <button id="toggle-touch-btn" class="hud-chip-btn" type="button">Touch UI</button>
       <button id="open-teams-btn" class="hud-chip-btn" type="button">Menu (M)</button>
     </div>
@@ -2493,6 +2494,7 @@
       hostId: null,
       roster: null,
       serverOnlineCount: 0,
+      localMatchEndTimestamp: 0,
       sendTimer: 0,
       hostSendTimer: 0
     };
@@ -2666,6 +2668,14 @@
             unitName = "Tan " + (i + 1);
           }
 
+          const savedStats =
+            mpState.active &&
+            mpState.roster &&
+            mpState.roster.unitStats &&
+            mpState.roster.unitStats[unitId]
+              ? mpState.roster.unitStats[unitId]
+              : null;
+
           const unit = {
             unitId,
             slotIndex: i,
@@ -2695,11 +2705,11 @@
               ? 9.6
               : (team === "green" ? 5.5 : 5.1) + (i % 3) * 0.25,
             radius: 0.72,
-            health: 100,
+            health: savedStats && typeof savedStats.health === "number" ? savedStats.health : 100,
             maxHealth: 100,
-            alive: true,
-            kills: 0,
-            deaths: 0,
+            alive: savedStats && typeof savedStats.alive === "boolean" ? savedStats.alive : true,
+            kills: savedStats && typeof savedStats.kills === "number" ? savedStats.kills : 0,
+            deaths: savedStats && typeof savedStats.deaths === "number" ? savedStats.deaths : 0,
             respawnTimer: 0,
             fireCooldown: isLocalPlayer ? 0 : 0.6 + (i % 4) * 0.35,
             fireRate: isLocalPlayer ? 0.2 : 0.78 + (i % 3) * 0.15,
@@ -3093,8 +3103,187 @@
     });
 
     // =========================================================================
-    // 9. WEAPON, TRACERS, IMPACT PARTICLES & RAYCAST HIT DETECTION
+    // 9. WEB AUDIO API SOUND EFFECTS, WEAPONS, TRACERS & HIT DETECTION
     // =========================================================================
+    const SOUND_STORAGE_KEY = "toy_soldiers_sound_enabled";
+    const toggleSoundBtnEl = document.getElementById("toggle-sound-btn");
+    let soundEnabled = true;
+    let audioCtx = null;
+    let gunshotNoiseBuffer = null;
+
+    try {
+      const savedSound = localStorage.getItem(SOUND_STORAGE_KEY);
+      if (savedSound === "0") soundEnabled = false;
+    } catch (err) {}
+
+    function updateSoundButtonLabel() {
+      if (!toggleSoundBtnEl) return;
+      toggleSoundBtnEl.textContent = soundEnabled ? "🔊 Sound" : "🔇 Muted";
+      toggleSoundBtnEl.style.opacity = soundEnabled ? "1" : "0.65";
+    }
+    updateSoundButtonLabel();
+
+    function ensureAudioContext() {
+      if (!soundEnabled) return null;
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return null;
+
+      if (!audioCtx) {
+        try {
+          audioCtx = new AudioContextClass();
+          // Pre-build a 0.22s white/pink noise buffer for rifle muzzle blasts
+          const sampleRate = audioCtx.sampleRate;
+          const length = Math.floor(sampleRate * 0.22);
+          gunshotNoiseBuffer = audioCtx.createBuffer(1, length, sampleRate);
+          const data = gunshotNoiseBuffer.getChannelData(0);
+          let b0 = 0, b1 = 0, b2 = 0;
+          for (let i = 0; i < length; i++) {
+            const white = Math.random() * 2 - 1;
+            b0 = 0.997 * b0 + white * 0.029;
+            b1 = 0.985 * b1 + white * 0.032;
+            b2 = 0.950 * b2 + white * 0.048;
+            data[i] = (white * 0.65 + b0 + b1 + b2) * Math.pow(1 - i / length, 1.35);
+          }
+        } catch (err) {
+          return null;
+        }
+      }
+
+      if (audioCtx && audioCtx.state === "suspended") {
+        audioCtx.resume().catch(() => {});
+      }
+      return audioCtx;
+    }
+
+    window.addEventListener("mousedown", ensureAudioContext, { passive: true });
+    window.addEventListener("touchstart", ensureAudioContext, { passive: true });
+    window.addEventListener("keydown", ensureAudioContext, { passive: true });
+
+    if (toggleSoundBtnEl) {
+      toggleSoundBtnEl.addEventListener("click", () => {
+        soundEnabled = !soundEnabled;
+        try {
+          localStorage.setItem(SOUND_STORAGE_KEY, soundEnabled ? "1" : "0");
+        } catch (err) {}
+        updateSoundButtonLabel();
+        if (soundEnabled) ensureAudioContext();
+      });
+    }
+
+    // Plays a synthesized 3D rifle gunshot with distance attenuation and stereo panning
+    function playGunshotSound(shooterPos, isLocalShooter) {
+      if (!soundEnabled) return;
+      const ctx = ensureAudioContext();
+      if (!ctx || !gunshotNoiseBuffer) return;
+
+      const dist = camera ? BABYLON.Vector3.Distance(camera.position, shooterPos) : 0;
+      if (!isLocalShooter && dist > 130) return;
+
+      const distFactor = isLocalShooter
+        ? 1.0
+        : Math.max(0.06, Math.pow(1 - Math.min(1, dist / 130), 1.55));
+      const masterVol = (isLocalShooter ? 0.34 : 0.24) * distFactor;
+      const now = ctx.currentTime;
+
+      // Optional stereo panning based on shooter angle relative to camera
+      let outNode = ctx.destination;
+      if (typeof ctx.createStereoPanner === "function" && !isLocalShooter && player) {
+        try {
+          const panner = ctx.createStereoPanner();
+          const rightVec = new BABYLON.Vector3(
+            Math.cos(player.yaw),
+            0,
+            -Math.sin(player.yaw)
+          );
+          const toShooter = shooterPos.subtract(camera.position).normalize();
+          const panVal = Math.max(-0.85, Math.min(0.85, BABYLON.Vector3.Dot(toShooter, rightVec)));
+          panner.pan.setValueAtTime(panVal, now);
+          panner.connect(ctx.destination);
+          outNode = panner;
+        } catch (err) {}
+      }
+
+      const pitchJitter = 0.94 + Math.random() * 0.12;
+
+      // 1. Filtered Muzzle Blast Noise Burst
+      const noiseSrc = ctx.createBufferSource();
+      noiseSrc.buffer = gunshotNoiseBuffer;
+      noiseSrc.playbackRate.setValueAtTime(pitchJitter, now);
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(2200 * pitchJitter, now);
+      filter.frequency.exponentialRampToValueAtTime(280, now + 0.13);
+      filter.Q.setValueAtTime(1.1, now);
+
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(masterVol * 1.15, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+      noiseSrc.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(outNode);
+      noiseSrc.start(now);
+      noiseSrc.stop(now + 0.15);
+
+      // 2. High-Frequency Supersonic Crack / Plastic Rifle Snap
+      const crackOsc = ctx.createOscillator();
+      crackOsc.type = "sawtooth";
+      crackOsc.frequency.setValueAtTime(880 * pitchJitter, now);
+      crackOsc.frequency.exponentialRampToValueAtTime(140, now + 0.045);
+
+      const crackGain = ctx.createGain();
+      crackGain.gain.setValueAtTime(masterVol * 0.55, now);
+      crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.048);
+
+      crackOsc.connect(crackGain);
+      crackGain.connect(outNode);
+      crackOsc.start(now);
+      crackOsc.stop(now + 0.05);
+
+      // 3. Low-End Chamber Punch
+      const punchOsc = ctx.createOscillator();
+      punchOsc.type = "triangle";
+      punchOsc.frequency.setValueAtTime(155 * pitchJitter, now);
+      punchOsc.frequency.exponentialRampToValueAtTime(42, now + 0.085);
+
+      const punchGain = ctx.createGain();
+      punchGain.gain.setValueAtTime(masterVol * 0.85, now);
+      punchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+
+      punchOsc.connect(punchGain);
+      punchGain.connect(outNode);
+      punchOsc.start(now);
+      punchOsc.stop(now + 0.095);
+    }
+
+    // Subtle plastic impact / hit confirm tick
+    function playImpactHitSound(hitPoint, isSoldierHit) {
+      if (!soundEnabled) return;
+      const ctx = ensureAudioContext();
+      if (!ctx) return;
+
+      const dist = camera ? BABYLON.Vector3.Distance(camera.position, hitPoint) : 0;
+      if (dist > 95) return;
+
+      const now = ctx.currentTime;
+      const vol = (isSoldierHit ? 0.18 : 0.08) * Math.max(0.1, 1 - dist / 95);
+
+      const osc = ctx.createOscillator();
+      osc.type = isSoldierHit ? "sine" : "triangle";
+      osc.frequency.setValueAtTime(isSoldierHit ? 520 : 320, now);
+      osc.frequency.exponentialRampToValueAtTime(110, now + 0.045);
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(vol, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.055);
+    }
+
     const tracers = [];
     const impactParticles = [];
 
@@ -3155,6 +3344,9 @@
       muzzleLight.position.copyFrom(muzzlePos);
       muzzleLight.intensity = 2.2;
 
+      // Play 3D synthesized rifle gunshot sound
+      playGunshotSound(muzzlePos, Boolean(shooter.isPlayer));
+
       const maxRange = 135;
       const ray = new BABYLON.Ray(muzzlePos, aimDir, maxRange);
 
@@ -3179,15 +3371,16 @@
             const target = hitMesh.metadata.soldier;
             hitKind = target.team === "green" ? "green" : "tan";
             target.velocity.addInPlace(aimDir.scale(4.5));
-            applyDamage(target, damageAmount, aimDir, shooter);
             spawnImpactBurst(
               hitPoint,
               false,
               target.team === "green" ? "#4be03e" : "#ffd584"
             );
+            playImpactHitSound(hitPoint, true);
 
-            // Broadcast damage to multiplayer peers
             if (mpState.active) {
+              // In Multiplayer, server authoritatively updates health & K/D and broadcasts unit_damaged to all clients
+              target.model.flinchTimer = 1.0;
               sendNetMessage({
                 type: "damage_unit",
                 targetUnitId: target.unitId,
@@ -3195,6 +3388,8 @@
                 amount: damageAmount,
                 shotDir: { x: aimDir.x, y: aimDir.y, z: aimDir.z }
               });
+            } else {
+              applyDamage(target, damageAmount, aimDir, shooter);
             }
           } else if (hitMesh.metadata.isPhysicsBall && physicsBall) {
             hitKind = "ball";
@@ -3817,6 +4012,70 @@
       tryLockPointer();
     }
 
+    // Synchronizes local countdown clock with the server's authoritative remainingSec
+    function syncMatchTimerFromServer(remainingSec) {
+      if (typeof remainingSec !== "number") return;
+      matchTimeRemaining = Math.max(0, remainingSec);
+      mpState.localMatchEndTimestamp = performance.now() + matchTimeRemaining * 1000;
+      if (matchTimerEl) {
+        matchTimerEl.textContent = formatTimeMMSS(matchTimeRemaining);
+      }
+    }
+
+    // Applies the server's authoritative Kills & Deaths map across all soldiers
+    function applyServerUnitStats(unitStatsObj) {
+      if (!unitStatsObj || typeof unitStatsObj !== "object") return;
+      if (mpState.roster) {
+        mpState.roster.unitStats = unitStatsObj;
+      }
+      for (const [unitId, st] of Object.entries(unitStatsObj)) {
+        const unit = soldiersById.get(unitId);
+        if (!unit || !st) continue;
+        if (typeof st.kills === "number") unit.kills = st.kills;
+        if (typeof st.deaths === "number") unit.deaths = st.deaths;
+      }
+      updateHUD();
+    }
+
+    // Applies authoritative damage/death state received from the server in Multiplayer mode
+    function applyNetworkDamageState(target, newHealth, newAlive, shotDir) {
+      if (!target || gameEnded) return;
+
+      target.health = Math.max(0, newHealth);
+      target.model.flinchTimer = 1.0;
+
+      if (target.model.overheadBarFill) {
+        target.model.overheadBarFill.scaling.x = Math.max(
+          0.001,
+          target.health / target.maxHealth
+        );
+      }
+
+      if (!newAlive && target.alive) {
+        target.alive = false;
+        if (!target.isPlayer && !target.isRemotePlayer) {
+          target.respawnTimer = 3.0;
+        }
+        target.model.hitbox.isPickable = false;
+        if (target.model.overheadGroup) {
+          target.model.overheadGroup.setEnabled(false);
+        }
+        if (shotDir) {
+          const forward = new BABYLON.Vector3(
+            Math.sin(target.yaw),
+            0,
+            Math.cos(target.yaw)
+          );
+          target.fallDir = BABYLON.Vector3.Dot(shotDir, forward) >= 0 ? 1 : -1;
+        }
+        if (target.isPlayer && !gameEnded) {
+          showPlayerRespawnOverlay();
+        }
+      }
+
+      updateHUD();
+    }
+
     function syncRosterHumanFlags(roster) {
       if (!roster || !Array.isArray(roster.players)) return;
       const humanMap = new Map();
@@ -3843,7 +4102,11 @@
         }
         updateSoldierOverheadName(s);
       });
-      updateHUD();
+      if (roster.unitStats) {
+        applyServerUnitStats(roster.unitStats);
+      } else {
+        updateHUD();
+      }
     }
 
     function handleNetworkMessage(msg) {
@@ -3871,7 +4134,13 @@
           resetGame();
 
           if (typeof msg.roster.remainingSec === "number") {
-            matchTimeRemaining = Math.max(1, msg.roster.remainingSec);
+            syncMatchTimerFromServer(msg.roster.remainingSec);
+          }
+          if (msg.roster.unitStats) {
+            applyServerUnitStats(msg.roster.unitStats);
+          }
+          if (msg.roster.matchEnded) {
+            endMatchByTimeLimit();
           }
 
           const pCount = msg.roster.players ? msg.roster.players.length : 1;
@@ -3888,6 +4157,10 @@
           mpState.hostId = msg.roster.hostId;
           updateMpStatusBadge();
 
+          if (typeof msg.roster.remainingSec === "number") {
+            syncMatchTimerFromServer(msg.roster.remainingSec);
+          }
+
           if (msg.event === "player_joined" && msg.player) {
             const tColor = msg.player.team === "green" ? "#84ff78" : "#ffd584";
             showMpToast(
@@ -3903,10 +4176,32 @@
 
           const expectedCount = msg.roster.greenTotal + msg.roster.tanTotal;
           if (soldiers.length !== expectedCount) {
-            resetGame();
+            spawnAllSoldiers();
           } else {
             syncRosterHumanFlags(msg.roster);
           }
+          break;
+        }
+
+        case "timer_sync": {
+          if (typeof msg.remainingSec === "number") {
+            syncMatchTimerFromServer(msg.remainingSec);
+          }
+          if (msg.unitStats) {
+            applyServerUnitStats(msg.unitStats);
+          }
+          if (msg.matchEnded && !gameEnded) {
+            endMatchByTimeLimit();
+          }
+          break;
+        }
+
+        case "match_ended": {
+          syncMatchTimerFromServer(0);
+          if (msg.unitStats) {
+            applyServerUnitStats(msg.unitStats);
+          }
+          endMatchByTimeLimit();
           break;
         }
 
@@ -3926,25 +4221,27 @@
         }
 
         case "world_state": {
-          if (isMultiplayerAuthority()) return;
-          if (typeof msg.timeRemaining === "number") {
-            matchTimeRemaining = msg.timeRemaining;
+          if (typeof msg.remainingSec === "number") {
+            syncMatchTimerFromServer(msg.remainingSec);
           }
+          if (msg.unitStats) {
+            applyServerUnitStats(msg.unitStats);
+          }
+          if (msg.matchEnded && !gameEnded) {
+            endMatchByTimeLimit();
+            return;
+          }
+          if (isMultiplayerAuthority()) return;
           if (Array.isArray(msg.aiUnits)) {
             msg.aiUnits.forEach((u) => {
               const unit = soldiersById.get(u.unitId);
-              if (!unit) return;
-              if (typeof u.kills === "number") unit.kills = u.kills;
-              if (typeof u.deaths === "number") unit.deaths = u.deaths;
-              if (unit.isPlayer || unit.isRemotePlayer) return;
+              if (!unit || unit.isPlayer || unit.isRemotePlayer) return;
               unit.netTargetPos.set(u.x, u.y, u.z);
               unit.yaw = u.yaw;
               unit.pitch = u.pitch;
               unit.moveBlend = u.moveBlend;
               unit.strideDir = u.strideDir || 0;
-              if (typeof u.health === "number" && u.health < unit.health && unit.alive) {
-                applyDamage(unit, unit.health - u.health, null, null);
-              } else if (u.alive && !unit.alive) {
+              if (u.alive && !unit.alive) {
                 respawnSingleSoldier(unit, u.x, u.y, u.z, u.yaw);
               }
             });
@@ -3973,6 +4270,10 @@
             msg.hitPoint.y,
             msg.hitPoint.z
           );
+
+          // Play 3D positional gunshot sound for remote player/AI shots
+          playGunshotSound(mPos, false);
+
           const tracerColor =
             msg.team === "green"
               ? new BABYLON.Color3(1.0, 0.95, 0.45)
@@ -3983,31 +4284,43 @@
             spawnImpactBurst(hPos, true, "#e6c373");
           } else if (msg.hitKind === "green") {
             spawnImpactBurst(hPos, false, "#4be03e");
+            playImpactHitSound(hPos, true);
           } else if (msg.hitKind === "tan") {
             spawnImpactBurst(hPos, false, "#ffd584");
+            playImpactHitSound(hPos, true);
           } else if (msg.hitKind === "toy" || msg.hitKind === "ball") {
             spawnImpactBurst(hPos, false, "#fff0a0");
+            playImpactHitSound(hPos, false);
           }
           break;
         }
 
         case "unit_damaged": {
+          if (msg.unitStats) {
+            applyServerUnitStats(msg.unitStats);
+          }
           const target = soldiersById.get(msg.targetUnitId);
           if (!target) return;
-          const attacker = msg.attackerUnitId
-            ? soldiersById.get(msg.attackerUnitId)
-            : null;
           const dir = msg.shotDir
             ? new BABYLON.Vector3(msg.shotDir.x, msg.shotDir.y, msg.shotDir.z)
             : null;
           if (dir) {
             target.velocity.addInPlace(dir.scale(4.5));
           }
-          applyDamage(target, msg.amount, dir, attacker);
+          const newHealth =
+            typeof msg.health === "number"
+              ? msg.health
+              : Math.max(0, target.health - (msg.amount || 0));
+          const newAlive =
+            typeof msg.alive === "boolean" ? msg.alive : newHealth > 0;
+          applyNetworkDamageState(target, newHealth, newAlive, dir);
           break;
         }
 
         case "unit_respawned": {
+          if (msg.unitStats) {
+            applyServerUnitStats(msg.unitStats);
+          }
           const target = soldiersById.get(msg.unitId);
           if (!target) return;
           respawnSingleSoldier(target, msg.x, msg.y, msg.z, msg.yaw);
@@ -4036,6 +4349,9 @@
           isSetupOpen = false;
           setupModalEl.style.display = "none";
           resetGame();
+          if (typeof msg.roster.remainingSec === "number") {
+            syncMatchTimerFromServer(msg.roster.remainingSec);
+          }
           showMpToast("🔄 New round started! All soldiers respawned.", "#84ff78");
           break;
         }
@@ -4351,6 +4667,7 @@
         mpState.active && mpState.roster && mpState.roster.durationSec
           ? mpState.roster.durationSec
           : configuredDurationSec;
+      mpState.localMatchEndTimestamp = performance.now() + matchTimeRemaining * 1000;
       if (!isSetupOpen) {
         document.body.classList.remove("modal-open");
       }
@@ -4567,7 +4884,11 @@
 
       // ----- MATCH COUNTDOWN TIMER -----
       if (!gameEnded && !isSetupOpen) {
-        matchTimeRemaining = Math.max(0, matchTimeRemaining - dt);
+        if (mpState.active && mpState.localMatchEndTimestamp > 0) {
+          matchTimeRemaining = Math.max(0, (mpState.localMatchEndTimestamp - now) / 1000);
+        } else {
+          matchTimeRemaining = Math.max(0, matchTimeRemaining - dt);
+        }
         if (matchTimerEl) {
           matchTimerEl.textContent = formatTimeMMSS(matchTimeRemaining);
         }

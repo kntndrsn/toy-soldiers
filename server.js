@@ -69,6 +69,44 @@ function sanitizeCode(raw) {
   return cleaned || "SAND";
 }
 
+function getUnitStat(room, unitId) {
+  let st = room.unitStats.get(unitId);
+  if (!st) {
+    st = { kills: 0, deaths: 0, health: 100, alive: true };
+    room.unitStats.set(unitId, st);
+  }
+  return st;
+}
+
+function serializeUnitStats(room) {
+  const obj = {};
+  for (const [unitId, st] of room.unitStats.entries()) {
+    obj[unitId] = {
+      kills: st.kills,
+      deaths: st.deaths,
+      health: st.health,
+      alive: st.alive
+    };
+  }
+  return obj;
+}
+
+function resetRoomMatchState(room) {
+  room.matchEndTime = Date.now() + room.durationSec * 1000;
+  room.matchEnded = false;
+  room.unitStats.clear();
+  for (let i = 0; i < room.greenTotal; i++) {
+    room.unitStats.set(`green_${i}`, { kills: 0, deaths: 0, health: 100, alive: true });
+  }
+  for (let i = 0; i < room.tanTotal; i++) {
+    room.unitStats.set(`tan_${i}`, { kills: 0, deaths: 0, health: 100, alive: true });
+  }
+  for (const c of room.clients.values()) {
+    c.health = 100;
+    c.alive = true;
+  }
+}
+
 function getOrCreateRoom(roomCode, greenTotal, tanTotal, hostName, worldLimit, durationSec) {
   let room = rooms.get(roomCode);
   if (!room) {
@@ -83,9 +121,12 @@ function getOrCreateRoom(roomCode, greenTotal, tanTotal, hostName, worldLimit, d
       worldLimit: lim,
       durationSec: dur,
       matchEndTime: Date.now() + dur * 1000,
+      matchEnded: false,
+      unitStats: new Map(),
       clients: new Map(), // Map<clientId, ClientInfo>
       matchId: 1
     };
+    resetRoomMatchState(room);
     rooms.set(roomCode, room);
   }
   return room;
@@ -109,7 +150,7 @@ function serializeRoster(room) {
       alive: c.alive
     });
   }
-  const remainingSec = Math.max(0, Math.round((room.matchEndTime - Date.now()) / 1000));
+  const remainingSec = Math.max(0, (room.matchEndTime - Date.now()) / 1000);
   return {
     roomCode: room.code,
     hostId: room.hostId,
@@ -119,6 +160,8 @@ function serializeRoster(room) {
     worldLimit: room.worldLimit,
     durationSec: room.durationSec,
     remainingSec,
+    matchEnded: room.matchEnded,
+    unitStats: serializeUnitStats(room),
     matchId: room.matchId,
     players
   };
@@ -186,7 +229,7 @@ wss.on("connection", (ws) => {
           requestedDuration
         );
 
-        // If this device clicked Host (or room had no host), apply their match settings
+        // If this device clicked Host (or room had no host), apply their match settings & reset round
         if (isHosting || !room.hostId) {
           room.hostId = clientId;
           room.hostName = name;
@@ -194,7 +237,7 @@ wss.on("connection", (ws) => {
           room.tanTotal = Math.max(1, Math.min(16, requestedTan));
           room.worldLimit = Math.max(50, Math.min(130, requestedLimit));
           room.durationSec = Math.max(60, Math.min(1800, requestedDuration));
-          room.matchEndTime = Date.now() + room.durationSec * 1000;
+          resetRoomMatchState(room);
         }
 
         const slotIndex = assignSlotForPlayer(room, team);
@@ -206,6 +249,7 @@ wss.on("connection", (ws) => {
         }
 
         const unitId = `${team}_${slotIndex}`;
+        getUnitStat(room, unitId);
         const clientInfo = {
           id: clientId,
           ws,
@@ -290,10 +334,14 @@ wss.on("connection", (ws) => {
       // Room Host broadcasts AI soldier states & dynamic beach ball state (~20 Hz)
       case "host_world_state": {
         if (!currentRoom || currentRoom.hostId !== clientId) return;
+        const remainingSec = Math.max(0, (currentRoom.matchEndTime - Date.now()) / 1000);
         broadcastToRoom(
           currentRoom,
           {
             type: "world_state",
+            remainingSec,
+            matchEnded: currentRoom.matchEnded,
+            unitStats: serializeUnitStats(currentRoom),
             aiUnits: msg.aiUnits || [],
             ball: msg.ball || null
           },
@@ -320,19 +368,44 @@ wss.on("connection", (ws) => {
         break;
       }
 
-      // Damage dealt to a soldier (AI or human)
+      // Authoritative damage & Kill/Death tracking across all clients in the room
       case "damage_unit": {
-        if (!currentRoom) return;
+        if (!currentRoom || currentRoom.matchEnded) return;
+        const targetUnitId = String(msg.targetUnitId || "");
+        const attackerUnitId = msg.attackerUnitId ? String(msg.attackerUnitId) : null;
+        const amount = Math.max(0, Number(msg.amount) || 0);
+        if (!targetUnitId || amount <= 0) return;
+
+        const targetStat = getUnitStat(currentRoom, targetUnitId);
+        if (!targetStat.alive) return; // Already eliminated; ignore duplicate hit packets
+
+        targetStat.health = Math.max(0, targetStat.health - amount);
+        let killed = false;
+        if (targetStat.health <= 0) {
+          targetStat.alive = false;
+          targetStat.deaths += 1;
+          killed = true;
+          if (attackerUnitId && attackerUnitId !== targetUnitId) {
+            const attackerStat = getUnitStat(currentRoom, attackerUnitId);
+            attackerStat.kills += 1;
+          }
+        }
+
+        // Broadcast to ALL clients (including sender) so everyone's K/D & health stay identical
         broadcastToRoom(
           currentRoom,
           {
             type: "unit_damaged",
-            targetUnitId: msg.targetUnitId,
-            attackerUnitId: msg.attackerUnitId || null,
-            amount: Number(msg.amount) || 0,
-            shotDir: msg.shotDir || null
+            targetUnitId,
+            attackerUnitId,
+            amount,
+            health: targetStat.health,
+            alive: targetStat.alive,
+            killed,
+            shotDir: msg.shotDir || null,
+            unitStats: serializeUnitStats(currentRoom)
           },
-          clientId
+          null
         );
         break;
       }
@@ -355,11 +428,15 @@ wss.on("connection", (ws) => {
 
       // Individual player (or Host auto-respawning AI) respawns a single soldier without resetting the match
       case "respawn_unit": {
-        if (!currentRoom) return;
+        if (!currentRoom || currentRoom.matchEnded) return;
         const c = currentRoom.clients.get(clientId);
         if (!c) return;
 
         const targetUnitId = msg.unitId || c.unitId;
+        const targetStat = getUnitStat(currentRoom, targetUnitId);
+        targetStat.health = 100;
+        targetStat.alive = true;
+
         const isSelf = targetUnitId === c.unitId;
         if (isSelf) {
           c.health = 100;
@@ -381,7 +458,8 @@ wss.on("connection", (ws) => {
             x: Number(msg.x) || 0,
             y: Number(msg.y) || 0,
             z: Number(msg.z) || 0,
-            yaw: Number(msg.yaw) || 0
+            yaw: Number(msg.yaw) || 0,
+            unitStats: serializeUnitStats(currentRoom)
           },
           clientId
         );
@@ -403,13 +481,8 @@ wss.on("connection", (ws) => {
         if (msg.durationSec) {
           currentRoom.durationSec = Math.max(60, Math.min(1800, Number(msg.durationSec)));
         }
-        currentRoom.matchEndTime = Date.now() + currentRoom.durationSec * 1000;
+        resetRoomMatchState(currentRoom);
         currentRoom.matchId++;
-
-        for (const c of currentRoom.clients.values()) {
-          c.health = 100;
-          c.alive = true;
-        }
 
         broadcastToRoom(currentRoom, {
           type: "match_restarted",
@@ -459,6 +532,51 @@ function removeClientFromRoom(room, clientId) {
     roster: serializeRoster(room)
   });
 }
+
+// ============================================================================
+// 3. SERVER-AUTHORITATIVE MATCH TIMER & SCOREBOARD SYNC LOOP
+// ============================================================================
+let tickCounter = 0;
+setInterval(() => {
+  tickCounter++;
+  const now = Date.now();
+
+  for (const room of rooms.values()) {
+    if (room.clients.size === 0) continue;
+
+    const remainingSec = Math.max(0, (room.matchEndTime - now) / 1000);
+
+    // Trigger simultaneous match end for all players when the server clock hits 0
+    if (remainingSec <= 0 && !room.matchEnded) {
+      room.matchEnded = true;
+      broadcastToRoom(
+        room,
+        {
+          type: "match_ended",
+          remainingSec: 0,
+          unitStats: serializeUnitStats(room),
+          roster: serializeRoster(room)
+        },
+        null
+      );
+      continue;
+    }
+
+    // Broadcast authoritative clock & K/D stats once per second to keep all clients locked in sync
+    if (!room.matchEnded && tickCounter % 4 === 0) {
+      broadcastToRoom(
+        room,
+        {
+          type: "timer_sync",
+          remainingSec,
+          matchEnded: room.matchEnded,
+          unitStats: serializeUnitStats(room)
+        },
+        null
+      );
+    }
+  }
+}, 250);
 
 server.listen(PORT, () => {
   console.log(`Plastic Army Men Server running on http://localhost:${PORT}`);
