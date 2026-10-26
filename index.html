@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>Plastic Army Men</title>
+  <title>Toy Soldiers</title>
   <style>
     * {
       box-sizing: border-box;
@@ -855,7 +855,7 @@
   <!-- On-Screen HUD -->
   <div id="hud">
     <div id="instructions">
-      <strong id="instructions-title">BACKYARD SANDBOX BATTLE</strong><br />
+      <strong id="instructions-title">SANDBOX</strong><br />
       <strong>WASD / Left Stick</strong> : Move &nbsp;|&nbsp; <strong>Space / Jump</strong> : Jump<br />
       <strong>Mouse / Right Thumb</strong> : Aim &nbsp;|&nbsp; <strong>Left-Click / Fire</strong> : Shoot
     </div>
@@ -868,9 +868,11 @@
     </div>
 
     <div id="perf-hud">
-      <div><span id="perf-fps" style="color: #84ff78; font-weight: bold;">60 FPS</span> &bull; <span id="perf-frametime">16.7 ms</span></div>
-      <div>Ping: <span id="perf-ping" style="color: #84ff78; font-weight: bold;">-- ms</span> &bull; Srv: <span id="perf-srv">--</span></div>
-      <div>Net: <span id="perf-net">0 pkt/s (0.0 KB/s)</span> &bull; Units: <span id="perf-units">0</span></div>
+      <div><span id="perf-fps" style="color: #84ff78; font-weight: bold;">60 FPS</span></div>
+      <div id="perf-mp-details" style="display: none;">
+        <div>Ping: <span id="perf-ping" style="color: #84ff78; font-weight: bold;">-- ms</span> &bull; Units: <span id="perf-units">0</span></div>
+        <div>Net: <span id="perf-net">0 pkt/s (0.0 KB/s)</span></div>
+      </div>
     </div>
 
     <div id="scoreboard">
@@ -938,15 +940,15 @@
         <div class="setup-field">
           <span class="setup-field-label" style="color: #ffd584;">Map</span>
           <select id="map-select" class="count-input" style="width: 100%; font-size: 13px;">
-            <option value="sandbox" selected>Backyard Sandbox</option>
-            <option value="shoebox">The Shoe Box (Bedroom CQC)</option>
+            <option value="sandbox" selected>Sandbox</option>
+            <option value="shoebox">Shoebox</option>
           </select>
         </div>
 
         <div class="setup-field">
           <span class="setup-field-label" style="color: #e8d59e;">Map Size</span>
           <select id="map-size-select" class="count-input" style="width: 100%; font-size: 13px;">
-            <option value="28">Small (Shoe Box)</option>
+            <option value="28">Small (Shoebox)</option>
             <option value="60">Medium</option>
             <option value="80" selected>Large</option>
             <option value="105">Huge</option>
@@ -981,8 +983,9 @@
         <button class="primary-btn" id="start-match-btn" type="button" style="flex: 1; background: #3b6e36;">
           Play Solo
         </button>
-        <input id="mp-room-input" class="count-input" type="text" value="SAND1" placeholder="Room" title="Room Code" style="width: 74px; height: 39px; font-size: 13.5px; text-transform: uppercase;" />
-        <button class="primary-btn" id="host-mp-btn" type="button" style="flex: 1.2; background: #2e8b24;">
+        <input id="mp-room-input" class="count-input" type="text" value="SAND101" placeholder="Room" title="Room Code" style="width: 78px; height: 39px; font-size: 13px; text-transform: uppercase;" />
+        <input id="mp-password-input" class="count-input" type="password" value="" placeholder="Pass (opt)" title="Optional Room Password" style="width: 82px; height: 39px; font-size: 12px; padding: 0 6px;" />
+        <button class="primary-btn" id="host-mp-btn" type="button" style="flex: 1.15; background: #2e8b24;">
           Host Match
         </button>
       </div>
@@ -3539,11 +3542,20 @@
 
     // Live Performance & Network Telemetry State
     const perfTelemetry = {
+      clientId: "c_" + Math.random().toString(36).slice(2, 8),
       totalFrames: 0,
       frames: 0,
       accumTime: 0,
       fps: 60,
       frameMs: 16.7,
+      physicsMs: 0.2,
+      aiMs: 0.3,
+      animMs: 0.4,
+      renderMs: 2.0,
+      _physAccum: 0,
+      _aiAccum: 0,
+      _animAccum: 0,
+      _renderAccum: 0,
       pingMs: null,
       serverTickMs: null,
       serverMemMB: null,
@@ -3551,8 +3563,32 @@
       bytesThisSec: 0,
       pktRate: 0,
       kbRate: 0,
-      pingTimer: 0
+      pingTimer: 0,
+      soloReportTimer: 0
     };
+
+    function getClientPerfSnapshot() {
+      let aliveUnits = 0;
+      for (let i = 0; i < soldiers.length; i++) {
+        if (soldiers[i].alive) aliveUnits++;
+      }
+      return {
+        clientId: mpState.clientId || perfTelemetry.clientId,
+        mode: mpState.active ? "multiplayer" : "solo",
+        roomCode: mpState.active ? mpState.roomCode : null,
+        mapType: builtMapType || configuredMapType,
+        fps: Number(perfTelemetry.fps.toFixed(1)),
+        frameMs: Number(perfTelemetry.frameMs.toFixed(2)),
+        renderMs: Number(perfTelemetry.renderMs.toFixed(2)),
+        physicsMs: Number(perfTelemetry.physicsMs.toFixed(2)),
+        aiMs: Number(perfTelemetry.aiMs.toFixed(2)),
+        animMs: Number(perfTelemetry.animMs.toFixed(2)),
+        aliveUnits,
+        totalUnits: soldiers.length
+      };
+    }
+    window.__TOY_SOLDIERS_PERF__ = perfTelemetry;
+    window.getToySoldiersPerfProfile = getClientPerfSnapshot;
 
     function isMultiplayerAuthority() {
       return !mpState.active || mpState.clientId === mpState.hostId;
@@ -3567,10 +3603,140 @@
       }
     }
 
-    const CALLSIGNS = [
-      "Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot",
-      "Golf", "Hotel", "India", "Juliet", "Kilo", "Lima"
+    // 330+ Historically Themed Soldier Names (American Revolution through 20th Century)
+    const HISTORICAL_SOLDIER_NAMES = [
+      // American Revolution (Continental Army, Minutemen & Allied Commanders)
+      "Washington", "Lafayette", "Hamilton", "Knox", "Greene", "Marion", "Morgan", "Wayne",
+      "Putnam", "Stark", "Schuyler", "Steuben", "Rochambeau", "Kosciuszko", "Pulaski", "DeKalb",
+      "Mercer", "Warren", "Prescott", "Revere", "EthanAllen", "Sumter", "Pickens", "Lighthorse",
+      "Glover", "Muhlenberg", "Sullivan", "Heath", "Lincoln", "Gates", "StClair", "Moultrie",
+      "Jasper", "NathanHale", "MollyPitcher", "Ludington", "SalemPoor", "PeterSalem", "ArtemasWard", "Gridley",
+      "Knowlton", "Barton", "Tallmadge", "Brewster", "Woodhull", "Culper", "Herkimer", "Gansevoort",
+      "Willett", "Dearborn", "Brooks", "Cilley", "Scammell", "EnochPoor", "Learned", "JohnNixon",
+      "Paterson", "Greaton", "Bond", "Whitcomb", "JosephReed", "Cadwalader", "Ewing", "Mifflin",
+      "EdwardHand", "Irvine", "Armstrong", "Maxwell", "Stirling", "Smallwood", "OthoWilliams", "JohnHoward",
+      "MordecaiGist", "Baylor", "Moylan", "Sheldon", "Armand", "Laurens", "Pinckney", "Huger",
+      "PeterHorry", "Davie", "IsaacShelby", "JohnSevier", "Campbell", "Cleveland", "McDowell", "Winston",
+      "GeorgeClark", "DanielBoone", "SimonKenton", "Bowman", "BenLogan", "LeviTodd", "Harrod", "Montgomery",
+      "Macpherson", "ReturnMeigs", "JohnLamb", "EleazerOswald", "EbenezerStevens", "JohnCrane", "Bauman", "Humphreys",
+      "Trumbull", "Huntington", "Varnum", "Hitchcock", "Lippitt", "Cornell", "Angell", "Olney",
+      "Talbot", "Whipple", "Hopkins", "PaulJones", "JohnBarry", "Biddle", "Nicholson", "Manley",
+      "SamuelTucker", "RichardDale", "JoshuaBarney", "Mugford", "Conyngham", "Fanning", "Ledyard", "Badger",
+      "Danjou", "Grasse", "Destaing", "Lauzun", "Chastellux", "DeuxPonts", "Duportail", "Laumoy",
+      "Gouvion", "Fleury", "Ternant", "Tousard", "Pontgibaud", "Armistead", "JackJouett", "Francisco",
+      "MurphyTim", "ElijahClarke", "JohnDooly", "NancyHart", "AndrewPickens", "Richardson", "Rutherford", "Ashe",
+      "Caswell", "Moore", "Nash", "Hogan", "JethroSumner", "WilliamDavie", "WilliamPolk", "Dickson",
+      // War of 1812, Frontier & Early Republic
+      "Jackson", "WHHarrison", "WinfieldScott", "Macomb", "JacobBrown", "Ripley", "JamesMiller", "ZebulonPike",
+      "WilliamWorth", "EdmundGaines", "ThomasJesup", "JohnWool", "Twiggs", "GeorgeArmistead", "Stricker", "SamSmith",
+      "JamesLawrence", "OliverPerry", "Macdonough", "Bainbridge", "IsaacHull", "ChasStewart", "DavidPorter", "JohnRodgers",
+      "Chauncey", "Warrington", "Blakely", "WmBurrows", "ChasMorris", "Preble", "RichSomers", "WmEaton",
+      "OBannon", "DavyCrockett", "JimBowie", "WmTravis", "SamHouston", "JuanSeguin", "JamesFannin", "Burleson",
+      "BenMilam", "Kearny", "Doniphan", "Fremont", "ZachTaylor", "Ringgold", "Quitman", "JamesShields",
+      // American Civil War
+      "UlyssesGrant", "Sherman", "Sheridan", "GeoThomas", "GeorgeMeade", "Hancock", "Chamberlain", "JohnReynolds",
+      "Sedgwick", "Gouverneur", "AAHumphreys", "HoratioWright", "GeorgeSykes", "HenrySlocum", "OOHoward", "JohnLogan",
+      "McPherson", "FrankBlair", "GrenvilleDodge", "Osterhaus", "JohnCorse", "WmHazen", "Grierson", "JamesWilson",
+      "Kilpatrick", "JohnBuford", "Pleasonton", "DavidGregg", "WesleyMerritt", "Custer", "TomDevin", "WmGamble",
+      "Farnsworth", "StrongVincent", "StephenWeed", "PatORorke", "MarsenaPatrick", "HenryHunt", "JohnTidball", "JohnGibbon",
+      "SamCarroll", "AlexWebb", "NormanHall", "WmHarrow", "Stannard", "Doubleday", "JohnRobinson", "Wadsworth",
+      "SolMeredith", "LysanderCutler", "RufusDawes", "HenryMorrow", "Kryzyzanowski", "CarlSchurz", "FrancisBarlow", "Steinwehr",
+      "ChasCoster", "Buschbeck", "JohnGeary", "ThomasKane", "Candy", "Cobham", "DavidIreland", "Lockwood",
+      "McDougall", "Colgrove", "ThomasRuger", "DavidBirney", "DeTrobriand", "GeoBurling", "ChasGraham", "DanSickles",
+      "JohnCaldwell", "EdwardCross", "PatrickKelly", "SamuelZook", "JohnBrooke", "ThomasSmyth", "NelsonMiles", "AlexHays",
+      "GeoWillard", "Eliakim", "Wheaton", "HenryEustis", "JosBartlett", "DavidNevin", "Torbert", "DavidRussell",
+      "HiramBurnham", "GeoGetty", "AlbionHowe", "LewisGrant", "EllisSpear", "RobertShaw", "Hallowell", "WmCarney",
+      "RobertSmalls", "JohnWilder", "Rosecrans", "DonBuell", "GordonGranger", "Crittenden", "AlexMcCook", "JamesNegley",
+      "JohnBrannan", "AbsalomBaird", "ThomasWood", "JohnPalmer", "SamBeatty", "WmCarlin", "EdwardKing", "Scribner",
+      "Starkweather", "Steedman", "Whittaker", "Ormsby", "JohnTurchin", "JamesGarfield", "Opdycke", "ChasHarker",
+      "GeoWagner", "AugWillich", "AbelStreight", "RobertMinty", "EliLong", "Farragut", "DDPorter", "AndrewFoote",
+      "JohnWorden", "JohnWinslow", "WmCushing", "TunisCraven", "JamesJouett", "FrancisRoe", "RobertELee", "Stonewall",
+      "Longstreet", "JebStuart", "PatCleburne", "JohnGordon", "LewisArmistead", "RichGarnett", "JamesKemper", "Pettigrew",
+      "IsaacTrimble", "JohnHood", "EvanderLaw", "Jerome", "HenryBenning", "RichAnderson", "JoeKershaw", "Barksdale",
+      "WmWofford", "PaulSemmes", "JohnMosby", "Forrest", "JoeWheeler", "WadeHampton", "FitzLee", "TomRosser",
+      "LunsfordLomax", "JubalEarly", "DickEwell", "RobertRodes", "Ramseur", "JohnPegram", "JohnPelham", "PorterAlex",
+      // World War I
+      "Pershing", "AlvinYork", "Rickenbacker", "Whittlesey", "Holderman", "McMurtry", "DanDaly", "SmedleyButler",
+      "WendellNeville", "JamesHarbord", "RobtBullard", "HunterLiggett", "Summerall", "BeaumontBuck", "JohnHines", "HansonEly",
+      "FrankParker", "MacArthur", "WildBill", "GeoPatton", "GeoMarshall", "SamWoodfill", "Barkley", "Sawelson",
+      "Marcellus", "HaroldTurner", "DonaldCall", "FrankLuke", "RaoulLufbery", "DavidPutnam", "ElliotSprings", "FieldKindley",
+      "ReedLandis", "HenryJohnson", "NeedhamRoberts", "JamesEurope", "SamBadgett",
+      // World War II & Korean War
+      "Eisenhower", "OmarBradley", "AudieMurphy", "DickWinters", "RonSpeirs", "CarwoodLipton", "BillGuarnere", "BabeHeffron",
+      "BuckCompton", "DonMalarkey", "JoeToye", "GeorgeLuz", "FrankPerconte", "BullRandleman", "LewisNixon", "RobertSink",
+      "BobStrayer", "ThomasMeehan", "HarryWelsh", "FloydTalbert", "JohnnyMartin", "SkipMuck", "AlexPenkala", "DocRoe",
+      "ShiftyPowers", "JohnBasilone", "ChestyPuller", "Vandegrift", "RedMikeEdson", "DavidShoup", "MitchellPaige", "JackLucas",
+      "WmHawkins", "KenWalsh", "JoeFoss", "PappyBoyington", "RobertGaler", "HaroldBauer", "JohnSmith", "MarionCarl",
+      "DavidMcCampbell", "ButchOHare", "JimmyThach", "JimmyFlatley", "GeorgeGay", "JohnWaldron", "JimmyDoolittle", "DickBong",
+      "TommyMcGuire", "WadeMcClusky", "DickBest", "DustyKleiss", "ChesterNimitz", "RaySpruance", "BullHalsey", "MarcMitscher",
+      "WillisLee", "ArleighBurke", "ErnestEvans", "RobertJohnston", "SamRoberts", "CliftonSprague", "JimGavin", "MattRidgway",
+      "MaxwellTaylor", "McAuliffe", "RobertCole", "JulianAaron", "Vandervoort", "BillYarborough", "WilliamDarby", "JamesRudder",
+      "HenryMucci", "RobertPrince", "CreightonAbrams", "LafayettePool", "EarlyB", "BruceClarke", "MauriceRose", "LightningJoe",
+      "CourtneyHodges", "SandyPatch", "LucianTruscott", "MarkClark", "ErnestHarmon", "WaltonWalker", "WilliamDean", "OPSmith",
+      "RayMurray", "WEBarber", "RayDavis", "ReginaldMyers", "CarlSitter", "Gabreski", "DonGentile", "GeorgePreddy",
+      "HubZemke", "DaveSchilling", "RobtJohnson", "BudMahurin", "ChasMacdonald", "NeelKearby", "JohnMeyer", "DonBlakeslee",
+      "RobinOlds", "ChuckYeager", "BudAnderson", "BobHoover", "JackIlfrey", "JamesJabara", "JoeMcConnell", "VernonBaker",
+      "DanielInouye", "WillyJames", "BenDavis", "LeeArcher", "WendellPruitt", "RubenRivers", "ChasThomas", "EdwardCarter"
     ];
+
+    const activeOnlinePlayerNames = new Set();
+    const activeServerRoomCodes = new Set();
+    const sessionUsedSoldierNames = new Set();
+    const sessionUsedRoomCodes = new Set();
+    let userCustomizedPlayerName = false;
+    let userCustomizedRoomCode = false;
+
+    function pickUniqueHistoricalSoldierName(extraExcludedSet = null) {
+      const available = [];
+      for (let i = 0; i < HISTORICAL_SOLDIER_NAMES.length; i++) {
+        const candidate = HISTORICAL_SOLDIER_NAMES[i];
+        const lower = candidate.toLowerCase();
+        if (activeOnlinePlayerNames.has(lower)) continue;
+        if (extraExcludedSet && extraExcludedSet.has(lower)) continue;
+        if (!extraExcludedSet && sessionUsedSoldierNames.has(lower)) continue;
+        available.push(candidate);
+      }
+
+      if (available.length > 0) {
+        const chosen = available[Math.floor(Math.random() * available.length)];
+        if (extraExcludedSet) {
+          extraExcludedSet.add(chosen.toLowerCase());
+        } else {
+          sessionUsedSoldierNames.add(chosen.toLowerCase());
+        }
+        return chosen;
+      }
+
+      const fallbackBase =
+        HISTORICAL_SOLDIER_NAMES[Math.floor(Math.random() * HISTORICAL_SOLDIER_NAMES.length)] ||
+        "Washington";
+      const fallback = `${fallbackBase.slice(0, 14)}${Math.floor(10 + Math.random() * 90)}`;
+      if (extraExcludedSet) {
+        extraExcludedSet.add(fallback.toLowerCase());
+      } else {
+        sessionUsedSoldierNames.add(fallback.toLowerCase());
+      }
+      return fallback;
+    }
+
+    function generateUniqueRoomCode(mapType) {
+      const prefix = mapType === "shoebox" ? "SHOE" : "SAND";
+      for (let attempt = 0; attempt < 200; attempt++) {
+        const num = Math.floor(100 + Math.random() * 900);
+        const code = `${prefix}${num}`;
+        if (!activeServerRoomCodes.has(code) && !sessionUsedRoomCodes.has(code)) {
+          sessionUsedRoomCodes.add(code);
+          return code;
+        }
+      }
+      let seq = 1;
+      while (activeServerRoomCodes.has(`${prefix}${seq}`) || sessionUsedRoomCodes.has(`${prefix}${seq}`)) {
+        seq++;
+      }
+      const fallbackCode = `${prefix}${seq}`;
+      sessionUsedRoomCodes.add(fallbackCode);
+      return fallbackCode;
+    }
 
     function findSafeSpawnPoint(baseX, baseZ) {
       const margin = builtMapType === "shoebox" ? 2.4 : 3.5;
@@ -3720,9 +3886,15 @@
 
       // Map human players by unitId when in Multiplayer mode
       const humanByUnitId = new Map();
+      const matchUsedNames = new Set();
+      const localInputName = (document.getElementById("mp-name-input")?.value || "").trim();
+      if (localInputName) {
+        matchUsedNames.add(localInputName.toLowerCase());
+      }
       if (mpState.active && mpState.roster && Array.isArray(mpState.roster.players)) {
         mpState.roster.players.forEach((p) => {
           humanByUnitId.set(p.unitId, p);
+          if (p.name) matchUsedNames.add(String(p.name).trim().toLowerCase());
         });
       }
 
@@ -3739,19 +3911,18 @@
           const initialYaw = team === "green" ? 0 : Math.PI;
           model.root.rotation.y = initialYaw;
 
+          const botHistoricalName = pickUniqueHistoricalSoldierName(matchUsedNames);
           let unitName;
           let rawPlayerName = "";
           if (isLocalPlayer) {
             const customName = (document.getElementById("mp-name-input")?.value || "").trim();
-            rawPlayerName = customName || "You";
-            unitName = customName ? `${customName} (You)` : "You";
+            rawPlayerName = customName || botHistoricalName;
+            unitName = `${rawPlayerName} (You)`;
           } else if (isRemotePlayer) {
-            rawPlayerName = remotePlayerInfo.name || "Player";
+            rawPlayerName = remotePlayerInfo.name || botHistoricalName;
             unitName = rawPlayerName + " (Player)";
-          } else if (team === "green") {
-            unitName = "Green " + (CALLSIGNS[i] || "#" + (i + 1));
           } else {
-            unitName = "Tan " + (i + 1);
+            unitName = botHistoricalName;
           }
 
           const savedStats =
@@ -3766,6 +3937,7 @@
             unitId,
             slotIndex: i,
             name: unitName,
+            botName: botHistoricalName,
             rawPlayerName,
             team,
             isPlayer: isLocalPlayer,
@@ -5002,6 +5174,7 @@
     const joinMpBtn = document.getElementById("join-mp-btn");
     const mpNameInputEl = document.getElementById("mp-name-input");
     const mpRoomInputEl = document.getElementById("mp-room-input");
+    const mpPasswordInputEl = document.getElementById("mp-password-input");
     const mpTeamSelectEl = document.getElementById("mp-team-select");
     const mpUrlInputEl = document.getElementById("mp-url-input");
     const mpStatusBadgeEl = document.getElementById("mp-status-badge");
@@ -5013,9 +5186,8 @@
 
     // Performance & Server Telemetry DOM Elements
     const perfFpsEl = document.getElementById("perf-fps");
-    const perfFrametimeEl = document.getElementById("perf-frametime");
+    const perfMpDetailsEl = document.getElementById("perf-mp-details");
     const perfPingEl = document.getElementById("perf-ping");
-    const perfSrvEl = document.getElementById("perf-srv");
     const perfNetEl = document.getElementById("perf-net");
     const perfUnitsEl = document.getElementById("perf-units");
 
@@ -5026,43 +5198,75 @@
       perfFpsEl.textContent = `${fps} FPS`;
       perfFpsEl.style.color =
         fps >= 50 ? "#84ff78" : fps >= 30 ? "#ffd584" : "#ff6b6b";
-      perfFrametimeEl.textContent = `${perfTelemetry.frameMs.toFixed(1)} ms`;
 
-      if (perfTelemetry.pingMs !== null) {
-        const p = Math.round(perfTelemetry.pingMs);
-        perfPingEl.textContent = `${p} ms`;
-        perfPingEl.style.color =
-          p < 65 ? "#84ff78" : p < 140 ? "#ffd584" : "#ff6b6b";
-      } else {
-        perfPingEl.textContent = mpState.active ? "..." : "Local";
-        perfPingEl.style.color = "#b8e8ff";
+      // In Solo mode, only show FPS. In Server mode, show FPS, Ping, Units, and Pkt/s + Bandwidth.
+      if (!mpState.active) {
+        if (perfMpDetailsEl) perfMpDetailsEl.style.display = "none";
+        return;
       }
 
-      if (perfTelemetry.serverTickMs !== null && perfTelemetry.serverMemMB !== null) {
-        perfSrvEl.textContent = `${perfTelemetry.serverTickMs.toFixed(1)}ms • ${perfTelemetry.serverMemMB}MB`;
-      } else {
-        perfSrvEl.textContent = mpState.active ? "..." : "Local";
+      if (perfMpDetailsEl) perfMpDetailsEl.style.display = "block";
+
+      if (perfPingEl) {
+        if (perfTelemetry.pingMs !== null) {
+          const p = Math.round(perfTelemetry.pingMs);
+          perfPingEl.textContent = `${p} ms`;
+          perfPingEl.style.color =
+            p < 65 ? "#84ff78" : p < 140 ? "#ffd584" : "#ff6b6b";
+        } else {
+          perfPingEl.textContent = "...";
+          perfPingEl.style.color = "#b8e8ff";
+        }
       }
 
-      perfNetEl.textContent = `${perfTelemetry.pktRate} pkt/s (${perfTelemetry.kbRate.toFixed(1)} KB/s)`;
+      if (perfNetEl) {
+        perfNetEl.textContent = `${perfTelemetry.pktRate} pkt/s (${perfTelemetry.kbRate.toFixed(1)} KB/s)`;
+      }
 
-      const aliveCount = soldiers.filter((s) => s.alive).length;
-      perfUnitsEl.textContent = `${aliveCount}/${soldiers.length}`;
+      if (perfUnitsEl) {
+        let aliveCount = 0;
+        for (let i = 0; i < soldiers.length; i++) {
+          if (soldiers[i].alive) aliveCount++;
+        }
+        perfUnitsEl.textContent = `${aliveCount}/${soldiers.length}`;
+      }
     }
 
-    // Load saved player name & preferred team from browser localStorage
+    // Initialize with a random unique historically themed soldier name & preferred team
     const NAME_STORAGE_KEY = "toy_soldiers_player_name";
     const TEAM_STORAGE_KEY = "toy_soldiers_player_team";
     try {
-      const savedName = localStorage.getItem(NAME_STORAGE_KEY);
-      if (savedName && savedName.trim()) {
-        mpNameInputEl.value = savedName.trim().slice(0, 18);
-      }
       const savedTeam = localStorage.getItem(TEAM_STORAGE_KEY);
       if (savedTeam === "green" || savedTeam === "tan") {
         mpTeamSelectEl.value = savedTeam;
       }
     } catch (err) {}
+
+    if (mpNameInputEl) {
+      mpNameInputEl.value = pickUniqueHistoricalSoldierName();
+    }
+
+    function updateRoomCodeForSelectedMap(mapType, forceUpdate = false) {
+      if (!mpRoomInputEl) return;
+      const prefix = mapType === "shoebox" ? "SHOE" : "SAND";
+      const currentVal = (mpRoomInputEl.value || "").trim().toUpperCase();
+      if (
+        forceUpdate ||
+        !userCustomizedRoomCode ||
+        !currentVal.startsWith(prefix) ||
+        currentVal === "SAND1" ||
+        currentVal === "SHOE1" ||
+        activeServerRoomCodes.has(currentVal)
+      ) {
+        const nextCode = generateUniqueRoomCode(mapType);
+        mpRoomInputEl.value = nextCode;
+        if (!mpState.active) {
+          mpState.roomCode = nextCode;
+        }
+      }
+    }
+
+    updateRoomCodeForSelectedMap(configuredMapType, true);
 
     function savePlayerProfileToStorage() {
       try {
@@ -5074,9 +5278,20 @@
       } catch (err) {}
     }
 
-    mpNameInputEl.addEventListener("input", savePlayerProfileToStorage);
-    mpNameInputEl.addEventListener("change", savePlayerProfileToStorage);
+    mpNameInputEl.addEventListener("input", () => {
+      userCustomizedPlayerName = true;
+      savePlayerProfileToStorage();
+    });
+    mpNameInputEl.addEventListener("change", () => {
+      userCustomizedPlayerName = true;
+      savePlayerProfileToStorage();
+    });
     mpTeamSelectEl.addEventListener("change", savePlayerProfileToStorage);
+    if (mpRoomInputEl) {
+      mpRoomInputEl.addEventListener("input", () => {
+        userCustomizedRoomCode = true;
+      });
+    }
 
     function showMpToast(text, borderColor = "#7ad7ff") {
       if (!mpToastContainerEl) return;
@@ -5107,13 +5322,16 @@
     }
 
     function getMapSizeLabel(limit, mapType) {
-      if (mapType === "shoebox" || limit <= 50) return "Shoe Box";
-      if (limit <= 65) return "Medium";
-      if (limit >= 95) return "Huge";
-      return "Large";
+      if (mapType === "shoebox" || limit <= 50) return "Shoebox";
+      if (limit <= 65) return "Sandbox (Medium)";
+      if (limit >= 95) return "Sandbox (Huge)";
+      return "Sandbox (Large)";
     }
 
     function pollServerRoomsPreview() {
+      // Do not poll server during solo gameplay when Setup Modal is closed
+      if (!isSetupOpen && !mpState.active) return;
+
       const rawWs = (mpUrlInputEl.value || "wss://toy-soldiers.duckdns.org").trim();
       const httpBase = rawWs
         .replace(/^wss:/i, "https:")
@@ -5129,13 +5347,46 @@
           }
           if (!data || !Array.isArray(data.rooms)) return;
 
+          // Track active room codes and chosen online player names to guarantee uniqueness
+          activeServerRoomCodes.clear();
+          activeOnlinePlayerNames.clear();
+          if (Array.isArray(data.takenNames)) {
+            data.takenNames.forEach((n) => {
+              if (n) activeOnlinePlayerNames.add(String(n).trim().toLowerCase());
+            });
+          }
+
           // Count total online players across all server rooms for upper-right badge
           let totalOnline = 0;
           data.rooms.forEach((rm) => {
-            totalOnline += Array.isArray(rm.players) ? rm.players.length : 0;
+            if (rm.roomCode) {
+              activeServerRoomCodes.add(String(rm.roomCode).toUpperCase());
+            }
+            if (Array.isArray(rm.players)) {
+              totalOnline += rm.players.length;
+              rm.players.forEach((p) => {
+                if (p && p.name) {
+                  activeOnlinePlayerNames.add(String(p.name).trim().toLowerCase());
+                }
+              });
+            }
           });
           mpState.serverOnlineCount = totalOnline;
           updateMpStatusBadge();
+
+          if (!mpState.active) {
+            const currentNameLower = (mpNameInputEl.value || "").trim().toLowerCase();
+            if (
+              !userCustomizedPlayerName &&
+              (!currentNameLower || activeOnlinePlayerNames.has(currentNameLower))
+            ) {
+              mpNameInputEl.value = pickUniqueHistoricalSoldierName();
+            }
+            const currentRoomUpper = (mpRoomInputEl.value || "").trim().toUpperCase();
+            if (!userCustomizedRoomCode && activeServerRoomCodes.has(currentRoomUpper)) {
+              updateRoomCodeForSelectedMap(configuredMapType, true);
+            }
+          }
 
           if (!isSetupOpen) return;
 
@@ -5155,6 +5406,7 @@
                 const pCount = Array.isArray(rm.players) ? rm.players.length : 1;
                 const mapLbl = getMapSizeLabel(rm.worldLimit || 80, rm.mapType);
                 const hcLbl = rm.hardcoreMode ? " &bull; ⚡ Hardcore" : "";
+                const lockBadge = rm.hasPassword ? "🔒 " : "";
                 const remStr =
                   typeof rm.remainingSec === "number"
                     ? formatTimeMMSS(rm.remainingSec)
@@ -5162,10 +5414,10 @@
                 return `
                   <div class="match-row">
                     <div class="match-info">
-                      <span class="match-title">${code} &bull; Host: ${host}</span>
+                      <span class="match-title">${lockBadge}${code} &bull; Host: ${host}</span>
                       <span class="match-meta">${rm.greenTotal}v${rm.tanTotal} &bull; ${mapLbl}${hcLbl} &bull; ${remStr} left &bull; ${pCount} Online</span>
                     </div>
-                    <button type="button" class="join-row-btn" data-room="${code}">Join</button>
+                    <button type="button" class="join-row-btn" data-room="${code}" data-locked="${rm.hasPassword ? "1" : "0"}">Join</button>
                   </div>
                 `;
               })
@@ -5174,9 +5426,24 @@
             activeMatchesListEl.querySelectorAll(".join-row-btn").forEach((btn) => {
               btn.addEventListener("click", () => {
                 const selectedRoom = btn.getAttribute("data-room");
+                const isLocked = btn.getAttribute("data-locked") === "1";
                 if (selectedRoom) {
                   mpRoomInputEl.value = selectedRoom;
-                  connectToMultiplayerRoom("join_room", selectedRoom);
+                  let overridePassword = null;
+                  if (isLocked && mpPasswordInputEl && !mpPasswordInputEl.value.trim()) {
+                    if (typeof window.prompt === "function") {
+                      const entered = window.prompt(`Enter password for room ${selectedRoom}:`);
+                      if (entered === null) return;
+                      mpPasswordInputEl.value = entered.trim();
+                      overridePassword = entered.trim();
+                    } else {
+                      mpModalStatusEl.textContent = `🔒 Enter password for ${selectedRoom}`;
+                      mpModalStatusEl.style.color = "#ffd584";
+                      mpPasswordInputEl.focus();
+                      return;
+                    }
+                  }
+                  connectToMultiplayerRoom("join_room", selectedRoom, overridePassword);
                 }
               });
             });
@@ -5222,9 +5489,11 @@
       mpState.ws = null;
       mpState.roster = null;
       updateMpStatusBadge();
+      updatePerfHudDOM();
     }
 
     function readHostSetupInputs() {
+      const prevMapType = configuredMapType;
       configuredFriendlyCount = clampInt(friendlyInputEl.value, 0, 999999, 3);
       configuredEnemyCount = clampInt(enemyInputEl.value, 1, 999999, 4);
       friendlyInputEl.value = configuredFriendlyCount;
@@ -5241,19 +5510,47 @@
           mapSizeSelectEl.value = String(configuredMapLimit);
         }
       }
+      if (prevMapType !== configuredMapType) {
+        userCustomizedRoomCode = false;
+        updateRoomCodeForSelectedMap(configuredMapType, true);
+      } else {
+        updateRoomCodeForSelectedMap(configuredMapType, false);
+      }
       configuredHardcoreMode = Boolean(hardcoreCheckboxEl && hardcoreCheckboxEl.checked);
       configuredDurationSec = clampInt(timeLimitSelectEl.value, 60, 1800, 300);
     }
 
-    function connectToMultiplayerRoom(mode, customRoomCode) {
+    function connectToMultiplayerRoom(mode, customRoomCode, customPassword) {
       savePlayerProfileToStorage();
       readHostSetupInputs();
 
       const wsUrl = (mpUrlInputEl.value || "wss://toy-soldiers.duckdns.org").trim();
-      const playerName = (mpNameInputEl.value || "Soldier").trim() || "Soldier";
-      const roomCode = (customRoomCode || mpRoomInputEl.value || "SAND1")
+      const playerName =
+        (mpNameInputEl.value || "").trim() || pickUniqueHistoricalSoldierName();
+      mpNameInputEl.value = playerName;
+
+      // If hosting a new match and the user didn't type a custom code, ensure we don't collide with an active room
+      if (mode === "host_room" && !userCustomizedRoomCode) {
+        const cur = (mpRoomInputEl.value || "").trim().toUpperCase();
+        if (!cur || activeServerRoomCodes.has(cur)) {
+          updateRoomCodeForSelectedMap(configuredMapType, true);
+        }
+      }
+
+      const roomCode = (
+        customRoomCode ||
+        mpRoomInputEl.value ||
+        generateUniqueRoomCode(configuredMapType)
+      )
         .trim()
         .toUpperCase();
+      mpRoomInputEl.value = roomCode;
+      const roomPassword =
+        typeof customPassword === "string"
+          ? customPassword
+          : mpPasswordInputEl
+          ? (mpPasswordInputEl.value || "").trim()
+          : "";
       const chosenTeam = mpTeamSelectEl.value === "tan" ? "tan" : "green";
 
       disconnectMultiplayer();
@@ -5279,6 +5576,7 @@
           JSON.stringify({
             type: mode === "host_room" ? "host_room" : "join_room",
             roomCode,
+            password: roomPassword,
             name: playerName,
             team: chosenTeam,
             greenTotal: configuredFriendlyCount + 1,
@@ -5466,6 +5764,9 @@
           s.isPlayer = false;
           s.isRemotePlayer = false;
           s.rawPlayerName = "";
+          if (s.botName) {
+            s.name = s.botName;
+          }
         }
         updateSoldierOverheadName(s);
       });
@@ -5478,6 +5779,17 @@
 
     function handleNetworkMessage(msg) {
       switch (msg.type) {
+        case "join_error": {
+          mpModalStatusEl.textContent = msg.message || "Unable to join room";
+          mpModalStatusEl.style.color = "#ff7b7b";
+          showMpToast(`🔒 ${msg.message || "Unable to join room"}`, "#ff7b7b");
+          if (mpPasswordInputEl) {
+            mpPasswordInputEl.focus();
+          }
+          disconnectMultiplayer();
+          break;
+        }
+
         case "room_joined": {
           mpState.active = true;
           mpState.clientId = msg.clientId;
@@ -5486,6 +5798,10 @@
           mpState.roster = msg.roster;
           mpState.roomCode = msg.roster.roomCode;
           mpState.hostId = msg.roster.hostId;
+          if (mpRoomInputEl && msg.roster.roomCode) {
+            mpRoomInputEl.value = msg.roster.roomCode;
+          }
+          updatePerfHudDOM();
 
           if (msg.roster.mapType === "shoebox" || Number(msg.roster.worldLimit) <= 50) {
             configuredMapType = "shoebox";
@@ -5995,10 +6311,7 @@
       }
 
       if (instructionsTitleEl) {
-        const mapTitle =
-          builtMapType === "shoebox"
-            ? "THE SHOE BOX — BEDROOM CQC"
-            : "BACKYARD SANDBOX BATTLE";
+        const mapTitle = builtMapType === "shoebox" ? "SHOEBOX" : "SANDBOX";
         instructionsTitleEl.textContent = isHardcoreActive()
           ? `${mapTitle} [HARDCORE]`
           : mapTitle;
@@ -6334,18 +6647,27 @@
       const dt = Math.min(rawDt, 0.1);
       lastTime = now;
 
-      // Update FPS, Frame Time, WebSocket Ping & Network Bandwidth Telemetry
+      // Update FPS, Frame Time, Subsystem Breakdown, WebSocket Ping & Network Bandwidth Telemetry
       perfTelemetry.totalFrames += 1;
       perfTelemetry.frames += 1;
       perfTelemetry.accumTime += rawDt;
       if (perfTelemetry.accumTime >= 0.5) {
-        perfTelemetry.fps = perfTelemetry.frames / perfTelemetry.accumTime;
-        perfTelemetry.frameMs = (perfTelemetry.accumTime / perfTelemetry.frames) * 1000;
+        const fCount = Math.max(1, perfTelemetry.frames);
+        perfTelemetry.fps = fCount / perfTelemetry.accumTime;
+        perfTelemetry.frameMs = (perfTelemetry.accumTime / fCount) * 1000;
+        perfTelemetry.physicsMs = perfTelemetry._physAccum / fCount;
+        perfTelemetry.aiMs = perfTelemetry._aiAccum / fCount;
+        perfTelemetry.animMs = perfTelemetry._animAccum / fCount;
+        perfTelemetry.renderMs = perfTelemetry._renderAccum / fCount;
         perfTelemetry.pktRate = Math.round(perfTelemetry.pktsThisSec / perfTelemetry.accumTime);
         perfTelemetry.kbRate =
           perfTelemetry.bytesThisSec / 1024 / perfTelemetry.accumTime;
         perfTelemetry.frames = 0;
         perfTelemetry.accumTime = 0;
+        perfTelemetry._physAccum = 0;
+        perfTelemetry._aiAccum = 0;
+        perfTelemetry._animAccum = 0;
+        perfTelemetry._renderAccum = 0;
         perfTelemetry.pktsThisSec = 0;
         perfTelemetry.bytesThisSec = 0;
         updatePerfHudDOM();
@@ -6355,7 +6677,26 @@
         perfTelemetry.pingTimer += dt;
         if (perfTelemetry.pingTimer >= 1.2) {
           perfTelemetry.pingTimer = 0;
-          sendNetMessage({ type: "ping", clientTime: performance.now() });
+          sendNetMessage({
+            type: "ping",
+            clientTime: performance.now(),
+            clientPerf: getClientPerfSnapshot()
+          });
+        }
+      } else if (
+        window.location.host &&
+        !window.location.host.endsWith("github.io") &&
+        typeof fetch === "function"
+      ) {
+        // Stream solo-mode client performance breakdown to local /api/perf/client every 2s
+        perfTelemetry.soloReportTimer += dt;
+        if (perfTelemetry.soloReportTimer >= 2.0) {
+          perfTelemetry.soloReportTimer = 0;
+          fetch("/api/perf/client", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(getClientPerfSnapshot())
+          }).catch(() => {});
         }
       }
 
@@ -6405,7 +6746,9 @@
       }
 
       // Rebuild O(N) 2D Spatial Hash Grid once per frame before soldier physics/collision checks
+      const tPhysStart = performance.now();
       rebuildSpatialHashGrid();
+      perfTelemetry._physAccum += performance.now() - tPhysStart;
 
       // ----- PLAYER UPDATE -----
       if (player) {
@@ -6460,8 +6803,13 @@
             player.moveBlend = Math.max(0, player.moveBlend - dt * 6);
           }
 
+          const tP0 = performance.now();
           updateSoldierPhysicsAndCollisions(player, dt);
+          const tP1 = performance.now();
           animateSoldier(player, dt, isMoving, strideDir);
+          const tP2 = performance.now();
+          perfTelemetry._physAccum += tP1 - tP0;
+          perfTelemetry._animAccum += tP2 - tP1;
 
           // Broadcast local player's state to multiplayer room (~25 Hz)
           if (mpState.active) {
@@ -6486,12 +6834,18 @@
             firePlayerWeapon();
           }
         } else {
+          const tP0 = performance.now();
           updateSoldierPhysicsAndCollisions(player, dt);
+          const tP1 = performance.now();
           animateSoldier(player, dt, false, 0);
+          const tP2 = performance.now();
+          perfTelemetry._physAccum += tP1 - tP0;
+          perfTelemetry._animAccum += tP2 - tP1;
         }
       }
 
       // ----- REMOTE PLAYERS & AI SQUADS UPDATE (WITH AUTO-RESPAWN) -----
+      const tAiLoopStart = performance.now();
       const isHost = isMultiplayerAuthority();
       for (const s of soldiers) {
         if (s.isPlayer) continue;
@@ -6546,6 +6900,7 @@
           updateAISoldier(s, dt);
         }
       }
+      perfTelemetry._aiAccum += performance.now() - tAiLoopStart;
 
       // If we are the Multiplayer Room Host, broadcast compact quantized AI states & beach ball
       if (mpState.active && isHost && !isSetupOpen) {
@@ -6672,7 +7027,9 @@
     });
 
     engine.runRenderLoop(() => {
+      const rStart = performance.now();
       scene.render();
+      perfTelemetry._renderAccum += performance.now() - rStart;
     });
 
     function handleViewportResize() {
