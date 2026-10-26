@@ -629,7 +629,7 @@
             <option value="tan">Tan Team</option>
           </select>
         </div>
-        <input id="mp-url-input" class="count-input" type="text" placeholder="ws://localhost:3000" style="width: 100%; font-size: 12.5px; text-align: left; padding: 0 10px;" />
+        <input id="mp-url-input" class="count-input" type="text" placeholder="wss://toy-soldiers.duckdns.org" style="width: 100%; font-size: 12.5px; text-align: left; padding: 0 10px;" />
       </div>
 
       <div style="display: flex; gap: 10px; margin-top: 8px;">
@@ -2944,12 +2944,12 @@
     const mpStatusBadgeEl = document.getElementById("mp-status-badge");
     const mpModalStatusEl = document.getElementById("mp-modal-status");
 
-    // Pre-fill WebSocket URL based on current page location
-    if (window.location.host) {
+    // Pre-fill WebSocket URL based on current page location (or default to toy-soldiers.duckdns.org)
+    if (window.location.host && !window.location.host.endsWith("github.io")) {
       const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
       mpUrlInputEl.value = `${proto}//${window.location.host}`;
     } else {
-      mpUrlInputEl.value = "ws://localhost:3000";
+      mpUrlInputEl.value = "wss://toy-soldiers.duckdns.org";
     }
 
     function updateMpStatusBadge() {
