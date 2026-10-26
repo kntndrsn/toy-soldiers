@@ -69,12 +69,13 @@ function sanitizeCode(raw) {
   return cleaned || "SAND";
 }
 
-function getOrCreateRoom(roomCode, greenTotal, tanTotal) {
+function getOrCreateRoom(roomCode, greenTotal, tanTotal, hostName) {
   let room = rooms.get(roomCode);
   if (!room) {
     room = {
       code: roomCode,
       hostId: null,
+      hostName: hostName || "Host",
       greenTotal: Math.max(1, Math.min(13, greenTotal || 4)),
       tanTotal: Math.max(1, Math.min(16, tanTotal || 4)),
       clients: new Map(), // Map<clientId, ClientInfo>
@@ -106,6 +107,7 @@ function serializeRoster(room) {
   return {
     roomCode: room.code,
     hostId: room.hostId,
+    hostName: room.hostName || "Host",
     greenTotal: room.greenTotal,
     tanTotal: room.tanTotal,
     matchId: room.matchId,
@@ -149,27 +151,33 @@ wss.on("connection", (ws) => {
     }
 
     switch (msg.type) {
-      // Player joins or creates a multiplayer room
+      // Host creates/configures a room (settings come from the Host device)
+      // or Joiner joins an existing room (inherits the Host's room settings)
+      case "host_room":
       case "join_room": {
         if (currentRoom) {
           removeClientFromRoom(currentRoom, clientId);
         }
 
+        const isHosting = msg.type === "host_room";
         const roomCode = sanitizeCode(msg.roomCode);
         const team = msg.team === "tan" ? "tan" : "green";
         const name = String(msg.name || "Soldier").slice(0, 18);
         const requestedGreen = Number(msg.greenTotal) || 4;
         const requestedTan = Number(msg.tanTotal) || 4;
 
-        const room = getOrCreateRoom(roomCode, requestedGreen, requestedTan);
-        if (!room.hostId) {
+        const room = getOrCreateRoom(roomCode, requestedGreen, requestedTan, name);
+
+        // If this device clicked Host (or room had no host), apply their match settings
+        if (isHosting || !room.hostId) {
           room.hostId = clientId;
+          room.hostName = name;
           room.greenTotal = Math.max(1, Math.min(13, requestedGreen));
           room.tanTotal = Math.max(1, Math.min(16, requestedTan));
         }
 
         const slotIndex = assignSlotForPlayer(room, team);
-        // Expand team total if more humans join than current total
+        // Expand team total only if more humans join than current total
         if (team === "green" && slotIndex + 1 > room.greenTotal) {
           room.greenTotal = slotIndex + 1;
         } else if (team === "tan" && slotIndex + 1 > room.tanTotal) {
@@ -197,10 +205,10 @@ wss.on("connection", (ws) => {
         currentRoom = room;
 
         console.log(
-          `[${new Date().toISOString()}] [Room ${room.code}] ${name} (${clientId}) joined ${team.toUpperCase()} as ${unitId} (${room.clients.size} online)`
+          `[${new Date().toISOString()}] [Room ${room.code}] ${name} (${clientId}) ${isHosting ? "HOSTED" : "joined"} ${team.toUpperCase()} as ${unitId} [${room.greenTotal}v${room.tanTotal}] (${room.clients.size} online)`
         );
 
-        // Send welcome packet to joining client
+        // Send welcome packet to joining/hosting client
         ws.send(
           JSON.stringify({
             type: "room_joined",
@@ -208,6 +216,7 @@ wss.on("connection", (ws) => {
             unitId,
             team,
             slotIndex,
+            isHost: room.hostId === clientId,
             roster: serializeRoster(room)
           })
         );
@@ -322,6 +331,36 @@ wss.on("connection", (ws) => {
         break;
       }
 
+      // Individual player respawns their own soldier without resetting the match
+      case "respawn_unit": {
+        if (!currentRoom) return;
+        const c = currentRoom.clients.get(clientId);
+        if (!c) return;
+
+        c.health = 100;
+        c.alive = true;
+        c.x = Number(msg.x) || 0;
+        c.y = Number(msg.y) || 0;
+        c.z = Number(msg.z) || (c.team === "green" ? -30 : 28);
+        c.yaw = Number(msg.yaw) || (c.team === "green" ? 0 : Math.PI);
+
+        broadcastToRoom(
+          currentRoom,
+          {
+            type: "unit_respawned",
+            unitId: c.unitId,
+            playerName: c.name,
+            team: c.team,
+            x: c.x,
+            y: c.y,
+            z: c.z,
+            yaw: c.yaw
+          },
+          clientId
+        );
+        break;
+      }
+
       // Restart match for everyone in the room
       case "restart_match": {
         if (!currentRoom) return;
@@ -372,8 +411,9 @@ function removeClientFromRoom(room, clientId) {
 
   // Reassign host if the previous host left
   if (room.hostId === clientId) {
-    const nextHost = room.clients.keys().next().value;
-    room.hostId = nextHost || null;
+    const nextEntry = room.clients.values().next().value;
+    room.hostId = nextEntry ? nextEntry.id : null;
+    room.hostName = nextEntry ? nextEntry.name : "Host";
   }
 
   broadcastToRoom(room, {

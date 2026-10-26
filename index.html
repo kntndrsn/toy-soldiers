@@ -578,6 +578,65 @@
       letter-spacing: 0.3px;
     }
 
+    /* Active Matches Browser List in Setup Modal */
+    #active-matches-box {
+      background: rgba(0, 0, 0, 0.38);
+      border: 1px solid rgba(122, 215, 255, 0.35);
+      border-radius: 8px;
+      padding: 8px 10px;
+      max-height: 135px;
+      overflow-y: auto;
+      text-align: left;
+    }
+
+    .match-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 8px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.06);
+      margin-bottom: 6px;
+      gap: 8px;
+    }
+
+    .match-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .match-info {
+      display: flex;
+      flex-direction: column;
+      font-size: 12.5px;
+      line-height: 1.35;
+    }
+
+    .match-title {
+      font-weight: bold;
+      color: #98ff8c;
+    }
+
+    .match-meta {
+      font-size: 11.5px;
+      color: #cccccc;
+    }
+
+    .join-row-btn {
+      padding: 6px 14px;
+      font-size: 12.5px;
+      font-weight: bold;
+      color: #ffffff;
+      background: #1d6fd8;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .join-row-btn:hover {
+      background: #2980f2;
+    }
+
     @media (max-width: 768px) {
       #scoreboard {
         top: 12px;
@@ -653,11 +712,27 @@
     <!-- Start-of-Match Team & Multiplayer Configuration Modal -->
     <div id="setup-modal">
       <h2>SANDBOX DEPLOYMENT</h2>
-      <p>Play Solo with AI or join an Online WebSocket Room</p>
+      <p>Configure your soldier, Host a Match, or Join an Active Game</p>
 
+      <!-- Player Identity (Saved in Browser localStorage) -->
+      <div class="setup-field" style="gap: 10px;">
+        <div style="flex: 1;">
+          <div class="setup-field-label" style="color: #7ad7ff;">Your Soldier Name &amp; Team</div>
+          <div class="setup-field-sub">Saved automatically in your browser</div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="mp-name-input" class="count-input" type="text" value="Soldier" placeholder="Your Name" style="width: 125px; font-size: 14px;" />
+          <select id="mp-team-select" class="count-input" style="width: 112px; font-size: 13px;">
+            <option value="green">Green Team</option>
+            <option value="tan">Tan Team</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Host / Solo Match Settings -->
       <div class="setup-field">
         <div>
-          <div class="setup-field-label" style="color: #84ff78;">Friendly AI Teammates</div>
+          <div class="setup-field-label" style="color: #84ff78;">Green Squad Size (Host / Solo)</div>
           <div class="setup-field-sub" id="friendly-summary">You + 3 Friendly = 4 Green Total</div>
         </div>
         <div class="stepper">
@@ -669,7 +744,7 @@
 
       <div class="setup-field">
         <div>
-          <div class="setup-field-label" style="color: #ffd584;">Enemy Tan Soldiers</div>
+          <div class="setup-field-label" style="color: #ffd584;">Tan Squad Size (Host / Solo)</div>
           <div class="setup-field-sub" id="enemy-summary">4 Bad Guys to eliminate</div>
         </div>
         <div class="stepper">
@@ -679,30 +754,34 @@
         </div>
       </div>
 
-      <!-- Multiplayer Room Configuration -->
-      <div class="setup-field" style="flex-direction: column; align-items: stretch; gap: 8px;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span class="setup-field-label" style="color: #7ad7ff;">Online Multiplayer Room</span>
-          <span id="mp-modal-status" style="font-size: 12px; color: #cccccc;">WebSocket Server</span>
-        </div>
-        <div style="display: flex; gap: 8px;">
-          <input id="mp-name-input" class="count-input" type="text" value="Soldier" placeholder="Name" style="flex: 1; width: auto; font-size: 14px;" />
-          <input id="mp-room-input" class="count-input" type="text" value="SAND1" placeholder="Room" style="width: 86px; font-size: 14px; text-transform: uppercase;" />
-          <select id="mp-team-select" class="count-input" style="width: 112px; font-size: 13px;">
-            <option value="green">Green Team</option>
-            <option value="tan">Tan Team</option>
-          </select>
-        </div>
-        <input id="mp-url-input" class="count-input" type="text" placeholder="wss://toy-soldiers.duckdns.org" style="width: 100%; font-size: 12.5px; text-align: left; padding: 0 10px;" />
-      </div>
-
-      <div style="display: flex; gap: 10px; margin-top: 8px;">
-        <button class="primary-btn" id="start-match-btn" type="button" style="flex: 1; font-size: 15px;">
+      <!-- Host or Play Solo Buttons -->
+      <div style="display: flex; gap: 8px; margin-bottom: 14px; align-items: center;">
+        <button class="primary-btn" id="start-match-btn" type="button" style="flex: 1; font-size: 14.5px; background: #3b6e36;">
           Play Solo
         </button>
-        <button class="primary-btn" id="join-mp-btn" type="button" style="flex: 1.2; font-size: 15px; background: #1d6fd8;">
-          Join / Host Online
+        <input id="mp-room-input" class="count-input" type="text" value="SAND1" placeholder="Room" title="Room Code to Host" style="width: 82px; height: 41px; font-size: 14px; text-transform: uppercase;" />
+        <button class="primary-btn" id="host-mp-btn" type="button" style="flex: 1.25; font-size: 14.5px; background: #2e8b24;">
+          Host Online Match
         </button>
+      </div>
+
+      <!-- Join Active Online Match Browser -->
+      <div class="setup-field" style="flex-direction: column; align-items: stretch; gap: 8px; margin-bottom: 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span class="setup-field-label" style="color: #7ad7ff;">Join an Active Match</span>
+          <span id="mp-modal-status" style="font-size: 12px; color: #cccccc;">Checking server...</span>
+        </div>
+        <div id="active-matches-box">
+          <div id="active-matches-list" style="font-size: 12.5px; color: #bbbbbb;">
+            No active matches yet — click <strong>Host Online Match</strong> above to start one!
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="mp-url-input" class="count-input" type="text" placeholder="wss://toy-soldiers.duckdns.org" style="flex: 1; width: auto; height: 28px; font-size: 11.5px; text-align: left; padding: 0 8px; opacity: 0.75;" />
+          <button class="join-row-btn" id="join-mp-btn" type="button" style="height: 28px; padding: 0 12px; font-size: 12px;">
+            Join Room Code
+          </button>
+        </div>
       </div>
     </div>
 
@@ -1077,6 +1156,9 @@
 
       const baseH = getSandHeight(centerX, centerZ);
       obstacles.push({
+        cx: centerX,
+        cz: centerZ,
+        radius: Math.hypot(width / 2, depth / 2),
         minX: centerX - width / 2,
         maxX: centerX + width / 2,
         minZ: centerZ - depth / 2,
@@ -2197,6 +2279,7 @@
 
           const unit = {
             unitId,
+            slotIndex: i,
             name: unitName,
             team,
             isPlayer: isLocalPlayer,
@@ -2204,6 +2287,11 @@
             model,
             position: model.root.position,
             netTargetPos: new BABYLON.Vector3(
+              pt.x,
+              getSandHeight(pt.x, pt.z),
+              pt.z
+            ),
+            lastProgressPos: new BABYLON.Vector3(
               pt.x,
               getSandHeight(pt.x, pt.z),
               pt.z
@@ -2229,7 +2317,10 @@
             fallDir: 1,
             fallTwist: ((i % 2) - 0.5) * 0.9,
             strafeDir: i % 2 === 0 ? 1 : -1,
-            strafeTimer: 1.5 + (i % 3) * 0.6
+            strafeTimer: 1.5 + (i % 3) * 0.6,
+            flankSign: pt.x >= 0 ? 1 : -1,
+            stuckTimer: 0,
+            unstickTimer: 0
           };
 
           model.hitbox.metadata = { soldier: unit };
@@ -2563,8 +2654,10 @@
 
     // ----- DESKTOP KEYBOARD & MOUSE -----
     window.addEventListener("keydown", (e) => {
+      const tag = document.activeElement ? document.activeElement.tagName : "";
+      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
       if (e.code in keys) keys[e.code] = true;
-      if (e.code === "KeyR" && gameEnded && !isSetupOpen) resetGame();
+      if (e.code === "KeyR" && gameEnded && !isSetupOpen) handleRetryAction();
       if (e.code === "KeyM") openSetupModal();
     });
 
@@ -2999,6 +3092,7 @@
     const friendlySummaryEl = document.getElementById("friendly-summary");
     const enemySummaryEl = document.getElementById("enemy-summary");
     const startMatchBtn = document.getElementById("start-match-btn");
+    const hostMpBtn = document.getElementById("host-mp-btn");
     const joinMpBtn = document.getElementById("join-mp-btn");
     const mpNameInputEl = document.getElementById("mp-name-input");
     const mpRoomInputEl = document.getElementById("mp-room-input");
@@ -3006,9 +3100,38 @@
     const mpUrlInputEl = document.getElementById("mp-url-input");
     const mpStatusBadgeEl = document.getElementById("mp-status-badge");
     const mpModalStatusEl = document.getElementById("mp-modal-status");
+    const activeMatchesListEl = document.getElementById("active-matches-list");
     const mpToastContainerEl = document.getElementById("mp-toast-container");
     const onlineRosterPanelEl = document.getElementById("online-roster-panel");
     const onlineRosterListEl = document.getElementById("online-roster-list");
+
+    // Load saved player name & preferred team from browser localStorage
+    const NAME_STORAGE_KEY = "toy_soldiers_player_name";
+    const TEAM_STORAGE_KEY = "toy_soldiers_player_team";
+    try {
+      const savedName = localStorage.getItem(NAME_STORAGE_KEY);
+      if (savedName && savedName.trim()) {
+        mpNameInputEl.value = savedName.trim().slice(0, 18);
+      }
+      const savedTeam = localStorage.getItem(TEAM_STORAGE_KEY);
+      if (savedTeam === "green" || savedTeam === "tan") {
+        mpTeamSelectEl.value = savedTeam;
+      }
+    } catch (err) {}
+
+    function savePlayerProfileToStorage() {
+      try {
+        const cleanName = (mpNameInputEl.value || "").trim().slice(0, 18);
+        if (cleanName) {
+          localStorage.setItem(NAME_STORAGE_KEY, cleanName);
+        }
+        localStorage.setItem(TEAM_STORAGE_KEY, mpTeamSelectEl.value);
+      } catch (err) {}
+    }
+
+    mpNameInputEl.addEventListener("input", savePlayerProfileToStorage);
+    mpNameInputEl.addEventListener("change", savePlayerProfileToStorage);
+    mpTeamSelectEl.addEventListener("change", savePlayerProfileToStorage);
 
     function showMpToast(text, borderColor = "#7ad7ff") {
       if (!mpToastContainerEl) return;
@@ -3021,6 +3144,14 @@
         toast.style.opacity = "0";
         setTimeout(() => toast.remove(), 320);
       }, 4200);
+    }
+
+    function escapeHtml(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
     }
 
     function pollServerRoomsPreview() {
@@ -3036,20 +3167,49 @@
         .then((data) => {
           if (!data || !Array.isArray(data.rooms)) return;
           if (data.rooms.length === 0) {
-            mpModalStatusEl.textContent = "Server Online (0 active rooms)";
+            mpModalStatusEl.textContent = "Server Online • 0 active matches";
             mpModalStatusEl.style.color = "#84ff78";
+            activeMatchesListEl.innerHTML =
+              'No active matches yet — click <strong>Host Online Match</strong> above to start one!';
           } else {
-            const summary = data.rooms
-              .map((rm) => `${rm.roomCode}: ${rm.players.length} player(s)`)
-              .join(" | ");
-            mpModalStatusEl.textContent = `Active: ${summary}`;
+            mpModalStatusEl.textContent = `Server Online • ${data.rooms.length} active match${data.rooms.length === 1 ? "" : "es"}`;
             mpModalStatusEl.style.color = "#7ad7ff";
+
+            activeMatchesListEl.innerHTML = data.rooms
+              .map((rm) => {
+                const code = escapeHtml(rm.roomCode);
+                const host = escapeHtml(rm.hostName || "Host");
+                const pCount = Array.isArray(rm.players) ? rm.players.length : 1;
+                return `
+                  <div class="match-row">
+                    <div class="match-info">
+                      <span class="match-title">Room ${code} &bull; Hosted by ${host}</span>
+                      <span class="match-meta">${rm.greenTotal} Green vs ${rm.tanTotal} Tan &bull; ${pCount} Player${pCount === 1 ? "" : "s"} Online</span>
+                    </div>
+                    <button type="button" class="join-row-btn" data-room="${code}">Join Match</button>
+                  </div>
+                `;
+              })
+              .join("");
+
+            activeMatchesListEl.querySelectorAll(".join-row-btn").forEach((btn) => {
+              btn.addEventListener("click", () => {
+                const selectedRoom = btn.getAttribute("data-room");
+                if (selectedRoom) {
+                  mpRoomInputEl.value = selectedRoom;
+                  connectToMultiplayerRoom("join_room", selectedRoom);
+                }
+              });
+            });
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          mpModalStatusEl.textContent = "Server unreachable";
+          mpModalStatusEl.style.color = "#ff9e7b";
+        });
     }
-    setInterval(pollServerRoomsPreview, 4000);
-    setTimeout(pollServerRoomsPreview, 300);
+    setInterval(pollServerRoomsPreview, 2500);
+    setTimeout(pollServerRoomsPreview, 250);
 
     // Pre-fill WebSocket URL based on current page location (or default to toy-soldiers.duckdns.org)
     if (window.location.host && !window.location.host.endsWith("github.io")) {
@@ -3083,18 +3243,22 @@
       updateMpStatusBadge();
     }
 
-    function connectAndJoinMultiplayerRoom() {
+    function connectToMultiplayerRoom(mode, customRoomCode) {
+      savePlayerProfileToStorage();
       refreshSetupSummaries();
       configuredFriendlyCount = clampInt(friendlyInputEl.value, 0, 12, 3);
       configuredEnemyCount = clampInt(enemyInputEl.value, 1, 16, 4);
 
-      const wsUrl = (mpUrlInputEl.value || "ws://localhost:3000").trim();
-      const playerName = (mpNameInputEl.value || "Soldier").trim();
-      const roomCode = (mpRoomInputEl.value || "SAND1").trim().toUpperCase();
+      const wsUrl = (mpUrlInputEl.value || "wss://toy-soldiers.duckdns.org").trim();
+      const playerName = (mpNameInputEl.value || "Soldier").trim() || "Soldier";
+      const roomCode = (customRoomCode || mpRoomInputEl.value || "SAND1")
+        .trim()
+        .toUpperCase();
       const chosenTeam = mpTeamSelectEl.value === "tan" ? "tan" : "green";
 
       disconnectMultiplayer();
-      mpModalStatusEl.textContent = "Connecting...";
+      mpModalStatusEl.textContent =
+        mode === "host_room" ? `Hosting ${roomCode}...` : `Joining ${roomCode}...`;
       mpModalStatusEl.style.color = "#ffd584";
 
       let ws;
@@ -3109,11 +3273,11 @@
       mpState.ws = ws;
 
       ws.addEventListener("open", () => {
-        mpModalStatusEl.textContent = "Connected! Joining room...";
+        mpModalStatusEl.textContent = "Connected!";
         mpModalStatusEl.style.color = "#84ff78";
         ws.send(
           JSON.stringify({
-            type: "join_room",
+            type: mode === "host_room" ? "host_room" : "join_room",
             roomCode,
             name: playerName,
             team: chosenTeam,
@@ -3149,6 +3313,65 @@
       });
     }
 
+    // Restores a single soldier (local or remote) to full health & upright pose at (x, y, z)
+    function respawnSingleSoldier(unit, x, y, z, yaw) {
+      if (!unit) return;
+      unit.health = unit.maxHealth;
+      unit.alive = true;
+      unit.fallProgress = 0;
+      unit.moveBlend = 0;
+      unit.velocity.set(0, 0, 0);
+      unit.position.set(x, y, z);
+      unit.netTargetPos.set(x, y, z);
+      unit.lastProgressPos.set(x, y, z);
+      unit.yaw = yaw;
+      unit.pitch = unit.team === "green" ? 0.04 : 0;
+
+      unit.model.root.rotation.y = yaw;
+      unit.model.pelvis.position.y = 0.96;
+      unit.model.pelvis.rotation.set(0, 0, 0);
+      unit.model.spine.rotation.set(0, 0, 0);
+      unit.model.hitbox.isPickable = true;
+
+      if (unit.model.overheadGroup) {
+        unit.model.overheadGroup.setEnabled(true);
+      }
+      if (unit.model.overheadBarFill) {
+        unit.model.overheadBarFill.scaling.x = 1;
+      }
+
+      animateSoldier(unit, 0.016, false, 0);
+      updateHUD();
+    }
+
+    // Respawns ONLY the local player in multiplayer without resetting the match for others
+    function respawnLocalPlayer() {
+      if (!player) return;
+      const teamCount = soldiers.filter((s) => s.team === player.team).length || 4;
+      const pt = getFormationPoint(player.team, player.slotIndex || 0, teamCount);
+      const y = getSandHeight(pt.x, pt.z);
+      const yaw = player.team === "green" ? 0 : Math.PI;
+
+      respawnSingleSoldier(player, pt.x, y, pt.z, yaw);
+
+      gameEnded = false;
+      matchVictory = false;
+      document.body.classList.remove("modal-open");
+      endMessageEl.style.display = "none";
+
+      if (mpState.active) {
+        sendNetMessage({
+          type: "respawn_unit",
+          unitId: player.unitId,
+          x: pt.x,
+          y,
+          z: pt.z,
+          yaw
+        });
+      }
+
+      tryLockPointer();
+    }
     function syncRosterHumanFlags(roster) {
       if (!roster || !Array.isArray(roster.players)) return;
       const humanMap = new Map();
@@ -3307,6 +3530,17 @@
           break;
         }
 
+        case "unit_respawned": {
+          const target = soldiersById.get(msg.unitId);
+          if (!target) return;
+          respawnSingleSoldier(target, msg.x, msg.y, msg.z, msg.yaw);
+          if (msg.playerName) {
+            const tColor = msg.team === "green" ? "#84ff78" : "#ffd584";
+            showMpToast(`🔄 ${msg.playerName} respawned!`, tColor);
+          }
+          break;
+        }
+
         case "ball_impulse": {
           if (physicsBall) {
             physicsBall.velocity.x += msg.vx;
@@ -3391,12 +3625,14 @@
       endMessageEl.style.display = "none";
       setupModalEl.style.display = "block";
       refreshSetupSummaries();
+      pollServerRoomsPreview();
       if (document.pointerLockElement && document.exitPointerLock) {
         document.exitPointerLock();
       }
     }
 
     startMatchBtn.addEventListener("click", () => {
+      savePlayerProfileToStorage();
       disconnectMultiplayer();
       refreshSetupSummaries();
       configuredFriendlyCount = clampInt(friendlyInputEl.value, 0, 12, 3);
@@ -3408,24 +3644,41 @@
       tryLockPointer();
     });
 
-    joinMpBtn.addEventListener("click", () => {
-      connectAndJoinMultiplayerRoom();
+    hostMpBtn.addEventListener("click", () => {
+      connectToMultiplayerRoom("host_room", mpRoomInputEl.value);
     });
 
-    restartBtn.addEventListener("click", () => {
+    joinMpBtn.addEventListener("click", () => {
+      connectToMultiplayerRoom("join_room", mpRoomInputEl.value);
+    });
+
+    let matchVictory = false;
+
+    function handleRetryAction() {
+      // In Multiplayer, if the local player was knocked down (not a full team victory),
+      // respawn ONLY this player without resetting the match for everyone else!
+      if (mpState.active && !matchVictory) {
+        respawnLocalPlayer();
+        return;
+      }
+
       isSetupOpen = false;
       document.body.classList.remove("modal-open");
       setupModalEl.style.display = "none";
       if (mpState.active) {
+        const gTotal = mpState.roster ? mpState.roster.greenTotal : configuredFriendlyCount + 1;
+        const tTotal = mpState.roster ? mpState.roster.tanTotal : configuredEnemyCount;
         sendNetMessage({
           type: "restart_match",
-          greenTotal: configuredFriendlyCount + 1,
-          tanTotal: configuredEnemyCount
+          greenTotal: gTotal,
+          tanTotal: tTotal
         });
       }
       resetGame();
       tryLockPointer();
-    });
+    }
+
+    restartBtn.addEventListener("click", handleRetryAction);
 
     setupAgainBtn.addEventListener("click", openSetupModal);
 
@@ -3539,6 +3792,7 @@
 
     function endGame(victory) {
       gameEnded = true;
+      matchVictory = Boolean(victory);
       document.body.classList.add("modal-open");
       isMouseDown = false;
       isMobileFiring = false;
@@ -3555,17 +3809,26 @@
         endTitleEl.style.color = "#8df57e";
         endSubtitleEl.textContent =
           `Your ${myTeamLabel} Squad eliminated all opposing ${enemyTeamLabel} Soldiers!`;
+        restartBtn.textContent = mpState.active ? "New Round (R)" : "Play Again (R)";
+      } else if (mpState.active) {
+        endTitleEl.textContent = "KNOCKED DOWN!";
+        endTitleEl.style.color = "#ff856b";
+        endSubtitleEl.textContent =
+          "The battle is still going! Respawn your soldier without resetting the match.";
+        restartBtn.textContent = "Respawn Soldier (R)";
       } else {
         endTitleEl.textContent = "GAME OVER";
         endTitleEl.style.color = "#ff6b6b";
         endSubtitleEl.textContent =
           "Your soldier was knocked down in the sandbox battle.";
+        restartBtn.textContent = "Play Again (R)";
       }
       endMessageEl.style.display = "block";
     }
 
     function resetGame() {
       gameEnded = false;
+      matchVictory = false;
       if (!isSetupOpen) {
         document.body.classList.remove("modal-open");
       }
@@ -3574,8 +3837,43 @@
     }
 
     // =========================================================================
-    // 12. AI SQUAD LOGIC (3 GREEN TEAMMATES & 4 TAN ENEMIES)
+    // 12. AI SQUAD LOGIC (WITH SANDCASTLE / OBSTACLE AVOIDANCE & UNSTICK REFLEX)
     // =========================================================================
+    function computeObstacleAvoidance(ai, goalDirX, goalDirZ) {
+      let steerX = 0;
+      let steerZ = 0;
+
+      for (const obs of obstacles) {
+        const dx = ai.position.x - obs.cx;
+        const dz = ai.position.z - obs.cz;
+        const dist = Math.max(0.01, Math.hypot(dx, dz));
+        const safeDist = obs.radius + ai.radius + 2.8;
+
+        if (dist < safeDist) {
+          // Vector from AI toward obstacle center
+          const toObsX = -dx / dist;
+          const toObsZ = -dz / dist;
+          // Check if obstacle is ahead of the AI's desired movement direction
+          const headingDot = toObsX * goalDirX + toObsZ * goalDirZ;
+
+          if (headingDot > -0.25 || dist < obs.radius + ai.radius + 1.0) {
+            const weight = ((safeDist - dist) / safeDist) * 2.6;
+            // Outward radial push away from obstacle center
+            const outX = dx / dist;
+            const outZ = dz / dist;
+            // Tangent vector around obstacle perimeter using the AI's committed flankSign
+            const tanX = -outZ * ai.flankSign;
+            const tanZ = outX * ai.flankSign;
+
+            steerX += (tanX * 1.45 + outX * 0.75) * weight;
+            steerZ += (tanZ * 1.45 + outZ * 0.75) * weight;
+          }
+        }
+      }
+
+      return { x: steerX, z: steerZ };
+    }
+
     function updateAISoldier(ai, dt) {
       if (!ai.alive) {
         updateSoldierPhysicsAndCollisions(ai, dt);
@@ -3622,7 +3920,7 @@
 
       ai.strafeTimer -= dt;
       if (ai.strafeTimer <= 0) {
-        ai.strafeTimer = 1.4 + Math.random() * 1.8;
+        ai.strafeTimer = 1.6 + Math.random() * 1.8;
         ai.strafeDir = Math.random() > 0.5 ? 1 : -1;
       }
 
@@ -3630,7 +3928,12 @@
       const right = new BABYLON.Vector3(Math.cos(ai.yaw), 0, -Math.sin(ai.yaw));
       const moveVec = new BABYLON.Vector3(0, 0, 0);
 
-      if (horizDist > 20 || !canSee) {
+      if (ai.unstickTimer > 0) {
+        // Active unstick maneuver: flank strongly to the side & slightly forward
+        ai.unstickTimer -= dt;
+        moveVec.addInPlace(right.scale(ai.flankSign * 1.25));
+        moveVec.addInPlace(forward.scale(0.35));
+      } else if (horizDist > 20 || !canSee) {
         moveVec.addInPlace(forward);
         moveVec.addInPlace(right.scale(ai.strafeDir * 0.45));
       } else if (horizDist < 8) {
@@ -3640,13 +3943,44 @@
         moveVec.addInPlace(right.scale(ai.strafeDir * 0.75));
       }
 
+      // Blend in smooth obstacle avoidance around the central sandcastle & toys
+      const avoid = computeObstacleAvoidance(
+        ai,
+         dx / horizDist,
+         dz / horizDist
+      );
+      moveVec.x += avoid.x;
+      moveVec.z += avoid.z;
+
       const isMoving = moveVec.lengthSquared() > 0.01;
       if (isMoving) {
         moveVec.normalize().scaleInPlace(ai.speed * dt);
         ai.position.addInPlace(moveVec);
         ai.moveBlend = Math.min(1, ai.moveBlend + dt * 5);
+
+        // Stuck detection: if trying to move for 0.4s without covering 0.45 units, flank & hop
+        ai.stuckTimer += dt;
+        if (ai.stuckTimer >= 0.4) {
+          const movedDist = Math.hypot(
+            ai.position.x - ai.lastProgressPos.x,
+            ai.position.z - ai.lastProgressPos.z
+          );
+          ai.lastProgressPos.copyFrom(ai.position);
+          ai.stuckTimer = 0;
+
+          if (movedDist < 0.45) {
+            ai.flankSign = -ai.flankSign;
+            ai.unstickTimer = 1.1;
+            if (ai.isGrounded) {
+              ai.velocity.y = 6.2;
+              ai.isGrounded = false;
+            }
+          }
+        }
       } else {
         ai.moveBlend = Math.max(0, ai.moveBlend - dt * 5);
+        ai.stuckTimer = 0;
+        ai.lastProgressPos.copyFrom(ai.position);
       }
 
       updateSoldierPhysicsAndCollisions(ai, dt);
