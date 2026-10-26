@@ -5952,6 +5952,25 @@
           break;
         }
 
+        case "remote_players_batch": {
+          if (!Array.isArray(msg.players)) return;
+          for (let i = 0; i < msg.players.length; i++) {
+            const p = msg.players[i];
+            const unit = soldiersById.get(p.unitId);
+            if (!unit || unit.isPlayer) continue;
+            if (!unit.isRemotePlayer) {
+              unit.isRemotePlayer = true;
+              updateSoldierOverheadName(unit);
+            }
+            unit.netTargetPos.set(p.x, p.y, p.z);
+            unit.yaw = p.yaw;
+            unit.pitch = p.pitch;
+            unit.moveBlend = p.moveBlend;
+            unit.strideDir = p.strideDir || 0;
+          }
+          break;
+        }
+
         case "world_state": {
           if (typeof msg.remainingSec === "number") {
             syncMatchTimerFromServer(msg.remainingSec);

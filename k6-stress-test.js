@@ -141,6 +141,7 @@ export function runPlayerSession() {
     }
   };
 
+  const sessionStart = Date.now();
   const wsTarget = `${WS_URL}/?k6vu=${vuId}`;
   const res = ws.connect(wsTarget, params, function (socket) {
     let myUnitId = `${team}_0`;
@@ -334,6 +335,11 @@ export function runPlayerSession() {
     "WebSocket handshake status is 101": (r) => r && r.status === 101
   });
   wsConnectSuccess.add(ok);
+
+  // Prevent 0ms tight reconnect spin if the server or proxy closes the socket early
+  if (Date.now() - sessionStart < 1000) {
+    sleep(1);
+  }
 }
 
 // ============================================================================

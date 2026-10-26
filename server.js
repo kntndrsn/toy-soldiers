@@ -28,12 +28,17 @@ const FAVICON_FILES = new Set([
 // 1. DDoS PROTECTION, RATE LIMITING & PERFORMANCE PROFILER STATE
 // ============================================================================
 const MAX_WS_PAYLOAD_BYTES = 16 * 1024; // 16 KB max frame size
-const MAX_CONN_PER_IP = Number(process.env.MAX_CONN_PER_IP) || 24;
+const MAX_CONN_PER_IP = Number(process.env.MAX_CONN_PER_IP) || 128;
 const MAX_WS_MSGS_PER_SEC = Number(process.env.MAX_WS_MSGS_PER_SEC) || 100;
 const MAX_WS_BYTES_PER_SEC = Number(process.env.MAX_WS_BYTES_PER_SEC) || 96 * 1024;
 const MAX_ROOM_ACTIONS_PER_10S = 10;
 const MAX_HTTP_REQ_PER_10S = 120;
 const IP_BAN_DURATION_MS = 30 * 1000;
+
+// Cached process memory telemetry (updated once per second to avoid synchronous OS syscalls on every ping)
+let cachedRssMB = Math.round((process.memoryUsage().rss / (1024 * 1024)) * 10) / 10;
+let cachedHeapUsedMB = Math.round((process.memoryUsage().heapUsed / (1024 * 1024)) * 10) / 10;
+let cachedHeapTotalMB = Math.round((process.memoryUsage().heapTotal / (1024 * 1024)) * 10) / 10;
 
 // Map<ip, { connCount, httpCount, httpWindowStart, bannedUntil, violations }>
 const ipSecurityState = new Map();
@@ -174,7 +179,6 @@ function getTakenPlayerNames() {
 
 function buildPerfApiPayload() {
   const now = Date.now();
-  const mem = process.memoryUsage();
   const ticks = perfMetrics.tickHistoryMs;
   const avgTick =
     ticks.length > 0
@@ -271,9 +275,9 @@ function buildPerfApiPayload() {
       tickAvgMs: Number(avgTick.toFixed(3)),
       tickP95Ms: Number(p95Tick.toFixed(3)),
       tickMaxMs: Number(maxTick.toFixed(3)),
-      rssMB: Number((mem.rss / (1024 * 1024)).toFixed(1)),
-      heapUsedMB: Number((mem.heapUsed / (1024 * 1024)).toFixed(1)),
-      heapTotalMB: Number((mem.heapTotal / (1024 * 1024)).toFixed(1))
+      rssMB: cachedRssMB,
+      heapUsedMB: cachedHeapUsedMB,
+      heapTotalMB: cachedHeapTotalMB
     },
     network: {
       inboundPktPerSec: perfMetrics.inboundPktsSec,
@@ -941,11 +945,15 @@ function getUnitStat(room, unitId) {
   if (!st) {
     st = { kills: 0, deaths: 0, health: 100, alive: true };
     room.unitStats.set(unitId, st);
+    room.statsDirty = true;
   }
   return st;
 }
 
 function serializeUnitStats(room) {
+  if (!room.statsDirty && room.cachedUnitStats) {
+    return room.cachedUnitStats;
+  }
   const obj = {};
   for (const [unitId, st] of room.unitStats.entries()) {
     obj[unitId] = {
@@ -955,6 +963,8 @@ function serializeUnitStats(room) {
       alive: st.alive
     };
   }
+  room.cachedUnitStats = obj;
+  room.statsDirty = false;
   return obj;
 }
 
@@ -972,6 +982,7 @@ function resetRoomMatchState(room) {
     c.health = 100;
     c.alive = true;
   }
+  room.statsDirty = true;
 }
 
 function getOrCreateRoom(
@@ -1006,6 +1017,9 @@ function getOrCreateRoom(
       matchEndTime: Date.now() + dur * 1000,
       matchEnded: false,
       unitStats: new Map(),
+      statsDirty: true,
+      cachedUnitStats: null,
+      dirtyPlayers: new Map(), // Map<clientId, PlayerStateDelta> for 25 Hz batching in 3+ player rooms
       clients: new Map(), // Map<clientId, ClientInfo>
       matchId: 1
     };
@@ -1279,9 +1293,7 @@ wss.on("connection", (ws, req) => {
         room.clients.set(clientId, clientInfo);
         currentRoom = room;
 
-        console.log(
-          `[${new Date().toISOString()}] [Room ${room.code}] ${name} (${clientId}) ${isHosting ? "HOSTED" : "joined"} ${team.toUpperCase()} as ${unitId} [${room.greenTotal}v${room.tanTotal}] (${room.clients.size} online)`
-        );
+        const rosterSnapshot = serializeRoster(room);
 
         // Send welcome packet to joining/hosting client
         safeSend(ws, {
@@ -1291,20 +1303,22 @@ wss.on("connection", (ws, req) => {
           team,
           slotIndex,
           isHost: room.hostId === clientId,
-          roster: serializeRoster(room)
+          roster: rosterSnapshot
         });
 
-        // Notify everyone else in the room
-        broadcastToRoom(
-          room,
-          {
-            type: "roster_update",
-            event: "player_joined",
-            player: { id: clientId, name, team, unitId },
-            roster: serializeRoster(room)
-          },
-          clientId
-        );
+        // Notify everyone else in the room (skip serialization if solo host)
+        if (room.clients.size > 1) {
+          broadcastToRoom(
+            room,
+            {
+              type: "roster_update",
+              event: "player_joined",
+              player: { id: clientId, name, team, unitId },
+              roster: rosterSnapshot
+            },
+            clientId
+          );
+        }
         break;
       }
 
@@ -1314,16 +1328,37 @@ wss.on("connection", (ws, req) => {
         const c = currentRoom.clients.get(clientId);
         if (!c) break;
 
-        c.x = Number(msg.x) || 0;
-        c.y = Number(msg.y) || 0;
-        c.z = Number(msg.z) || 0;
-        c.yaw = Number(msg.yaw) || 0;
-        c.pitch = Number(msg.pitch) || 0;
+        c.x = Math.round((Number(msg.x) || 0) * 100) / 100;
+        c.y = Math.round((Number(msg.y) || 0) * 100) / 100;
+        c.z = Math.round((Number(msg.z) || 0) * 100) / 100;
+        c.yaw = Math.round((Number(msg.yaw) || 0) * 100) / 100;
+        c.pitch = Math.round((Number(msg.pitch) || 0) * 100) / 100;
+        c.moveBlend = Math.round((Number(msg.moveBlend) || 0) * 100) / 100;
+        c.strideDir = Math.round((Number(msg.strideDir) || 0) * 100) / 100;
 
-        broadcastToRoom(
-          currentRoom,
-          {
-            type: "remote_player_state",
+        // Skip broadcast if this player is the only human in the room
+        if (currentRoom.clients.size <= 1) break;
+
+        // For 2-player rooms, dispatch immediately; for 3+ player rooms, coalesce into the 25 Hz room batch
+        if (currentRoom.clients.size === 2) {
+          broadcastToRoom(
+            currentRoom,
+            {
+              type: "remote_player_state",
+              clientId,
+              unitId: c.unitId,
+              x: c.x,
+              y: c.y,
+              z: c.z,
+              yaw: c.yaw,
+              pitch: c.pitch,
+              moveBlend: c.moveBlend,
+              strideDir: c.strideDir
+            },
+            clientId
+          );
+        } else {
+          currentRoom.dirtyPlayers.set(clientId, {
             clientId,
             unitId: c.unitId,
             x: c.x,
@@ -1331,11 +1366,10 @@ wss.on("connection", (ws, req) => {
             z: c.z,
             yaw: c.yaw,
             pitch: c.pitch,
-            moveBlend: Number(msg.moveBlend) || 0,
-            strideDir: Number(msg.strideDir) || 0
-          },
-          clientId
-        );
+            moveBlend: c.moveBlend,
+            strideDir: c.strideDir
+          });
+        }
         break;
       }
 
@@ -1361,7 +1395,7 @@ wss.on("connection", (ws, req) => {
 
       // Weapon fired (renders tracer & muzzle flash on all clients)
       case "fire_shot": {
-        if (!currentRoom) break;
+        if (!currentRoom || currentRoom.clients.size <= 1) break;
         broadcastToRoom(
           currentRoom,
           {
@@ -1400,6 +1434,7 @@ wss.on("connection", (ws, req) => {
             attackerStat.kills += 1;
           }
         }
+        currentRoom.statsDirty = true;
 
         const deltaStats = { [targetUnitId]: targetStat };
         if (attackerUnitId && attackerUnitId !== targetUnitId) {
@@ -1427,7 +1462,7 @@ wss.on("connection", (ws, req) => {
 
       // Beach ball impulse (kicked or shot)
       case "ball_impulse": {
-        if (!currentRoom) break;
+        if (!currentRoom || currentRoom.clients.size <= 1) break;
         broadcastToRoom(
           currentRoom,
           {
@@ -1451,6 +1486,7 @@ wss.on("connection", (ws, req) => {
         const targetStat = getUnitStat(currentRoom, targetUnitId);
         targetStat.health = 100;
         targetStat.alive = true;
+        currentRoom.statsDirty = true;
 
         const isSelf = targetUnitId === c.unitId;
         if (isSelf) {
@@ -1462,22 +1498,24 @@ wss.on("connection", (ws, req) => {
           c.yaw = Number(msg.yaw) || 0;
         }
 
-        broadcastToRoom(
-          currentRoom,
-          {
-            type: "unit_respawned",
-            unitId: targetUnitId,
-            playerName: isSelf ? c.name : null,
-            team: msg.team || c.team,
-            isAI: Boolean(msg.isAI),
-            x: Number(msg.x) || 0,
-            y: Number(msg.y) || 0,
-            z: Number(msg.z) || 0,
-            yaw: Number(msg.yaw) || 0,
-            unitStats: { [targetUnitId]: targetStat }
-          },
-          clientId
-        );
+        if (currentRoom.clients.size > 1) {
+          broadcastToRoom(
+            currentRoom,
+            {
+              type: "unit_respawned",
+              unitId: targetUnitId,
+              playerName: isSelf ? c.name : null,
+              team: msg.team || c.team,
+              isAI: Boolean(msg.isAI),
+              x: Number(msg.x) || 0,
+              y: Number(msg.y) || 0,
+              z: Number(msg.z) || 0,
+              yaw: Number(msg.yaw) || 0,
+              unitStats: { [targetUnitId]: targetStat }
+            },
+            clientId
+          );
+        }
         break;
       }
 
@@ -1501,12 +1539,11 @@ wss.on("connection", (ws, req) => {
             updatedAt: now
           });
         }
-        const memMB = Math.round(process.memoryUsage().rss / (1024 * 1024));
         safeSend(ws, {
           type: "pong",
           clientTime: msg.clientTime,
           serverTickMs: Number(lastServerTickMs.toFixed(2)),
-          serverMemMB: memMB
+          serverMemMB: Math.round(cachedRssMB)
         });
         break;
       }
@@ -1574,11 +1611,8 @@ wss.on("connection", (ws, req) => {
 function removeClientFromRoom(room, clientId) {
   const leaving = room.clients.get(clientId);
   room.clients.delete(clientId);
-
-  if (leaving) {
-    console.log(
-      `[${new Date().toISOString()}] [Room ${room.code}] ${leaving.name} (${clientId}) left (${room.clients.size} remaining)`
-    );
+  if (room.dirtyPlayers) {
+    room.dirtyPlayers.delete(clientId);
   }
 
   if (room.clients.size === 0) {
@@ -1602,6 +1636,50 @@ function removeClientFromRoom(room, clientId) {
     roster: serializeRoster(room)
   });
 }
+
+// 25 Hz (40ms) Coalesced Player State Broadcast Loop for 3+ player rooms
+// Cuts O(N^2) per-packet socket writes by up to 7x in full rooms!
+setInterval(() => {
+  for (const room of rooms.values()) {
+    if (!room.dirtyPlayers || room.dirtyPlayers.size === 0) continue;
+    if (room.clients.size <= 1) {
+      room.dirtyPlayers.clear();
+      continue;
+    }
+
+    if (room.dirtyPlayers.size === 1) {
+      const single = room.dirtyPlayers.values().next().value;
+      room.dirtyPlayers.clear();
+      broadcastToRoom(
+        room,
+        {
+          type: "remote_player_state",
+          clientId: single.clientId,
+          unitId: single.unitId,
+          x: single.x,
+          y: single.y,
+          z: single.z,
+          yaw: single.yaw,
+          pitch: single.pitch,
+          moveBlend: single.moveBlend,
+          strideDir: single.strideDir
+        },
+        single.clientId
+      );
+    } else {
+      const states = Array.from(room.dirtyPlayers.values());
+      room.dirtyPlayers.clear();
+      broadcastToRoom(
+        room,
+        {
+          type: "remote_players_batch",
+          players: states
+        },
+        null
+      );
+    }
+  }
+}, 40);
 
 // ============================================================================
 // 3. SERVER-AUTHORITATIVE MATCH TIMER, SCOREBOARD SYNC & TELEMETRY LOOP
@@ -1657,8 +1735,13 @@ setInterval(() => {
     perfMetrics.tickHistoryMs.shift();
   }
 
-  // Once per second: sample packet/bandwidth rates & append to 60s rolling history
+  // Once per second: sample memory, packet/bandwidth rates & append to 60s rolling history
   if (tickCounter % 4 === 0) {
+    const mem = process.memoryUsage();
+    cachedRssMB = Number((mem.rss / (1024 * 1024)).toFixed(1));
+    cachedHeapUsedMB = Number((mem.heapUsed / (1024 * 1024)).toFixed(1));
+    cachedHeapTotalMB = Number((mem.heapTotal / (1024 * 1024)).toFixed(1));
+
     const elapsedSec = Math.max(0.1, (now - perfMetrics._lastRateSampleTime) / 1000);
     perfMetrics.inboundPktsSec = Math.round(perfMetrics._inPktsAccum / elapsedSec);
     perfMetrics.outboundPktsSec = Math.round(perfMetrics._outPktsAccum / elapsedSec);
@@ -1679,7 +1762,7 @@ setInterval(() => {
     perfMetrics.history.push({
       t: now,
       tickMs: Number(lastServerTickMs.toFixed(3)),
-      rssMB: Number((process.memoryUsage().rss / (1024 * 1024)).toFixed(1)),
+      rssMB: cachedRssMB,
       inboundPktPerSec: perfMetrics.inboundPktsSec,
       outboundPktPerSec: perfMetrics.outboundPktsSec,
       outboundKBPerSec: Number((perfMetrics.outboundBytesSec / 1024).toFixed(2)),
