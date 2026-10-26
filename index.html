@@ -565,8 +565,9 @@
     </div>
 
     <div id="top-right-bar">
+      <span id="mp-status-badge" class="hud-chip-btn" style="pointer-events: none; border-color: rgba(152, 255, 140, 0.45); color: #b8ffb0;">Mode: Solo</span>
       <button id="toggle-touch-btn" class="hud-chip-btn" type="button">Touch UI</button>
-      <button id="open-teams-btn" class="hud-chip-btn" type="button">Teams (M)</button>
+      <button id="open-teams-btn" class="hud-chip-btn" type="button">Setup / MP (M)</button>
     </div>
 
     <div id="scoreboard">
@@ -585,10 +586,10 @@
       <div id="squad-list"></div>
     </div>
 
-    <!-- Start-of-Match Team Configuration Modal -->
+    <!-- Start-of-Match Team & Multiplayer Configuration Modal -->
     <div id="setup-modal">
       <h2>SANDBOX DEPLOYMENT</h2>
-      <p>Choose your squad sizes before entering the sandbox</p>
+      <p>Play Solo with AI or join an Online WebSocket Room</p>
 
       <div class="setup-field">
         <div>
@@ -614,9 +615,31 @@
         </div>
       </div>
 
-      <button class="primary-btn" id="start-match-btn" type="button" style="width: 100%; margin-top: 6px; font-size: 16px;">
-        Start Battle
-      </button>
+      <!-- Multiplayer Room Configuration -->
+      <div class="setup-field" style="flex-direction: column; align-items: stretch; gap: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span class="setup-field-label" style="color: #7ad7ff;">Online Multiplayer Room</span>
+          <span id="mp-modal-status" style="font-size: 12px; color: #cccccc;">WebSocket Server</span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <input id="mp-name-input" class="count-input" type="text" value="Soldier" placeholder="Name" style="flex: 1; width: auto; font-size: 14px;" />
+          <input id="mp-room-input" class="count-input" type="text" value="SAND1" placeholder="Room" style="width: 86px; font-size: 14px; text-transform: uppercase;" />
+          <select id="mp-team-select" class="count-input" style="width: 112px; font-size: 13px;">
+            <option value="green">Green Team</option>
+            <option value="tan">Tan Team</option>
+          </select>
+        </div>
+        <input id="mp-url-input" class="count-input" type="text" placeholder="ws://localhost:3000" style="width: 100%; font-size: 12.5px; text-align: left; padding: 0 10px;" />
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-top: 8px;">
+        <button class="primary-btn" id="start-match-btn" type="button" style="flex: 1; font-size: 15px;">
+          Play Solo
+        </button>
+        <button class="primary-btn" id="join-mp-btn" type="button" style="flex: 1.2; font-size: 15px; background: #1d6fd8;">
+          Join / Host Online
+        </button>
+      </div>
     </div>
 
     <div id="end-message">
@@ -1976,13 +1999,38 @@
     }
 
     // =========================================================================
-    // 7. CONFIGURABLE SQUAD CREATION (FRIENDLY TEAMMATES & TAN BAD GUYS)
+    // 7. CONFIGURABLE SQUAD & ONLINE MULTIPLAYER STATE
     // =========================================================================
     const soldiers = [];
+    const soldiersById = new Map();
     let player = null;
     let configuredFriendlyCount = 3; // Default: 3 Friendly AI + You = 4 Green Total
     let configuredEnemyCount = 4;    // Default: 4 Enemy Tan Soldiers
     let isSetupOpen = true;
+
+    // WebSocket Multiplayer State
+    const mpState = {
+      active: false,
+      ws: null,
+      clientId: null,
+      myUnitId: "green_0",
+      myTeam: "green",
+      roomCode: "SAND1",
+      hostId: null,
+      roster: null,
+      sendTimer: 0,
+      hostSendTimer: 0
+    };
+
+    function isMultiplayerAuthority() {
+      return !mpState.active || mpState.clientId === mpState.hostId;
+    }
+
+    function sendNetMessage(payload) {
+      if (mpState.active && mpState.ws && mpState.ws.readyState === WebSocket.OPEN) {
+        mpState.ws.send(JSON.stringify(payload));
+      }
+    }
 
     const CALLSIGNS = [
       "Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot",
@@ -2016,136 +2064,123 @@
       return { x, z };
     }
 
-    function spawnAllSoldiers() {
-      soldiers.forEach((s) => s.model.root.dispose());
-      soldiers.length = 0;
-
-      // 1. Spawn Player (Green Squad Leader)
-      const playerPt = findSafeSpawnPoint(0, -30);
-      const playerModel = createPlasticSoldier("green", 0, false);
-      playerModel.root.position.set(
-        playerPt.x,
-        getSandHeight(playerPt.x, playerPt.z),
-        playerPt.z
-      );
-
-      player = {
-        name: "You (Squad Leader)",
-        team: "green",
-        isPlayer: true,
-        model: playerModel,
-        position: playerModel.root.position,
-        velocity: new BABYLON.Vector3(0, 0, 0),
-        isGrounded: true,
-        yaw: 0,
-        pitch: 0.04,
-        speed: 9.6,
-        radius: 0.72,
-        health: 100,
-        maxHealth: 100,
-        alive: true,
-        fireCooldown: 0,
-        fireRate: 0.2,
-        walkCycle: 0,
-        idleClock: 0,
-        moveBlend: 0,
-        fallProgress: 0,
-        fallDir: 1,
-        fallTwist: 0.3,
-        strafeDir: 1,
-        strafeTimer: 1.5
-      };
-      playerModel.hitbox.metadata = { soldier: player };
-      animateSoldier(player, 0.016, false, 0);
-      soldiers.push(player);
-
-      // 2. Spawn Friendly AI Green Teammates
-      for (let i = 0; i < configuredFriendlyCount; i++) {
+    function getFormationPoint(team, index, totalOnTeam) {
+      if (team === "green") {
+        if (index === 0) return findSafeSpawnPoint(0, -30);
+        const i = index - 1;
         const row = Math.floor(i / 4);
         const col = i % 4;
         const offsetX = (col - 1.5) * 8.5 + (row % 2 === 0 ? 2 : -2);
         const offsetZ = -28 - row * 5.2;
-        const pt = findSafeSpawnPoint(offsetX, offsetZ);
-
-        const model = createPlasticSoldier("green", i + 1, true);
-        model.root.position.set(pt.x, getSandHeight(pt.x, pt.z), pt.z);
-
-        const unit = {
-          name: "Green " + (CALLSIGNS[i] || "#" + (i + 1)),
-          team: "green",
-          isPlayer: false,
-          model,
-          position: model.root.position,
-          velocity: new BABYLON.Vector3(0, 0, 0),
-          isGrounded: true,
-          yaw: 0,
-          pitch: 0.04,
-          speed: 5.5 + Math.random() * 0.6,
-          radius: 0.72,
-          health: 100,
-          maxHealth: 100,
-          alive: true,
-          fireCooldown: 0.3 + Math.random() * 0.6,
-          fireRate: 0.72 + Math.random() * 0.35,
-          walkCycle: Math.random() * 6,
-          idleClock: Math.random() * 6,
-          moveBlend: 0,
-          fallProgress: 0,
-          fallDir: 1,
-          fallTwist: (Math.random() - 0.5) * 1.2,
-          strafeDir: Math.random() > 0.5 ? 1 : -1,
-          strafeTimer: 1.5 + Math.random() * 2.0
-        };
-        model.hitbox.metadata = { soldier: unit };
-        animateSoldier(unit, 0.016, false, 0);
-        soldiers.push(unit);
-      }
-
-      // 3. Spawn Enemy Tan Soldiers
-      for (let i = 0; i < configuredEnemyCount; i++) {
-        const row = Math.floor(i / 4);
-        const colsInRow = Math.min(4, configuredEnemyCount - row * 4);
-        const col = i % 4;
+        return findSafeSpawnPoint(offsetX, offsetZ);
+      } else {
+        const row = Math.floor(index / 4);
+        const colsInRow = Math.min(4, totalOnTeam - row * 4);
+        const col = index % 4;
         const spread = Math.max(1, colsInRow - 1);
         const offsetX =
           colsInRow === 1 ? 0 : ((col / spread) - 0.5) * 32 + (row % 2) * 3;
         const offsetZ = 27 + row * 5.2;
-        const pt = findSafeSpawnPoint(offsetX, offsetZ);
-
-        const model = createPlasticSoldier("tan", i, true);
-        model.root.position.set(pt.x, getSandHeight(pt.x, pt.z), pt.z);
-        model.root.rotation.y = Math.PI;
-
-        const unit = {
-          name: "Tan " + (i + 1),
-          team: "tan",
-          isPlayer: false,
-          model,
-          position: model.root.position,
-          velocity: new BABYLON.Vector3(0, 0, 0),
-          isGrounded: true,
-          yaw: Math.PI,
-          pitch: 0,
-          speed: 5.1 + Math.random() * 0.7,
-          radius: 0.72,
-          health: 100,
-          maxHealth: 100,
-          alive: true,
-          fireCooldown: 0.8 + Math.random() * 1.2,
-          fireRate: 0.82 + Math.random() * 0.4,
-          walkCycle: Math.random() * 6,
-          idleClock: Math.random() * 6,
-          moveBlend: 0,
-          fallProgress: 0,
-          fallDir: 1,
-          fallTwist: (Math.random() - 0.5) * 1.2,
-          strafeDir: Math.random() > 0.5 ? 1 : -1,
-          strafeTimer: 1.5 + Math.random() * 2.0
-        };
-        model.hitbox.metadata = { soldier: unit };
-        animateSoldier(unit, 0.016, false, 0);
-        soldiers.push(unit);
+        return findSafeSpawnPoint(offsetX, offsetZ);
       }
+    }
+
+    function spawnAllSoldiers() {
+      soldiers.forEach((s) => s.model.root.dispose());
+      soldiers.length = 0;
+      soldiersById.clear();
+
+      const greenTotal = mpState.active && mpState.roster
+        ? mpState.roster.greenTotal
+        : configuredFriendlyCount + 1;
+      const tanTotal = mpState.active && mpState.roster
+        ? mpState.roster.tanTotal
+        : configuredEnemyCount;
+
+      const myUnitId = mpState.active ? mpState.myUnitId : "green_0";
+
+      // Map human players by unitId when in Multiplayer mode
+      const humanByUnitId = new Map();
+      if (mpState.active && mpState.roster && Array.isArray(mpState.roster.players)) {
+        mpState.roster.players.forEach((p) => {
+          humanByUnitId.set(p.unitId, p);
+        });
+      }
+
+      function createTeamUnits(team, count) {
+        for (let i = 0; i < count; i++) {
+          const unitId = `${team}_${i}`;
+          const isLocalPlayer = unitId === myUnitId;
+          const remotePlayerInfo = !isLocalPlayer ? humanByUnitId.get(unitId) : null;
+          const isRemotePlayer = Boolean(remotePlayerInfo);
+
+          const pt = getFormationPoint(team, i, count);
+          const model = createPlasticSoldier(team, i, !isLocalPlayer);
+          model.root.position.set(pt.x, getSandHeight(pt.x, pt.z), pt.z);
+          const initialYaw = team === "green" ? 0 : Math.PI;
+          model.root.rotation.y = initialYaw;
+
+          let unitName;
+          if (isLocalPlayer) {
+            unitName = "You";
+          } else if (isRemotePlayer) {
+            unitName = remotePlayerInfo.name + " (Player)";
+          } else if (team === "green") {
+            unitName = "Green " + (CALLSIGNS[i] || "#" + (i + 1));
+          } else {
+            unitName = "Tan " + (i + 1);
+          }
+
+          const unit = {
+            unitId,
+            name: unitName,
+            team,
+            isPlayer: isLocalPlayer,
+            isRemotePlayer,
+            model,
+            position: model.root.position,
+            netTargetPos: new BABYLON.Vector3(
+              pt.x,
+              getSandHeight(pt.x, pt.z),
+              pt.z
+            ),
+            velocity: new BABYLON.Vector3(0, 0, 0),
+            isGrounded: true,
+            yaw: initialYaw,
+            pitch: team === "green" ? 0.04 : 0,
+            strideDir: 0,
+            speed: isLocalPlayer || isRemotePlayer
+              ? 9.6
+              : (team === "green" ? 5.5 : 5.1) + (i % 3) * 0.25,
+            radius: 0.72,
+            health: 100,
+            maxHealth: 100,
+            alive: true,
+            fireCooldown: isLocalPlayer ? 0 : 0.6 + (i % 4) * 0.35,
+            fireRate: isLocalPlayer ? 0.2 : 0.78 + (i % 3) * 0.15,
+            walkCycle: i * 1.3,
+            idleClock: i * 1.1,
+            moveBlend: 0,
+            fallProgress: 0,
+            fallDir: 1,
+            fallTwist: ((i % 2) - 0.5) * 0.9,
+            strafeDir: i % 2 === 0 ? 1 : -1,
+            strafeTimer: 1.5 + (i % 3) * 0.6
+          };
+
+          model.hitbox.metadata = { soldier: unit };
+          animateSoldier(unit, 0.016, false, 0);
+          soldiers.push(unit);
+          soldiersById.set(unitId, unit);
+
+          if (isLocalPlayer) {
+            player = unit;
+          }
+        }
+      }
+
+      createTeamUnits("green", greenTotal);
+      createTeamUnits("tan", tanTotal);
 
       if (physicsBall) {
         const bx = 13;
@@ -2579,6 +2614,7 @@
       });
 
       let hitPoint = muzzlePos.add(aimDir.scale(maxRange));
+      let hitKind = "air";
 
       if (pickInfo && pickInfo.hit && pickInfo.pickedPoint) {
         hitPoint = pickInfo.pickedPoint;
@@ -2587,7 +2623,7 @@
         if (hitMesh && hitMesh.metadata) {
           if (hitMesh.metadata.soldier) {
             const target = hitMesh.metadata.soldier;
-            // Apply physical knockback impulse along shot direction
+            hitKind = target.team === "green" ? "green" : "tan";
             target.velocity.addInPlace(aimDir.scale(4.5));
             applyDamage(target, damageAmount, aimDir);
             spawnImpactBurst(
@@ -2595,14 +2631,36 @@
               false,
               target.team === "green" ? "#4be03e" : "#ffd584"
             );
+
+            // Broadcast damage to multiplayer peers
+            if (mpState.active) {
+              sendNetMessage({
+                type: "damage_unit",
+                targetUnitId: target.unitId,
+                amount: damageAmount,
+                shotDir: { x: aimDir.x, y: aimDir.y, z: aimDir.z }
+              });
+            }
           } else if (hitMesh.metadata.isPhysicsBall && physicsBall) {
-            // Shoot the beach ball to send it flying across the sandbox!
-            physicsBall.velocity.addInPlace(aimDir.scale(11));
+            hitKind = "ball";
+            const impulse = aimDir.scale(11);
+            physicsBall.velocity.addInPlace(impulse);
             physicsBall.velocity.y += 4.5;
             spawnImpactBurst(hitPoint, false, "#ffffff");
+
+            if (mpState.active) {
+              sendNetMessage({
+                type: "ball_impulse",
+                vx: impulse.x,
+                vy: impulse.y + 4.5,
+                vz: impulse.z
+              });
+            }
           } else if (hitMesh.metadata.isSand) {
+            hitKind = "sand";
             spawnImpactBurst(hitPoint, true, "#e6c373");
           } else {
+            hitKind = "toy";
             spawnImpactBurst(hitPoint, false, "#fff0a0");
           }
         }
@@ -2613,16 +2671,32 @@
           ? new BABYLON.Color3(1.0, 0.95, 0.45)
           : new BABYLON.Color3(1.0, 0.62, 0.25);
       spawnTracer(muzzlePos, hitPoint, tracerColor);
+
+      // Broadcast shot visual to multiplayer peers
+      if (mpState.active) {
+        sendNetMessage({
+          type: "fire_shot",
+          shooterUnitId: shooter.unitId,
+          team: shooter.team,
+          muzzlePos: { x: muzzlePos.x, y: muzzlePos.y, z: muzzlePos.z },
+          hitPoint: { x: hitPoint.x, y: hitPoint.y, z: hitPoint.z },
+          hitKind
+        });
+      }
     }
 
     function firePlayerWeapon() {
+      if (!player) return;
       const camForward = camera.getDirection(BABYLON.Vector3.Forward());
       const camRay = new BABYLON.Ray(camera.position, camForward, 110);
 
       const pick = scene.pickWithRay(camRay, (mesh) => {
         if (!mesh.isPickable) return false;
         if (mesh.metadata && mesh.metadata.soldier) {
-          return mesh.metadata.soldier.alive && mesh.metadata.soldier.team !== "green";
+          return (
+            mesh.metadata.soldier.alive &&
+            mesh.metadata.soldier.team !== player.team
+          );
         }
         return Boolean(mesh.metadata && mesh.metadata.isEnvironment);
       });
@@ -2855,13 +2929,278 @@
     const restartBtn = document.getElementById("restart-btn");
     const setupAgainBtn = document.getElementById("setup-again-btn");
 
-    // Setup modal elements
+    // Setup modal & Multiplayer UI elements
     const setupModalEl = document.getElementById("setup-modal");
     const friendlyInputEl = document.getElementById("friendly-input");
     const enemyInputEl = document.getElementById("enemy-input");
     const friendlySummaryEl = document.getElementById("friendly-summary");
     const enemySummaryEl = document.getElementById("enemy-summary");
     const startMatchBtn = document.getElementById("start-match-btn");
+    const joinMpBtn = document.getElementById("join-mp-btn");
+    const mpNameInputEl = document.getElementById("mp-name-input");
+    const mpRoomInputEl = document.getElementById("mp-room-input");
+    const mpTeamSelectEl = document.getElementById("mp-team-select");
+    const mpUrlInputEl = document.getElementById("mp-url-input");
+    const mpStatusBadgeEl = document.getElementById("mp-status-badge");
+    const mpModalStatusEl = document.getElementById("mp-modal-status");
+
+    // Pre-fill WebSocket URL based on current page location
+    if (window.location.host) {
+      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      mpUrlInputEl.value = `${proto}//${window.location.host}`;
+    } else {
+      mpUrlInputEl.value = "ws://localhost:3000";
+    }
+
+    function updateMpStatusBadge() {
+      if (!mpState.active || !mpState.roster) {
+        mpStatusBadgeEl.textContent = "Mode: Solo";
+        mpStatusBadgeEl.style.color = "#b8ffb0";
+        return;
+      }
+      const pCount = mpState.roster.players ? mpState.roster.players.length : 1;
+      const roleTag = isMultiplayerAuthority() ? "Host" : "Peer";
+      mpStatusBadgeEl.textContent = `Room: ${mpState.roomCode} (${pCount} Online - ${roleTag})`;
+      mpStatusBadgeEl.style.color = "#7ad7ff";
+    }
+
+    function disconnectMultiplayer() {
+      if (mpState.ws) {
+        try {
+          mpState.ws.close();
+        } catch (err) {}
+      }
+      mpState.active = false;
+      mpState.ws = null;
+      mpState.roster = null;
+      updateMpStatusBadge();
+    }
+
+    function connectAndJoinMultiplayerRoom() {
+      refreshSetupSummaries();
+      configuredFriendlyCount = clampInt(friendlyInputEl.value, 0, 12, 3);
+      configuredEnemyCount = clampInt(enemyInputEl.value, 1, 16, 4);
+
+      const wsUrl = (mpUrlInputEl.value || "ws://localhost:3000").trim();
+      const playerName = (mpNameInputEl.value || "Soldier").trim();
+      const roomCode = (mpRoomInputEl.value || "SAND1").trim().toUpperCase();
+      const chosenTeam = mpTeamSelectEl.value === "tan" ? "tan" : "green";
+
+      disconnectMultiplayer();
+      mpModalStatusEl.textContent = "Connecting...";
+      mpModalStatusEl.style.color = "#ffd584";
+
+      let ws;
+      try {
+        ws = new WebSocket(wsUrl);
+      } catch (err) {
+        mpModalStatusEl.textContent = "Invalid WebSocket URL";
+        mpModalStatusEl.style.color = "#ff7b7b";
+        return;
+      }
+
+      mpState.ws = ws;
+
+      ws.addEventListener("open", () => {
+        mpModalStatusEl.textContent = "Connected! Joining room...";
+        mpModalStatusEl.style.color = "#84ff78";
+        ws.send(
+          JSON.stringify({
+            type: "join_room",
+            roomCode,
+            name: playerName,
+            team: chosenTeam,
+            greenTotal: configuredFriendlyCount + 1,
+            tanTotal: configuredEnemyCount
+          })
+        );
+      });
+
+      ws.addEventListener("message", (event) => {
+        let msg;
+        try {
+          msg = JSON.parse(event.data);
+        } catch {
+          return;
+        }
+        handleNetworkMessage(msg);
+      });
+
+      ws.addEventListener("close", () => {
+        if (mpState.ws === ws) {
+          mpState.active = false;
+          mpState.ws = null;
+          updateMpStatusBadge();
+          mpModalStatusEl.textContent = "Disconnected from server";
+          mpModalStatusEl.style.color = "#ff9e7b";
+        }
+      });
+
+      ws.addEventListener("error", () => {
+        mpModalStatusEl.textContent = "Could not connect (is node server.js running?)";
+        mpModalStatusEl.style.color = "#ff7b7b";
+      });
+    }
+
+    function syncRosterHumanFlags(roster) {
+      if (!roster || !Array.isArray(roster.players)) return;
+      const humanMap = new Map();
+      roster.players.forEach((p) => humanMap.set(p.unitId, p));
+
+      soldiers.forEach((s) => {
+        if (s.unitId === mpState.myUnitId) {
+          s.isPlayer = true;
+          s.isRemotePlayer = false;
+          player = s;
+        } else if (humanMap.has(s.unitId)) {
+          const info = humanMap.get(s.unitId);
+          s.isPlayer = false;
+          s.isRemotePlayer = true;
+          s.name = info.name + " (Player)";
+        } else {
+          s.isPlayer = false;
+          s.isRemotePlayer = false;
+        }
+      });
+      updateHUD();
+    }
+
+    function handleNetworkMessage(msg) {
+      switch (msg.type) {
+        case "room_joined": {
+          mpState.active = true;
+          mpState.clientId = msg.clientId;
+          mpState.myUnitId = msg.unitId;
+          mpState.myTeam = msg.team;
+          mpState.roster = msg.roster;
+          mpState.roomCode = msg.roster.roomCode;
+          mpState.hostId = msg.roster.hostId;
+
+          setupModalEl.style.display = "none";
+          isSetupOpen = false;
+          updateMpStatusBadge();
+          resetGame();
+          tryLockPointer();
+          break;
+        }
+
+        case "roster_update": {
+          mpState.roster = msg.roster;
+          mpState.hostId = msg.roster.hostId;
+          updateMpStatusBadge();
+
+          const expectedCount = msg.roster.greenTotal + msg.roster.tanTotal;
+          if (soldiers.length !== expectedCount) {
+            resetGame();
+          } else {
+            syncRosterHumanFlags(msg.roster);
+          }
+          break;
+        }
+
+        case "remote_player_state": {
+          const unit = soldiersById.get(msg.unitId);
+          if (!unit || unit.isPlayer) return;
+          unit.isRemotePlayer = true;
+          unit.netTargetPos.set(msg.x, msg.y, msg.z);
+          unit.yaw = msg.yaw;
+          unit.pitch = msg.pitch;
+          unit.moveBlend = msg.moveBlend;
+          unit.strideDir = msg.strideDir || 0;
+          break;
+        }
+
+        case "world_state": {
+          if (isMultiplayerAuthority()) return;
+          if (Array.isArray(msg.aiUnits)) {
+            msg.aiUnits.forEach((u) => {
+              const unit = soldiersById.get(u.unitId);
+              if (!unit || unit.isPlayer || unit.isRemotePlayer) return;
+              unit.netTargetPos.set(u.x, u.y, u.z);
+              unit.yaw = u.yaw;
+              unit.pitch = u.pitch;
+              unit.moveBlend = u.moveBlend;
+              unit.strideDir = u.strideDir || 0;
+              if (typeof u.health === "number" && u.health < unit.health) {
+                applyDamage(unit, unit.health - u.health, null);
+              }
+            });
+          }
+          if (msg.ball && physicsBall) {
+            physicsBall.mesh.position.set(msg.ball.x, msg.ball.y, msg.ball.z);
+            physicsBall.velocity.set(msg.ball.vx, msg.ball.vy, msg.ball.vz);
+          }
+          break;
+        }
+
+        case "remote_shot": {
+          const shooter = soldiersById.get(msg.shooterUnitId);
+          if (shooter) {
+            shooter.model.muzzleFlash.isVisible = true;
+            shooter.model.flashTimer = 0.055;
+            shooter.model.recoilTimer = 1.0;
+          }
+          const mPos = new BABYLON.Vector3(
+            msg.muzzlePos.x,
+            msg.muzzlePos.y,
+            msg.muzzlePos.z
+          );
+          const hPos = new BABYLON.Vector3(
+            msg.hitPoint.x,
+            msg.hitPoint.y,
+            msg.hitPoint.z
+          );
+          const tracerColor =
+            msg.team === "green"
+              ? new BABYLON.Color3(1.0, 0.95, 0.45)
+              : new BABYLON.Color3(1.0, 0.62, 0.25);
+          spawnTracer(mPos, hPos, tracerColor);
+
+          if (msg.hitKind === "sand") {
+            spawnImpactBurst(hPos, true, "#e6c373");
+          } else if (msg.hitKind === "green") {
+            spawnImpactBurst(hPos, false, "#4be03e");
+          } else if (msg.hitKind === "tan") {
+            spawnImpactBurst(hPos, false, "#ffd584");
+          } else if (msg.hitKind === "toy" || msg.hitKind === "ball") {
+            spawnImpactBurst(hPos, false, "#fff0a0");
+          }
+          break;
+        }
+
+        case "unit_damaged": {
+          const target = soldiersById.get(msg.targetUnitId);
+          if (!target) return;
+          const dir = msg.shotDir
+            ? new BABYLON.Vector3(msg.shotDir.x, msg.shotDir.y, msg.shotDir.z)
+            : null;
+          if (dir) {
+            target.velocity.addInPlace(dir.scale(4.5));
+          }
+          applyDamage(target, msg.amount, dir);
+          break;
+        }
+
+        case "ball_impulse": {
+          if (physicsBall) {
+            physicsBall.velocity.x += msg.vx;
+            physicsBall.velocity.y += msg.vy;
+            physicsBall.velocity.z += msg.vz;
+          }
+          break;
+        }
+
+        case "match_restarted": {
+          mpState.roster = msg.roster;
+          mpState.hostId = msg.roster.hostId;
+          updateMpStatusBadge();
+          isSetupOpen = false;
+          setupModalEl.style.display = "none";
+          resetGame();
+          break;
+        }
+      }
+    }
 
     function clampInt(val, min, max, fallback) {
       const n = parseInt(val, 10);
@@ -2931,6 +3270,7 @@
     }
 
     startMatchBtn.addEventListener("click", () => {
+      disconnectMultiplayer();
       refreshSetupSummaries();
       configuredFriendlyCount = clampInt(friendlyInputEl.value, 0, 12, 3);
       configuredEnemyCount = clampInt(enemyInputEl.value, 1, 16, 4);
@@ -2940,9 +3280,20 @@
       tryLockPointer();
     });
 
+    joinMpBtn.addEventListener("click", () => {
+      connectAndJoinMultiplayerRoom();
+    });
+
     restartBtn.addEventListener("click", () => {
       isSetupOpen = false;
       setupModalEl.style.display = "none";
+      if (mpState.active) {
+        sendNetMessage({
+          type: "restart_match",
+          greenTotal: configuredFriendlyCount + 1,
+          tanTotal: configuredEnemyCount
+        });
+      }
       resetGame();
       tryLockPointer();
     });
@@ -3003,11 +3354,16 @@
       tanCountEl.textContent = tanAlive;
       tanTotalEl.textContent = tanAll.length;
 
-      const teammates = soldiers.filter((s) => s.team === "green" && !s.isPlayer);
+      const myTeam = player.team || "green";
+      const teammates = soldiers.filter((s) => s.team === myTeam && !s.isPlayer);
       squadListEl.innerHTML = teammates
         .map((tm) => {
           const pct = Math.max(0, Math.round(tm.health));
-          const color = tm.alive ? "#67e85f" : "#666666";
+          const color = tm.alive
+            ? myTeam === "green"
+              ? "#67e85f"
+              : "#ffd584"
+            : "#666666";
           const label = tm.alive ? tm.name : tm.name + " (DOWN)";
           return `
             <div class="squad-row">
@@ -3022,10 +3378,12 @@
     }
 
     function checkMatchOutcome() {
-      if (gameEnded) return;
+      if (gameEnded || !player) return;
 
-      const tanAlive = soldiers.filter((s) => s.team === "tan" && s.alive).length;
-      if (tanAlive === 0) {
+      const myTeam = player.team || "green";
+      const enemyTeam = myTeam === "green" ? "tan" : "green";
+      const enemiesAlive = soldiers.filter((s) => s.team === enemyTeam && s.alive).length;
+      if (enemiesAlive === 0) {
         endGame(true);
         return;
       }
@@ -3038,15 +3396,20 @@
     function endGame(victory) {
       gameEnded = true;
       isMouseDown = false;
-      if (document.pointerLockElement) {
+      isMobileFiring = false;
+      mobileFireBtnEl.classList.remove("active");
+      if (document.pointerLockElement && document.exitPointerLock) {
         document.exitPointerLock();
       }
+
+      const myTeamLabel = player && player.team === "tan" ? "Tan" : "Green";
+      const enemyTeamLabel = myTeamLabel === "Green" ? "Tan" : "Green";
 
       if (victory) {
         endTitleEl.textContent = "VICTORY!";
         endTitleEl.style.color = "#8df57e";
         endSubtitleEl.textContent =
-          `Your Green Squad eliminated all ${configuredEnemyCount} Tan Soldier${configuredEnemyCount === 1 ? "" : "s"}!`;
+          `Your ${myTeamLabel} Squad eliminated all opposing ${enemyTeamLabel} Soldiers!`;
       } else {
         endTitleEl.textContent = "GAME OVER";
         endTitleEl.style.color = "#ff6b6b";
@@ -3253,6 +3616,24 @@
           updateSoldierPhysicsAndCollisions(player, dt);
           animateSoldier(player, dt, isMoving, strideDir);
 
+          // Broadcast local player's state to multiplayer room (~25 Hz)
+          if (mpState.active) {
+            mpState.sendTimer += dt;
+            if (mpState.sendTimer >= 0.04) {
+              mpState.sendTimer = 0;
+              sendNetMessage({
+                type: "player_state",
+                x: player.position.x,
+                y: player.position.y,
+                z: player.position.z,
+                yaw: player.yaw,
+                pitch: player.pitch,
+                moveBlend: player.moveBlend,
+                strideDir
+              });
+            }
+          }
+
           if (player.fireCooldown > 0) player.fireCooldown -= dt;
           if ((isMouseDown || keys.Space || isMobileFiring) && player.fireCooldown <= 0) {
             firePlayerWeapon();
@@ -3263,15 +3644,75 @@
         }
       }
 
-      // ----- AI SQUADS UPDATE (FRIENDLY GREEN TEAMMATES + TAN ENEMIES) -----
+      // ----- REMOTE PLAYERS & AI SQUADS UPDATE -----
+      const isHost = isMultiplayerAuthority();
       for (const s of soldiers) {
         if (s.isPlayer) continue;
+
+        // Remote human player OR non-host AI soldier: interpolate smoothly from network state
+        if (s.isRemotePlayer || (mpState.active && !isHost)) {
+          if (s.alive) {
+            BABYLON.Vector3.LerpToRef(
+              s.position,
+              s.netTargetPos,
+              Math.min(1, dt * 14),
+              s.position
+            );
+            s.model.root.rotation.y = s.yaw;
+            animateSoldier(s, dt, s.moveBlend > 0.1, s.strideDir || 0);
+          } else {
+            updateSoldierPhysicsAndCollisions(s, dt);
+            animateSoldier(s, dt, false, 0);
+          }
+          continue;
+        }
+
+        // Local or Host-simulated AI Soldier
         if ((gameEnded || isSetupOpen) && s.alive) {
           s.moveBlend = Math.max(0, s.moveBlend - dt * 4);
           updateSoldierPhysicsAndCollisions(s, dt);
           animateSoldier(s, dt, false, 0);
         } else {
           updateAISoldier(s, dt);
+        }
+      }
+
+      // If we are the Multiplayer Room Host, broadcast AI states & beach ball at ~20 Hz
+      if (mpState.active && isHost && !isSetupOpen) {
+        mpState.hostSendTimer += dt;
+        if (mpState.hostSendTimer >= 0.05) {
+          mpState.hostSendTimer = 0;
+          const aiUnits = [];
+          for (const s of soldiers) {
+            if (!s.isPlayer && !s.isRemotePlayer) {
+              aiUnits.push({
+                unitId: s.unitId,
+                x: s.position.x,
+                y: s.position.y,
+                z: s.position.z,
+                yaw: s.yaw,
+                pitch: s.pitch,
+                moveBlend: s.moveBlend,
+                strideDir: s.strafeDir * 0.5,
+                health: s.health
+              });
+            }
+          }
+          const ball = physicsBall
+            ? {
+                x: physicsBall.mesh.position.x,
+                y: physicsBall.mesh.position.y,
+                z: physicsBall.mesh.position.z,
+                vx: physicsBall.velocity.x,
+                vy: physicsBall.velocity.y,
+                vz: physicsBall.velocity.z
+              }
+            : null;
+          sendNetMessage({
+            type: "host_world_state",
+            aiUnits,
+            ball
+          });
         }
       }
 

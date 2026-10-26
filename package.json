@@ -1,0 +1,12 @@
+{
+  "name": "toy-soldiers-sandbox",
+  "version": "1.0.0",
+  "description": "Multiplayer 3D Plastic Army Men Backyard Sandbox Shooter (Babylon.js + Node.js WebSockets)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
