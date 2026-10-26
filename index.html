@@ -855,7 +855,7 @@
   <!-- On-Screen HUD -->
   <div id="hud">
     <div id="instructions">
-      <strong>BACKYARD SANDBOX BATTLE</strong><br />
+      <strong id="instructions-title">BACKYARD SANDBOX BATTLE</strong><br />
       <strong>WASD / Left Stick</strong> : Move &nbsp;|&nbsp; <strong>Space / Jump</strong> : Jump<br />
       <strong>Mouse / Right Thumb</strong> : Aim &nbsp;|&nbsp; <strong>Left-Click / Fire</strong> : Shoot
     </div>
@@ -933,17 +933,29 @@
         </div>
       </div>
 
-      <!-- Row 3: Map Size & Time Limit -->
+      <!-- Row 3: Map & Map Size -->
       <div class="setup-grid">
+        <div class="setup-field">
+          <span class="setup-field-label" style="color: #ffd584;">Map</span>
+          <select id="map-select" class="count-input" style="width: 100%; font-size: 13px;">
+            <option value="sandbox" selected>Backyard Sandbox</option>
+            <option value="shoebox">The Shoe Box (Bedroom CQC)</option>
+          </select>
+        </div>
+
         <div class="setup-field">
           <span class="setup-field-label" style="color: #e8d59e;">Map Size</span>
           <select id="map-size-select" class="count-input" style="width: 100%; font-size: 13px;">
+            <option value="28">Small (Shoe Box)</option>
             <option value="60">Medium</option>
             <option value="80" selected>Large</option>
             <option value="105">Huge</option>
           </select>
         </div>
+      </div>
 
+      <!-- Row 4: Time Limit & Hardcore Mode -->
+      <div class="setup-grid">
         <div class="setup-field">
           <span class="setup-field-label" style="color: #b8e8ff;">Time Limit</span>
           <select id="time-limit-select" class="count-input" style="width: 100%; font-size: 13px;">
@@ -953,6 +965,14 @@
             <option value="600">10 Minutes</option>
             <option value="900">15 Minutes</option>
           </select>
+        </div>
+
+        <div class="setup-field">
+          <span class="setup-field-label" style="color: #ff856b;">Hardcore Mode</span>
+          <label for="hardcore-checkbox" style="display: flex; align-items: center; justify-content: center; gap: 7px; height: 30px; background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 133, 107, 0.45); border-radius: 6px; padding: 0 8px; cursor: pointer; font-size: 13px; font-weight: bold; color: #ffd5cc; pointer-events: auto;">
+            <input id="hardcore-checkbox" type="checkbox" style="width: 16px; height: 16px; accent-color: #e5342b; cursor: pointer; margin: 0;" />
+            <span>1-Shot Kill</span>
+          </label>
         </div>
       </div>
 
@@ -1125,14 +1145,20 @@
     // 4. UNEVEN SANDBOX TERRAIN, NORMAL CALCULATION & WOODEN FRAME
     // =========================================================================
     let WORLD_LIMIT = 80; // Default Large sandbox half-size (160x160 total)
+    let WORLD_LIMIT_X = 80;
+    let WORLD_LIMIT_Z = 80;
     let builtWorldLimit = 0;
+    let builtMapType = "";
     let envRootNode = null;
     const obstacles = []; // Static toy bounding boxes for movement collision
 
-    // Analytical height function for sculpted sand dunes, hills, and hollows
+    // Analytical height function for sculpted sand dunes, hills, and hollows (flat cardboard floor in Shoe Box)
     function getSandHeight(x, z) {
-      const cx = Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, x));
-      const cz = Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, z));
+      if (builtMapType === "shoebox") {
+        return 0;
+      }
+      const cx = Math.max(-WORLD_LIMIT_X, Math.min(WORLD_LIMIT_X, x));
+      const cz = Math.max(-WORLD_LIMIT_Z, Math.min(WORLD_LIMIT_Z, z));
 
       let h =
         Math.sin(cx * 0.085) * Math.cos(cz * 0.08) * 1.18 +
@@ -1154,7 +1180,7 @@
 
       const edgeFade = Math.min(
         1,
-        Math.min(WORLD_LIMIT - Math.abs(cx), WORLD_LIMIT - Math.abs(cz)) / 4
+        Math.min(WORLD_LIMIT_X - Math.abs(cx), WORLD_LIMIT_Z - Math.abs(cz)) / 4
       );
 
       return Math.max(-0.9, h * Math.max(0.2, edgeFade));
@@ -1162,6 +1188,9 @@
 
     // Surface normal of the sand at (x, z) for physics rolling & ragdoll tilt
     function getSandNormal(x, z) {
+      if (builtMapType === "shoebox") {
+        return new BABYLON.Vector3(0, 1, 0);
+      }
       const eps = 0.25;
       const hL = getSandHeight(x - eps, z);
       const hR = getSandHeight(x + eps, z);
@@ -1715,9 +1744,918 @@
       };
     }
 
-    function rebuildSandboxEnvironment(newLimit) {
-      const targetLimit = Math.max(50, Math.min(130, Number(newLimit) || 80));
-      if (envRootNode && builtWorldLimit === targetLimit) {
+    // =========================================================================
+    // 5B. THE SHOE BOX (BEDROOM CQC MAP) + ARMY TRUCKS & JEEPS FOR COVER
+    // =========================================================================
+    const armyOliveMat = createPlasticPBR("armyOliveMat", "#3b5924", 0.24);
+    const armyDarkOliveMat = createPlasticPBR("armyDarkOliveMat", "#233814", 0.22);
+    const armyCanvasMat = createPlasticPBR("armyCanvasMat", "#576e38", 0.42);
+    const armyTanCanvasMat = createPlasticPBR("armyTanCanvasMat", "#b59257", 0.42);
+
+    function createCardboardMaterial() {
+      const tex = new BABYLON.DynamicTexture("cardboardTex", 256, scene, true);
+      const ctx = tex.getContext();
+      ctx.fillStyle = "#c29663";
+      ctx.fillRect(0, 0, 256, 256);
+
+      // Corrugated cardboard ribs & kraft fiber grain
+      for (let y = 0; y < 256; y += 6) {
+        ctx.fillStyle = y % 12 === 0 ? "rgba(110, 72, 34, 0.14)" : "rgba(235, 198, 150, 0.12)";
+        ctx.fillRect(0, y, 256, 2);
+      }
+      const flecks = ["#ab7d4b", "#d1a775", "#966939", "#b58958"];
+      for (let i = 0; i < 2400; i++) {
+        ctx.fillStyle = flecks[i % flecks.length];
+        ctx.fillRect(Math.floor(Math.random() * 256), Math.floor(Math.random() * 256), 2, 2);
+      }
+
+      // Subtle fold crease lines
+      ctx.strokeStyle = "rgba(85, 52, 22, 0.28)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 128);
+      ctx.lineTo(256, 128);
+      ctx.stroke();
+
+      tex.update();
+      tex.wrapU = BABYLON.Texture.WRAP_ADDRESSMODE;
+      tex.wrapV = BABYLON.Texture.WRAP_ADDRESSMODE;
+      tex.uScale = 5;
+      tex.vScale = 5;
+
+      const mat = new BABYLON.StandardMaterial("cardboardMat", scene);
+      mat.diffuseTexture = tex;
+      mat.specularColor = new BABYLON.Color3(0.14, 0.11, 0.07);
+      mat.specularPower = 20;
+      return mat;
+    }
+
+    function createShoeboxOuterMaterial() {
+      const tex = new BABYLON.DynamicTexture("shoeboxOuterTex", { width: 512, height: 128 }, scene, true);
+      const ctx = tex.getContext();
+      ctx.fillStyle = "#c9382b";
+      ctx.fillRect(0, 0, 512, 128);
+
+      // Classic athletic sneaker box racing stripes
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 18, 512, 12);
+      ctx.fillRect(0, 96, 512, 10);
+
+      // Size & style label sticker on the side of the shoe box
+      ctx.fillStyle = "#f7f5f0";
+      ctx.fillRect(32, 36, 150, 54);
+      ctx.fillStyle = "#1c222b";
+      ctx.font = "bold 16px Segoe UI, sans-serif";
+      ctx.fillText("ARMY RUNNER '84", 40, 56);
+      ctx.font = "bold 13px Consolas, monospace";
+      ctx.fillText("US 10.5  |  CQC BOX", 40, 76);
+
+      tex.update();
+      const mat = new BABYLON.StandardMaterial("shoeboxOuterMat", scene);
+      mat.diffuseTexture = tex;
+      mat.specularColor = new BABYLON.Color3(0.22, 0.22, 0.22);
+      return mat;
+    }
+
+    function createBedroomFloorMaterial() {
+      const tex = new BABYLON.DynamicTexture("bedroomWoodTex", 256, scene, true);
+      const ctx = tex.getContext();
+      const plankColors = ["#7c4e29", "#8a5830", "#6f4422", "#82522c"];
+      for (let row = 0; row < 4; row++) {
+        const y = row * 64;
+        ctx.fillStyle = plankColors[row % plankColors.length];
+        ctx.fillRect(0, y, 256, 62);
+        ctx.fillStyle = "#3d220e";
+        ctx.fillRect(0, y + 62, 256, 2);
+        const jointX = ((row * 97) % 200) + 28;
+        ctx.fillRect(jointX, y, 2, 64);
+
+        for (let g = 0; g < 18; g++) {
+          ctx.fillStyle = g % 2 === 0 ? "rgba(45, 22, 8, 0.16)" : "rgba(180, 125, 75, 0.12)";
+          ctx.fillRect(0, y + Math.floor(Math.random() * 60), 256, 2);
+        }
+      }
+      tex.update();
+      tex.wrapU = BABYLON.Texture.WRAP_ADDRESSMODE;
+      tex.wrapV = BABYLON.Texture.WRAP_ADDRESSMODE;
+      tex.uScale = 12;
+      tex.vScale = 12;
+
+      const mat = new BABYLON.StandardMaterial("bedroomFloorMat", scene);
+      mat.diffuseTexture = tex;
+      mat.specularColor = new BABYLON.Color3(0.22, 0.16, 0.1);
+      return mat;
+    }
+
+    function createBedroomRugMaterial() {
+      const tex = new BABYLON.DynamicTexture("bedroomRugTex", 256, scene, true);
+      const ctx = tex.getContext();
+      ctx.fillStyle = "#2b456b";
+      ctx.fillRect(0, 0, 256, 256);
+
+      ctx.strokeStyle = "#d9c296";
+      ctx.lineWidth = 10;
+      ctx.strokeRect(14, 14, 228, 228);
+
+      ctx.strokeStyle = "#b84035";
+      ctx.lineWidth = 6;
+      ctx.strokeRect(28, 28, 200, 200);
+
+      tex.update();
+      const mat = new BABYLON.StandardMaterial("bedroomRugMat", scene);
+      mat.diffuseTexture = tex;
+      mat.specularColor = BABYLON.Color3.Black();
+      return mat;
+    }
+
+    const cardboardMat = createCardboardMaterial();
+    const shoeboxOuterMat = createShoeboxOuterMaterial();
+    const bedroomFloorMat = createBedroomFloorMaterial();
+    const bedroomRugMat = createBedroomRugMaterial();
+
+    const tissuePaperMat = new BABYLON.StandardMaterial("tissuePaperMat", scene);
+    tissuePaperMat.diffuseColor = new BABYLON.Color3(0.95, 0.94, 0.9);
+    tissuePaperMat.specularColor = new BABYLON.Color3(0.08, 0.08, 0.08);
+
+    const bedroomWallMat = new BABYLON.StandardMaterial("bedroomWallMat", scene);
+    bedroomWallMat.diffuseColor = new BABYLON.Color3(0.42, 0.5, 0.62);
+    bedroomWallMat.specularColor = BABYLON.Color3.Black();
+
+    const bedroomTrimMat = new BABYLON.StandardMaterial("bedroomTrimMat", scene);
+    bedroomTrimMat.diffuseColor = new BABYLON.Color3(0.92, 0.91, 0.87);
+    bedroomTrimMat.specularColor = new BABYLON.Color3(0.12, 0.12, 0.12);
+
+    const bedBlanketMat = new BABYLON.StandardMaterial("bedBlanketMat", scene);
+    bedBlanketMat.diffuseColor = new BABYLON.Color3(0.2, 0.36, 0.58);
+    bedBlanketMat.specularColor = new BABYLON.Color3(0.06, 0.06, 0.08);
+
+    // Cover Vehicle 1: Plastic 6x6 Military Cargo / Troop Transport Army Truck
+    function createArmyTruck(x, z, rotY, isTanVariant) {
+      const root = new BABYLON.TransformNode("armyTruck", scene);
+      const groundY = getSandHeight(x, z);
+      root.position.set(x, groundY, z);
+      root.rotation.y = rotY || 0;
+
+      const bodyMat = isTanVariant ? tanPlasticMat : armyOliveMat;
+      const trimMat = isTanVariant ? tanDarkPlasticMat : armyDarkOliveMat;
+      const canopyMat = isTanVariant ? armyTanCanvasMat : armyCanvasMat;
+
+      // Heavy 6x6 chassis frame & front bumper
+      const chassis = BABYLON.MeshBuilder.CreateBox(
+        "truckChassis",
+        { width: 3.1, height: 0.52, depth: 7.5 },
+        scene
+      );
+      chassis.position.set(0, 0.82, 0.1);
+      chassis.material = tireMat;
+      chassis.parent = root;
+
+      const bumper = BABYLON.MeshBuilder.CreateBox(
+        "truckBumper",
+        { width: 3.55, height: 0.36, depth: 0.38 },
+        scene
+      );
+      bumper.position.set(0, 0.84, -3.75);
+      bumper.material = trimMat;
+      bumper.parent = root;
+
+      // Engine hood & front radiator grille
+      const hood = BABYLON.MeshBuilder.CreateBox(
+        "truckHood",
+        { width: 2.6, height: 1.22, depth: 2.05 },
+        scene
+      );
+      hood.position.set(0, 1.62, -2.6);
+      hood.material = bodyMat;
+      hood.parent = root;
+
+      const grille = BABYLON.MeshBuilder.CreateBox(
+        "truckGrille",
+        { width: 2.2, height: 0.92, depth: 0.14 },
+        scene
+      );
+      grille.position.set(0, 1.6, -3.62);
+      grille.material = trimMat;
+      grille.parent = root;
+
+      [-0.82, 0.82].forEach((hx, idx) => {
+        const hl = BABYLON.MeshBuilder.CreateCylinder(
+          "truckLight_" + idx,
+          { diameter: 0.36, height: 0.14, tessellation: 12 },
+          scene
+        );
+        hl.rotation.x = Math.PI / 2;
+        hl.position.set(hx, 1.64, -3.66);
+        hl.material = yellowToyMat;
+        hl.parent = root;
+      });
+
+      // White Allied Star emblem on hood
+      const starBadge = BABYLON.MeshBuilder.CreateCylinder(
+        "truckStar",
+        { diameter: 0.92, height: 0.05, tessellation: 5 },
+        scene
+      );
+      starBadge.position.set(0, 2.25, -2.6);
+      starBadge.material = whiteToyMat;
+      starBadge.parent = root;
+
+      // Driver Cab & Roof
+      const cab = BABYLON.MeshBuilder.CreateBox(
+        "truckCab",
+        { width: 3.1, height: 1.38, depth: 1.85 },
+        scene
+      );
+      cab.position.set(0, 1.72, -0.75);
+      cab.material = bodyMat;
+      cab.parent = root;
+
+      const cabBack = BABYLON.MeshBuilder.CreateBox(
+        "truckCabBack",
+        { width: 3.05, height: 1.0, depth: 0.25 },
+        scene
+      );
+      cabBack.position.set(0, 2.75, 0.05);
+      cabBack.material = bodyMat;
+      cabBack.parent = root;
+
+      const cabRoof = BABYLON.MeshBuilder.CreateBox(
+        "truckCabRoof",
+        { width: 3.12, height: 0.24, depth: 1.85 },
+        scene
+      );
+      cabRoof.position.set(0, 3.22, -0.75);
+      cabRoof.material = trimMat;
+      cabRoof.parent = root;
+
+      [-1.38, 1.38].forEach((px, idx) => {
+        const pillar = BABYLON.MeshBuilder.CreateBox(
+          "truckPillar_" + idx,
+          { width: 0.18, height: 0.82, depth: 0.18 },
+          scene
+        );
+        pillar.position.set(px, 2.78, -1.55);
+        pillar.material = trimMat;
+        pillar.parent = root;
+      });
+
+      // Rear Cargo Bed + Arched Troop Canopy Cover
+      const cargoBed = BABYLON.MeshBuilder.CreateBox(
+        "truckCargoBed",
+        { width: 3.4, height: 1.35, depth: 4.35 },
+        scene
+      );
+      cargoBed.position.set(0, 1.72, 2.25);
+      cargoBed.material = bodyMat;
+      cargoBed.parent = root;
+
+      const canopyWalls = BABYLON.MeshBuilder.CreateBox(
+        "truckCanopyWalls",
+        { width: 3.32, height: 1.15, depth: 4.28 },
+        scene
+      );
+      canopyWalls.position.set(0, 2.82, 2.25);
+      canopyWalls.material = canopyMat;
+      canopyWalls.parent = root;
+
+      const canopyArch = BABYLON.MeshBuilder.CreateCylinder(
+        "truckCanopyArch",
+        { diameter: 3.32, height: 4.28, tessellation: 16 },
+        scene
+      );
+      canopyArch.rotation.x = Math.PI / 2;
+      canopyArch.scaling.y = 0.42;
+      canopyArch.position.set(0, 3.38, 2.25);
+      canopyArch.material = canopyMat;
+      canopyArch.parent = root;
+
+      // 6 Military Off-Road Tires
+      const wheelCoords = [
+        [-1.68, -2.65],
+        [1.68, -2.65],
+        [-1.68, 1.05],
+        [1.68, 1.05],
+        [-1.68, 3.05],
+        [1.68, 3.05]
+      ];
+      wheelCoords.forEach(([wx, wz], idx) => {
+        const wheel = BABYLON.MeshBuilder.CreateCylinder(
+          "truckWheel_" + idx,
+          { diameter: 1.56, height: 0.58, tessellation: 14 },
+          scene
+        );
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(wx, 0.78, wz);
+        wheel.material = tireMat;
+        wheel.parent = root;
+
+        const hub = BABYLON.MeshBuilder.CreateCylinder(
+          "truckHub_" + idx,
+          { diameter: 0.76, height: 0.62, tessellation: 10 },
+          scene
+        );
+        hub.rotation.z = Math.PI / 2;
+        hub.position.set(wx, 0.78, wz);
+        hub.material = trimMat;
+        hub.parent = root;
+      });
+
+      const w = 3.7;
+      const d = 8.0;
+      const spanX = Math.abs(w * Math.cos(rotY)) + Math.abs(d * Math.sin(rotY));
+      const spanZ = Math.abs(w * Math.sin(rotY)) + Math.abs(d * Math.cos(rotY));
+      registerToyObstacle(root, x, z, spanX, spanZ, 3.7);
+    }
+
+    // Cover Vehicle 2: Iconic 4x4 Plastic Army Recon Jeep with Mounted .50 Cal Turret
+    function createArmyJeep(x, z, rotY, isTanVariant) {
+      const root = new BABYLON.TransformNode("armyJeep", scene);
+      const groundY = getSandHeight(x, z);
+      root.position.set(x, groundY, z);
+      root.rotation.y = rotY || 0;
+
+      const bodyMat = isTanVariant ? tanPlasticMat : armyOliveMat;
+      const trimMat = isTanVariant ? tanDarkPlasticMat : armyDarkOliveMat;
+
+      // Jeep Chassis & Front Bumper
+      const chassis = BABYLON.MeshBuilder.CreateBox(
+        "jeepChassis",
+        { width: 2.55, height: 0.44, depth: 4.65 },
+        scene
+      );
+      chassis.position.set(0, 0.68, 0);
+      chassis.material = tireMat;
+      chassis.parent = root;
+
+      const bumper = BABYLON.MeshBuilder.CreateBox(
+        "jeepBumper",
+        { width: 2.88, height: 0.28, depth: 0.3 },
+        scene
+      );
+      bumper.position.set(0, 0.72, -2.42);
+      bumper.material = trimMat;
+      bumper.parent = root;
+
+      // Flat-Fender Hood & Grille
+      const hood = BABYLON.MeshBuilder.CreateBox(
+        "jeepHood",
+        { width: 2.35, height: 0.92, depth: 1.75 },
+        scene
+      );
+      hood.position.set(0, 1.32, -1.4);
+      hood.material = bodyMat;
+      hood.parent = root;
+
+      const fenders = BABYLON.MeshBuilder.CreateBox(
+        "jeepFenders",
+        { width: 2.9, height: 0.28, depth: 1.65 },
+        scene
+      );
+      fenders.position.set(0, 1.22, -1.4);
+      fenders.material = bodyMat;
+      fenders.parent = root;
+
+      [-0.72, 0.72].forEach((hx, idx) => {
+        const hl = BABYLON.MeshBuilder.CreateCylinder(
+          "jeepLight_" + idx,
+          { diameter: 0.32, height: 0.12, tessellation: 12 },
+          scene
+        );
+        hl.rotation.x = Math.PI / 2;
+        hl.position.set(hx, 1.38, -2.3);
+        hl.material = yellowToyMat;
+        hl.parent = root;
+      });
+
+      const hoodStar = BABYLON.MeshBuilder.CreateCylinder(
+        "jeepStar",
+        { diameter: 0.78, height: 0.05, tessellation: 5 },
+        scene
+      );
+      hoodStar.position.set(0, 1.8, -1.4);
+      hoodStar.material = whiteToyMat;
+      hoodStar.parent = root;
+
+      // Open-Top Jeep Tub, Seats & Windshield Frame
+      const tubFloor = BABYLON.MeshBuilder.CreateBox(
+        "jeepTubFloor",
+        { width: 2.6, height: 0.35, depth: 2.75 },
+        scene
+      );
+      tubFloor.position.set(0, 1.02, 0.8);
+      tubFloor.material = bodyMat;
+      tubFloor.parent = root;
+
+      [-1.15, 1.15].forEach((sx, idx) => {
+        const sideWall = BABYLON.MeshBuilder.CreateBox(
+          "jeepSide_" + idx,
+          { width: 0.32, height: 0.82, depth: 2.75 },
+          scene
+        );
+        sideWall.position.set(sx, 1.48, 0.8);
+        sideWall.material = bodyMat;
+        sideWall.parent = root;
+      });
+
+      const tailgate = BABYLON.MeshBuilder.CreateBox(
+        "jeepTailgate",
+        { width: 2.6, height: 0.88, depth: 0.32 },
+        scene
+      );
+      tailgate.position.set(0, 1.5, 2.05);
+      tailgate.material = bodyMat;
+      tailgate.parent = root;
+
+      [-0.58, 0.58].forEach((sx, idx) => {
+        const seat = BABYLON.MeshBuilder.CreateBox(
+          "jeepSeat_" + idx,
+          { width: 0.78, height: 0.68, depth: 0.65 },
+          scene
+        );
+        seat.position.set(sx, 1.45, 0.25);
+        seat.material = trimMat;
+        seat.parent = root;
+      });
+
+      const windshield = BABYLON.MeshBuilder.CreateBox(
+        "jeepWindshield",
+        { width: 2.45, height: 0.82, depth: 0.14 },
+        scene
+      );
+      windshield.position.set(0, 2.12, -0.45);
+      windshield.rotation.x = -0.18;
+      windshield.material = trimMat;
+      windshield.parent = root;
+
+      // Pedestal-Mounted .50 Cal Machine Gun in Rear Bed
+      const gunPost = BABYLON.MeshBuilder.CreateCylinder(
+        "jeepGunPost",
+        { diameter: 0.22, height: 1.25, tessellation: 10 },
+        scene
+      );
+      gunPost.position.set(0, 1.75, 1.15);
+      gunPost.material = trimMat;
+      gunPost.parent = root;
+
+      const gunReceiver = BABYLON.MeshBuilder.CreateBox(
+        "jeepGunReceiver",
+        { width: 0.26, height: 0.28, depth: 0.72 },
+        scene
+      );
+      gunReceiver.position.set(0, 2.42, 0.95);
+      gunReceiver.material = tireMat;
+      gunReceiver.parent = root;
+
+      const gunBarrel = BABYLON.MeshBuilder.CreateCylinder(
+        "jeepGunBarrel",
+        { diameter: 0.1, height: 1.05, tessellation: 8 },
+        scene
+      );
+      gunBarrel.rotation.x = Math.PI / 2;
+      gunBarrel.position.set(0, 2.44, 0.12);
+      gunBarrel.material = tireMat;
+      gunBarrel.parent = root;
+
+      // Spare Tire & Jerrycan on Rear Tailgate
+      const spareTire = BABYLON.MeshBuilder.CreateCylinder(
+        "jeepSpareTire",
+        { diameter: 1.25, height: 0.42, tessellation: 14 },
+        scene
+      );
+      spareTire.rotation.x = Math.PI / 2;
+      spareTire.position.set(0.55, 1.52, 2.35);
+      spareTire.material = tireMat;
+      spareTire.parent = root;
+
+      const jerrycan = BABYLON.MeshBuilder.CreateBox(
+        "jeepJerrycan",
+        { width: 0.58, height: 0.78, depth: 0.34 },
+        scene
+      );
+      jerrycan.position.set(-0.62, 1.52, 2.32);
+      jerrycan.material = trimMat;
+      jerrycan.parent = root;
+
+      // 4 Off-Road Jeep Wheels
+      const wheelCoords = [
+        [-1.38, -1.45],
+        [1.38, -1.45],
+        [-1.38, 1.42],
+        [1.38, 1.42]
+      ];
+      wheelCoords.forEach(([wx, wz], idx) => {
+        const wheel = BABYLON.MeshBuilder.CreateCylinder(
+          "jeepWheel_" + idx,
+          { diameter: 1.36, height: 0.52, tessellation: 14 },
+          scene
+        );
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(wx, 0.68, wz);
+        wheel.material = tireMat;
+        wheel.parent = root;
+
+        const hub = BABYLON.MeshBuilder.CreateCylinder(
+          "jeepHub_" + idx,
+          { diameter: 0.66, height: 0.56, tessellation: 10 },
+          scene
+        );
+        hub.rotation.z = Math.PI / 2;
+        hub.position.set(wx, 0.68, wz);
+        hub.material = trimMat;
+        hub.parent = root;
+      });
+
+      const w = 3.0;
+      const d = 5.0;
+      const spanX = Math.abs(w * Math.cos(rotY)) + Math.abs(d * Math.sin(rotY));
+      const spanZ = Math.abs(w * Math.sin(rotY)) + Math.abs(d * Math.cos(rotY));
+      registerToyObstacle(root, x, z, spanX, spanZ, 2.55);
+    }
+
+    // Builds the Cardboard Shoe Box CQC Arena + Surrounding Giant Bedroom Environment
+    function buildShoeBoxAndBedroomEnvironment() {
+      // 1. Cardboard Shoe Box Floor
+      const boxW = WORLD_LIMIT_X * 2;
+      const boxD = WORLD_LIMIT_Z * 2;
+      const boxFloor = BABYLON.MeshBuilder.CreateGround(
+        "shoeboxFloor",
+        { width: boxW, height: boxD, subdivisions: 4 },
+        scene
+      );
+      boxFloor.position.y = 0;
+      boxFloor.material = cardboardMat;
+      boxFloor.receiveShadows = true;
+      boxFloor.metadata = { isEnvironment: true, isSand: true };
+      boxFloor.parent = envRootNode;
+
+      // Crinkled white tissue paper sheets lining the bottom of the shoe box
+      const tissue1 = BABYLON.MeshBuilder.CreateGround(
+        "tissueSheet1",
+        { width: boxW * 0.72, height: boxD * 0.68 },
+        scene
+      );
+      tissue1.position.set(-1.5, 0.02, 1.2);
+      tissue1.rotation.y = 0.09;
+      tissue1.material = tissuePaperMat;
+      tissue1.receiveShadows = true;
+      tissue1.isPickable = false;
+      tissue1.parent = envRootNode;
+
+      const tissue2 = BABYLON.MeshBuilder.CreateGround(
+        "tissueSheet2",
+        { width: boxW * 0.58, height: boxD * 0.52 },
+        scene
+      );
+      tissue2.position.set(2.4, 0.035, -3.0);
+      tissue2.rotation.y = -0.14;
+      tissue2.material = tissuePaperMat;
+      tissue2.receiveShadows = true;
+      tissue2.isPickable = false;
+      tissue2.parent = envRootNode;
+
+      // 2. Cardboard Shoe Box Walls (Inner corrugated cardboard + outer athletic sneaker box wrapper)
+      const wallH = 5.0;
+      const wallT = 0.9;
+      const fullW = boxW + wallT * 2;
+      const fullD = boxD + wallT * 2;
+
+      const boxWalls = [
+        { x: 0, z: -WORLD_LIMIT_Z - wallT / 2, w: fullW, d: wallT },
+        { x: 0, z: WORLD_LIMIT_Z + wallT / 2, w: fullW, d: wallT },
+        { x: -WORLD_LIMIT_X - wallT / 2, z: 0, w: wallT, d: boxD },
+        { x: WORLD_LIMIT_X + wallT / 2, z: 0, w: wallT, d: boxD }
+      ];
+
+      boxWalls.forEach((bw, idx) => {
+        const wall = BABYLON.MeshBuilder.CreateBox(
+          "shoeboxWall_" + idx,
+          { width: bw.w, height: wallH, depth: bw.d },
+          scene
+        );
+        wall.position.set(bw.x, wallH / 2 - 0.1, bw.z);
+        wall.material = cardboardMat;
+        wall.receiveShadows = true;
+        shadowGen.addShadowCaster(wall);
+        wall.metadata = { isEnvironment: true, isWall: true };
+        wall.parent = envRootNode;
+
+        // Folded top cardboard rim
+        const rim = BABYLON.MeshBuilder.CreateBox(
+          "shoeboxRim_" + idx,
+          { width: bw.w + 0.16, height: 0.28, depth: bw.d + 0.16 },
+          scene
+        );
+        rim.position.set(bw.x, wallH - 0.1, bw.z);
+        rim.material = shoeboxOuterMat;
+        rim.isPickable = false;
+        rim.parent = envRootNode;
+      });
+
+      // Outer decorative sneaker box panels on the long sides
+      [-1, 1].forEach((sideSign, idx) => {
+        const outerWrap = BABYLON.MeshBuilder.CreateBox(
+          "shoeboxOuterWrap_" + idx,
+          { width: 0.15, height: wallH - 0.3, depth: fullD + 0.1 },
+          scene
+        );
+        outerWrap.position.set(sideSign * (WORLD_LIMIT_X + wallT + 0.08), wallH / 2 - 0.1, 0);
+        outerWrap.material = shoeboxOuterMat;
+        outerWrap.isPickable = false;
+        outerWrap.parent = envRootNode;
+      });
+
+      // 3. ARMY TRUCKS & JEEPS FOR CLOSE-QUARTERS COVER INSIDE THE SHOE BOX
+      // Two 6x6 Army Trucks in the center creating tactical lanes & line-of-sight breaks
+      createArmyTruck(-7.2, -3.5, 0.28, false);
+      createArmyTruck(7.2, 3.5, Math.PI + 0.28, true);
+
+      // Four 4x4 Army Jeeps across the flanks & team approaches for close-quarters cover
+      createArmyJeep(-10.5, 12.2, 0.62, false);
+      createArmyJeep(10.5, -12.2, -Math.PI + 0.62, false);
+      createArmyJeep(8.8, 15.8, -0.42, true);
+      createArmyJeep(-8.8, -15.8, Math.PI - 0.42, false);
+
+      // 4. GIANT BEDROOM SURROUNDINGS OUTSIDE THE SHOE BOX
+      // Hardwood bedroom floor + woven area rug beneath the shoe box
+      const bedroomFloor = BABYLON.MeshBuilder.CreateGround(
+        "bedroomFloor",
+        { width: 320, height: 320 },
+        scene
+      );
+      bedroomFloor.position.y = -0.35;
+      bedroomFloor.material = bedroomFloorMat;
+      bedroomFloor.receiveShadows = true;
+      bedroomFloor.isPickable = false;
+      bedroomFloor.parent = envRootNode;
+
+      const bedroomRug = BABYLON.MeshBuilder.CreateBox(
+        "bedroomRug",
+        { width: 92, height: 0.18, depth: 112 },
+        scene
+      );
+      bedroomRug.position.set(0, -0.22, 0);
+      bedroomRug.material = bedroomRugMat;
+      bedroomRug.receiveShadows = true;
+      bedroomRug.isPickable = false;
+      bedroomRug.parent = envRootNode;
+
+      // Propped-off Shoe Box Lid resting on the bedroom floor right beside the shoe box
+      const boxLid = BABYLON.MeshBuilder.CreateBox(
+        "shoeboxLid",
+        { width: boxW + 2.8, height: 3.4, depth: boxD + 2.8 },
+        scene
+      );
+      boxLid.position.set(-WORLD_LIMIT_X - 28, 1.5, 4);
+      boxLid.rotation.y = 0.22;
+      boxLid.material = shoeboxOuterMat;
+      boxLid.isPickable = false;
+      boxLid.parent = envRootNode;
+
+      // Bedroom perimeter walls & white wooden baseboards
+      const roomSpan = 280;
+      const roomHalf = roomSpan / 2;
+      const roomWallH = 96;
+      const roomWalls = [
+        { x: 0, z: roomHalf, w: roomSpan, d: 2 },
+        { x: 0, z: -roomHalf, w: roomSpan, d: 2 },
+        { x: -roomHalf, z: 0, w: 2, d: roomSpan },
+        { x: roomHalf, z: 0, w: 2, d: roomSpan }
+      ];
+      roomWalls.forEach((rw, idx) => {
+        const wMesh = BABYLON.MeshBuilder.CreateBox(
+          "bedroomWall_" + idx,
+          { width: rw.w, height: roomWallH, depth: rw.d },
+          scene
+        );
+        wMesh.position.set(rw.x, roomWallH / 2 - 0.35, rw.z);
+        wMesh.material = bedroomWallMat;
+        wMesh.isPickable = false;
+        wMesh.parent = envRootNode;
+
+        const baseboard = BABYLON.MeshBuilder.CreateBox(
+          "bedroomBaseboard_" + idx,
+          { width: rw.w + 0.5, height: 5.5, depth: rw.d + 0.8 },
+          scene
+        );
+        baseboard.position.set(rw.x, 2.4, rw.z);
+        baseboard.material = bedroomTrimMat;
+        baseboard.isPickable = false;
+        baseboard.parent = envRootNode;
+      });
+
+      // Giant Bedroom Bed (North-West corner: Headboard, Mattress, Blanket, Pillows)
+      const bedRoot = new BABYLON.TransformNode("giantBed", scene);
+      bedRoot.position.set(-68, -0.35, 84);
+      bedRoot.parent = envRootNode;
+
+      const headboard = BABYLON.MeshBuilder.CreateBox(
+        "bedHeadboard",
+        { width: 74, height: 46, depth: 4.5 },
+        scene
+      );
+      headboard.position.set(0, 23, 46);
+      headboard.material = woodMat;
+      headboard.isPickable = false;
+      headboard.parent = bedRoot;
+
+      const footboard = BABYLON.MeshBuilder.CreateBox(
+        "bedFootboard",
+        { width: 74, height: 26, depth: 4.0 },
+        scene
+      );
+      footboard.position.set(0, 13, -46);
+      footboard.material = woodMat;
+      footboard.isPickable = false;
+      footboard.parent = bedRoot;
+
+      const bedFrame = BABYLON.MeshBuilder.CreateBox(
+        "bedFrame",
+        { width: 72, height: 10, depth: 90 },
+        scene
+      );
+      bedFrame.position.set(0, 9, 0);
+      bedFrame.material = woodMat;
+      bedFrame.isPickable = false;
+      bedFrame.parent = bedRoot;
+
+      const mattress = BABYLON.MeshBuilder.CreateBox(
+        "bedMattress",
+        { width: 68, height: 11, depth: 86 },
+        scene
+      );
+      mattress.position.set(0, 19, 0);
+      mattress.material = whiteToyMat;
+      mattress.isPickable = false;
+      mattress.parent = bedRoot;
+
+      const blanket = BABYLON.MeshBuilder.CreateBox(
+        "bedBlanket",
+        { width: 69.5, height: 11.2, depth: 62 },
+        scene
+      );
+      blanket.position.set(0, 19.4, -12);
+      blanket.material = bedBlanketMat;
+      blanket.isPickable = false;
+      blanket.parent = bedRoot;
+
+      [-17, 17].forEach((px, idx) => {
+        const pillow = BABYLON.MeshBuilder.CreateBox(
+          "bedPillow_" + idx,
+          { width: 26, height: 5.5, depth: 16 },
+          scene
+        );
+        pillow.position.set(px, 26.5, 31);
+        pillow.rotation.x = 0.15;
+        pillow.material = whiteToyMat;
+        pillow.isPickable = false;
+        pillow.parent = bedRoot;
+      });
+
+      // Giant Study Desk, Lamp, Books & Chair (East side of the bedroom)
+      const deskRoot = new BABYLON.TransformNode("giantDesk", scene);
+      deskRoot.position.set(82, -0.35, 8);
+      deskRoot.parent = envRootNode;
+
+      const deskTop = BABYLON.MeshBuilder.CreateBox(
+        "deskTop",
+        { width: 44, height: 3.2, depth: 82 },
+        scene
+      );
+      deskTop.position.set(0, 42, 0);
+      deskTop.material = woodMat;
+      deskTop.isPickable = false;
+      deskTop.parent = deskRoot;
+
+      [
+        [-18, -36],
+        [18, -36],
+        [-18, 36],
+        [18, 36]
+      ].forEach(([lx, lz], idx) => {
+        const leg = BABYLON.MeshBuilder.CreateBox(
+          "deskLeg_" + idx,
+          { width: 3.2, height: 42, depth: 3.2 },
+          scene
+        );
+        leg.position.set(lx, 21, lz);
+        leg.material = woodMat;
+        leg.isPickable = false;
+        leg.parent = deskRoot;
+      });
+
+      // Desk Chair tucked beside the desk
+      const chairSeat = BABYLON.MeshBuilder.CreateBox(
+        "chairSeat",
+        { width: 24, height: 2.5, depth: 24 },
+        scene
+      );
+      chairSeat.position.set(-22, 24, -4);
+      chairSeat.material = blueToyMat;
+      chairSeat.isPickable = false;
+      chairSeat.parent = deskRoot;
+
+      const chairBack = BABYLON.MeshBuilder.CreateBox(
+        "chairBack",
+        { width: 3.0, height: 22, depth: 22 },
+        scene
+      );
+      chairBack.position.set(-33, 35, -4);
+      chairBack.material = blueToyMat;
+      chairBack.isPickable = false;
+      chairBack.parent = deskRoot;
+
+      const chairPedestal = BABYLON.MeshBuilder.CreateCylinder(
+        "chairPedestal",
+        { diameter: 3.5, height: 24, tessellation: 10 },
+        scene
+      );
+      chairPedestal.position.set(-22, 12, -4);
+      chairPedestal.material = tireMat;
+      chairPedestal.isPickable = false;
+      chairPedestal.parent = deskRoot;
+
+      // Giant Wooden Dresser with Drawers (South-West of the bedroom)
+      const dresser = BABYLON.MeshBuilder.CreateBox(
+        "bedroomDresser",
+        { width: 34, height: 50, depth: 64 },
+        scene
+      );
+      dresser.position.set(-92, 24.6, -64);
+      dresser.material = woodMat;
+      dresser.isPickable = false;
+      dresser.parent = envRootNode;
+
+      for (let dIdx = 0; dIdx < 3; dIdx++) {
+        const drawer = BABYLON.MeshBuilder.CreateBox(
+          "dresserDrawer_" + dIdx,
+          { width: 1.5, height: 11, depth: 56 },
+          scene
+        );
+        drawer.position.set(-74.6, 12 + dIdx * 14, -64);
+        drawer.material = bedroomTrimMat;
+        drawer.isPickable = false;
+        drawer.parent = envRootNode;
+      }
+
+      // Giant Bedroom Door (South Wall) & Glowing Window (North Wall)
+      const bedroomDoor = BABYLON.MeshBuilder.CreateBox(
+        "bedroomDoor",
+        { width: 38, height: 74, depth: 2.5 },
+        scene
+      );
+      bedroomDoor.position.set(42, 36.6, -roomHalf + 1.5);
+      bedroomDoor.material = bedroomTrimMat;
+      bedroomDoor.isPickable = false;
+      bedroomDoor.parent = envRootNode;
+
+      const doorKnob = BABYLON.MeshBuilder.CreateSphere(
+        "bedroomDoorKnob",
+        { diameter: 3.2, segments: 10 },
+        scene
+      );
+      doorKnob.position.set(28, 33, -roomHalf + 3.5);
+      doorKnob.material = yellowToyMat;
+      doorKnob.isPickable = false;
+      doorKnob.parent = envRootNode;
+
+      const windowFrame = BABYLON.MeshBuilder.CreateBox(
+        "bedroomWindowFrame",
+        { width: 58, height: 44, depth: 2.8 },
+        scene
+      );
+      windowFrame.position.set(44, 56, roomHalf - 1.5);
+      windowFrame.material = bedroomTrimMat;
+      windowFrame.isPickable = false;
+      windowFrame.parent = envRootNode;
+
+      const windowGlassMat = new BABYLON.StandardMaterial("windowGlassMat", scene);
+      windowGlassMat.emissiveColor = new BABYLON.Color3(0.68, 0.85, 0.98);
+      windowGlassMat.disableLighting = true;
+
+      const windowPane = BABYLON.MeshBuilder.CreateBox(
+        "bedroomWindowPane",
+        { width: 50, height: 36, depth: 1.2 },
+        scene
+      );
+      windowPane.position.set(44, 56, roomHalf - 2.4);
+      windowPane.material = windowGlassMat;
+      windowPane.isPickable = false;
+      windowPane.parent = envRootNode;
+    }
+
+    function rebuildSandboxEnvironment(newLimit, newMapType) {
+      const targetMapType =
+        newMapType === "shoebox" || Number(newLimit) <= 50 ? "shoebox" : "sandbox";
+      const targetLimit =
+        targetMapType === "shoebox"
+          ? 28
+          : Math.max(50, Math.min(130, Number(newLimit) || 80));
+
+      if (
+        envRootNode &&
+        builtWorldLimit === targetLimit &&
+        builtMapType === targetMapType
+      ) {
         if (physicsBall) {
           const bx = 13;
           const bz = -5;
@@ -1735,42 +2673,65 @@
         envRootNode.dispose();
         envRootNode = null;
       }
+      physicsBall = null;
       obstacles.length = 0;
-      WORLD_LIMIT = targetLimit;
+      builtMapType = targetMapType;
       builtWorldLimit = targetLimit;
 
-      scene.fogStart = WORLD_LIMIT + 35;
-      scene.fogEnd = WORLD_LIMIT * 2.7;
-      camera.maxZ = WORLD_LIMIT * 3.6;
-
       envRootNode = new BABYLON.TransformNode("envRoot", scene);
-      buildSandboxFrameAndGround();
 
-      const s = WORLD_LIMIT / 48;
-      createSandcastle(0, 2);
-      createToyDumpTruck(-18 * s, 14 * s, 2.6);
+      if (targetMapType === "shoebox") {
+        // Small Close-Quarters Combat Shoe Box dimensions (44 x 60 interior)
+        WORLD_LIMIT = 28;
+        WORLD_LIMIT_X = 22;
+        WORLD_LIMIT_Z = 30;
 
-      createBeachBucket(15 * s, 12 * s, redToyMat, false, 0.3);
-      createBeachBucket(-14 * s, -13 * s, blueToyMat, true, 1.1);
-      createBeachBucket(22 * s, -16 * s, tealToyMat, false, -0.6);
+        scene.clearColor = new BABYLON.Color4(0.32, 0.38, 0.48, 1.0);
+        scene.fogColor = new BABYLON.Color3(0.35, 0.41, 0.5);
+        scene.fogStart = 135;
+        scene.fogEnd = 330;
+        camera.maxZ = 360;
 
-      createToyBrick(-9 * s, 18 * s, 6.0, 2.1, 3.0, 4, 2, redToyMat, 0.18);
-      createToyBrick(10 * s, 22 * s, 6.0, 2.1, 3.0, 4, 2, blueToyMat, -0.22);
-      createToyBrick(-20 * s, -2 * s, 3.0, 2.3, 6.0, 2, 4, yellowToyMat, 0.12);
-      createToyBrick(20 * s, 1 * s, 3.0, 2.3, 6.0, 2, 4, redToyMat, -0.15);
-      createToyBrick(-7 * s, -18 * s, 6.0, 2.1, 3.0, 4, 2, tealToyMat, -0.1);
-      createToyBrick(9 * s, -17 * s, 6.0, 2.1, 3.0, 4, 2, yellowToyMat, 0.25);
+        buildShoeBoxAndBedroomEnvironment();
+      } else {
+        WORLD_LIMIT = targetLimit;
+        WORLD_LIMIT_X = targetLimit;
+        WORLD_LIMIT_Z = targetLimit;
 
-      // Additional outer cover toys for Large and Huge sandboxes
-      if (WORLD_LIMIT >= 70) {
-        createToyBrick(-32 * (s / 1.5), -32 * (s / 1.5), 6.0, 2.2, 3.0, 4, 2, blueToyMat, 0.4);
-        createToyBrick(32 * (s / 1.5), 32 * (s / 1.5), 6.0, 2.2, 3.0, 4, 2, yellowToyMat, -0.4);
-        createBeachBucket(-30 * (s / 1.5), 26 * (s / 1.5), yellowToyMat, true, -0.8);
-        createBeachBucket(30 * (s / 1.5), -26 * (s / 1.5), redToyMat, false, 0.5);
+        scene.clearColor = new BABYLON.Color4(0.51, 0.78, 0.96, 1.0);
+        scene.fogColor = new BABYLON.Color3(0.56, 0.81, 0.96);
+        scene.fogStart = WORLD_LIMIT + 35;
+        scene.fogEnd = WORLD_LIMIT * 2.7;
+        camera.maxZ = WORLD_LIMIT * 3.6;
+
+        buildSandboxFrameAndGround();
+
+        const s = WORLD_LIMIT / 48;
+        createSandcastle(0, 2);
+        createToyDumpTruck(-18 * s, 14 * s, 2.6);
+
+        createBeachBucket(15 * s, 12 * s, redToyMat, false, 0.3);
+        createBeachBucket(-14 * s, -13 * s, blueToyMat, true, 1.1);
+        createBeachBucket(22 * s, -16 * s, tealToyMat, false, -0.6);
+
+        createToyBrick(-9 * s, 18 * s, 6.0, 2.1, 3.0, 4, 2, redToyMat, 0.18);
+        createToyBrick(10 * s, 22 * s, 6.0, 2.1, 3.0, 4, 2, blueToyMat, -0.22);
+        createToyBrick(-20 * s, -2 * s, 3.0, 2.3, 6.0, 2, 4, yellowToyMat, 0.12);
+        createToyBrick(20 * s, 1 * s, 3.0, 2.3, 6.0, 2, 4, redToyMat, -0.15);
+        createToyBrick(-7 * s, -18 * s, 6.0, 2.1, 3.0, 4, 2, tealToyMat, -0.1);
+        createToyBrick(9 * s, -17 * s, 6.0, 2.1, 3.0, 4, 2, yellowToyMat, 0.25);
+
+        // Additional outer cover toys for Large and Huge sandboxes
+        if (WORLD_LIMIT >= 70) {
+          createToyBrick(-32 * (s / 1.5), -32 * (s / 1.5), 6.0, 2.2, 3.0, 4, 2, blueToyMat, 0.4);
+          createToyBrick(32 * (s / 1.5), 32 * (s / 1.5), 6.0, 2.2, 3.0, 4, 2, yellowToyMat, -0.4);
+          createBeachBucket(-30 * (s / 1.5), 26 * (s / 1.5), yellowToyMat, true, -0.8);
+          createBeachBucket(30 * (s / 1.5), -26 * (s / 1.5), redToyMat, false, 0.5);
+        }
+
+        createPhysicsBeachBall(13, -5, 1.85);
+        createPlasticShovel(-11 * s, 5 * s, tealToyMat, 0.8);
       }
-
-      createPhysicsBeachBall(13, -5, 1.85);
-      createPlasticShovel(-11 * s, 5 * s, tealToyMat, 0.8);
 
       // Freeze static environment world matrices so Babylon skips matrix recomputation every frame
       envRootNode.getChildMeshes().forEach((m) => {
@@ -2536,10 +3497,29 @@
     let player = null;
     let configuredFriendlyCount = 3; // Default: 3 Friendly AI + You = 4 Green Total
     let configuredEnemyCount = 4;    // Default: 4 Enemy Tan Soldiers
+    let configuredMapType = "sandbox"; // "sandbox" | "shoebox"
     let configuredMapLimit = 80;     // Default: Large (80 -> 160x160)
+    let configuredHardcoreMode = false; // 1-Shot Kill Hardcore Mode
     let configuredDurationSec = 300; // Default: 5 Minutes (300s)
     let matchTimeRemaining = 300;
     let isSetupOpen = true;
+
+    function isHardcoreActive() {
+      if (mpState.active && mpState.roster && typeof mpState.roster.hardcoreMode === "boolean") {
+        return mpState.roster.hardcoreMode;
+      }
+      return Boolean(configuredHardcoreMode);
+    }
+
+    function getActiveMapType() {
+      if (mpState.active && mpState.roster) {
+        if (mpState.roster.mapType === "shoebox" || Number(mpState.roster.worldLimit) <= 50) {
+          return "shoebox";
+        }
+        return "sandbox";
+      }
+      return configuredMapType === "shoebox" ? "shoebox" : "sandbox";
+    }
 
     // WebSocket Multiplayer State
     const mpState = {
@@ -2593,37 +3573,51 @@
     ];
 
     function findSafeSpawnPoint(baseX, baseZ) {
-      const bound = WORLD_LIMIT - 3.5;
-      let x = Math.max(-bound, Math.min(bound, baseX));
-      let z = Math.max(-bound, Math.min(bound, baseZ));
+      const margin = builtMapType === "shoebox" ? 2.4 : 3.5;
+      const boundX = WORLD_LIMIT_X - margin;
+      const boundZ = WORLD_LIMIT_Z - margin;
+      let x = Math.max(-boundX, Math.min(boundX, baseX));
+      let z = Math.max(-boundZ, Math.min(boundZ, baseZ));
 
-      for (let attempt = 0; attempt < 20; attempt++) {
+      const pad = builtMapType === "shoebox" ? 1.1 : 1.4;
+      const stepX = builtMapType === "shoebox" ? 2.6 : 3.6;
+      const stepZ = builtMapType === "shoebox" ? 2.1 : 2.8;
+
+      for (let attempt = 0; attempt < 24; attempt++) {
         let blocked = false;
         for (const obs of obstacles) {
           if (
-            x > obs.minX - 1.4 &&
-            x < obs.maxX + 1.4 &&
-            z > obs.minZ - 1.4 &&
-            z < obs.maxZ + 1.4
+            x > obs.minX - pad &&
+            x < obs.maxX + pad &&
+            z > obs.minZ - pad &&
+            z < obs.maxZ + pad
           ) {
             blocked = true;
             break;
           }
         }
         if (!blocked) break;
-        x += (attempt % 2 === 0 ? 1 : -1) * 3.6;
-        z += (attempt > 6 ? -2.8 : 2.8);
-        x = Math.max(-bound, Math.min(bound, x));
-        z = Math.max(-bound, Math.min(bound, z));
+        x += (attempt % 2 === 0 ? 1 : -1) * stepX;
+        z += (attempt > 6 ? -stepZ : stepZ);
+        x = Math.max(-boundX, Math.min(boundX, x));
+        z = Math.max(-boundZ, Math.min(boundZ, z));
       }
 
       return { x, z };
     }
 
     function getFormationPoint(team, index, totalOnTeam) {
-      const baseZ = Math.max(28, WORLD_LIMIT - 14);
-      const cols = Math.max(4, Math.min(20, Math.ceil(Math.sqrt(totalOnTeam * 2.2))));
-      const spanWidth = Math.min(WORLD_LIMIT * 1.65, Math.max(28, cols * 5.2));
+      const isShoebox = builtMapType === "shoebox";
+      const baseZ = isShoebox
+        ? WORLD_LIMIT_Z - 4.2
+        : Math.max(28, WORLD_LIMIT_Z - 14);
+      const cols = isShoebox
+        ? Math.max(3, Math.min(10, Math.ceil(Math.sqrt(totalOnTeam * 2.0))))
+        : Math.max(4, Math.min(20, Math.ceil(Math.sqrt(totalOnTeam * 2.2))));
+      const spanWidth = isShoebox
+        ? Math.min(WORLD_LIMIT_X * 1.65, Math.max(15, cols * 3.8))
+        : Math.min(WORLD_LIMIT_X * 1.65, Math.max(28, cols * 5.2));
+      const rowStep = isShoebox ? 2.6 : 4.4;
 
       if (team === "green") {
         if (index === 0) return findSafeSpawnPoint(0, -baseZ);
@@ -2632,50 +3626,54 @@
         const col = i % cols;
         const colsInRow = Math.min(cols, Math.max(1, totalOnTeam - 1 - row * cols));
         const frac = colsInRow <= 1 ? 0 : col / (colsInRow - 1) - 0.5;
-        const offsetX = frac * spanWidth + (row % 2 === 0 ? 1.5 : -1.5);
+        const offsetX = frac * spanWidth + (row % 2 === 0 ? 1.2 : -1.2);
         // Step rows inward toward the center if there are many rows of bots
-        const rowOffsetZ = (row % 6) * 4.4;
-        const offsetZ = -(baseZ - 2) + rowOffsetZ;
+        const rowOffsetZ = (row % 6) * rowStep;
+        const offsetZ = -(baseZ - (isShoebox ? 1.2 : 2)) + rowOffsetZ;
         return findSafeSpawnPoint(offsetX, offsetZ);
       } else {
         const row = Math.floor(index / cols);
         const col = index % cols;
         const colsInRow = Math.min(cols, Math.max(1, totalOnTeam - row * cols));
         const frac = colsInRow <= 1 ? 0 : col / (colsInRow - 1) - 0.5;
-        const offsetX = frac * spanWidth + (row % 2 === 0 ? -1.5 : 1.5);
-        const rowOffsetZ = (row % 6) * 4.4;
-        const offsetZ = (baseZ - 2) - rowOffsetZ;
+        const offsetX = frac * spanWidth + (row % 2 === 0 ? -1.2 : 1.2);
+        const rowOffsetZ = (row % 6) * rowStep;
+        const offsetZ = (baseZ - (isShoebox ? 1.2 : 2)) - rowOffsetZ;
         return findSafeSpawnPoint(offsetX, offsetZ);
       }
     }
 
     // Picks a safe respawn point as far away from living enemies as possible
     function findFarthestSafeSpawnPoint(team) {
-      const margin = WORLD_LIMIT - 6;
+      const marginX = WORLD_LIMIT_X - (builtMapType === "shoebox" ? 3.5 : 6);
+      const marginZ = WORLD_LIMIT_Z - (builtMapType === "shoebox" ? 3.8 : 6);
       const candidates = [];
 
       for (let i = 0; i < 28; i++) {
         const angle = (i / 28) * Math.PI * 2;
-        const r = i % 2 === 0 ? margin : margin * 0.68;
+        const scale = i % 2 === 0 ? 1.0 : 0.68;
         candidates.push(
-          findSafeSpawnPoint(Math.sin(angle) * r, Math.cos(angle) * r)
+          findSafeSpawnPoint(
+            Math.sin(angle) * marginX * scale,
+            Math.cos(angle) * marginZ * scale
+          )
         );
       }
 
       const livingEnemies = soldiers.filter((s) => s.alive && s.team !== team);
       const livingAllies = soldiers.filter((s) => s.alive && s.team === team);
 
-      let bestPt = candidates[0] || { x: 0, z: team === "green" ? -margin : margin };
+      let bestPt = candidates[0] || { x: 0, z: team === "green" ? -marginZ : marginZ };
       let bestScore = -Infinity;
 
       for (const pt of candidates) {
-        let minEnemyDist = WORLD_LIMIT * 2;
+        let minEnemyDist = WORLD_LIMIT_Z * 2;
         for (const en of livingEnemies) {
           const d = Math.hypot(pt.x - en.position.x, pt.z - en.position.z);
           if (d < minEnemyDist) minEnemyDist = d;
         }
 
-        let minAllyDist = WORLD_LIMIT * 2;
+        let minAllyDist = WORLD_LIMIT_Z * 2;
         for (const al of livingAllies) {
           const d = Math.hypot(pt.x - al.position.x, pt.z - al.position.z);
           if (d < minAllyDist) minAllyDist = d;
@@ -2698,11 +3696,14 @@
     }
 
     function spawnAllSoldiers() {
+      const targetMapType = getActiveMapType();
       const targetWorldLimit =
-        mpState.active && mpState.roster && mpState.roster.worldLimit
+        targetMapType === "shoebox"
+          ? 28
+          : mpState.active && mpState.roster && mpState.roster.worldLimit
           ? mpState.roster.worldLimit
           : configuredMapLimit;
-      rebuildSandboxEnvironment(targetWorldLimit);
+      rebuildSandboxEnvironment(targetWorldLimit, targetMapType);
 
       soldiers.forEach((s) => s.model.root.dispose());
       soldiers.length = 0;
@@ -3501,59 +4502,69 @@
         }
       }
 
-      // 2. Check outer wooden sandbox walls
-      const wallTop = 3.3;
+      // 2. Check outer wooden sandbox / cardboard shoe box walls
+      const wallTop = builtMapType === "shoebox" ? 5.0 : 3.3;
       if (dx > 1e-5) {
-        const t = (WORLD_LIMIT - ox) / dx;
+        const t = (WORLD_LIMIT_X - ox) / dx;
         if (t > 0 && t < closestDist && oy + dy * t <= wallTop) {
           closestDist = t;
           hitKind = "toy";
         }
       } else if (dx < -1e-5) {
-        const t = (-WORLD_LIMIT - ox) / dx;
+        const t = (-WORLD_LIMIT_X - ox) / dx;
         if (t > 0 && t < closestDist && oy + dy * t <= wallTop) {
           closestDist = t;
           hitKind = "toy";
         }
       }
       if (dz > 1e-5) {
-        const t = (WORLD_LIMIT - oz) / dz;
+        const t = (WORLD_LIMIT_Z - oz) / dz;
         if (t > 0 && t < closestDist && oy + dy * t <= wallTop) {
           closestDist = t;
           hitKind = "toy";
         }
       } else if (dz < -1e-5) {
-        const t = (-WORLD_LIMIT - oz) / dz;
+        const t = (-WORLD_LIMIT_Z - oz) / dz;
         if (t > 0 && t < closestDist && oy + dy * t <= wallTop) {
           closestDist = t;
           hitKind = "toy";
         }
       }
 
-      // 3. Fast step-march + binary refinement against analytical uneven sand heightfield
+      // 3. Fast floor / sand heightfield intersection
       if (checkSand) {
-        const step = 2.2;
-        let prevT = 0;
-        for (let t = step; t <= closestDist; t += step) {
-          const rx = ox + dx * t;
-          const ry = oy + dy * t;
-          const rz = oz + dz * t;
-          if (ry <= 3.2 && ry <= getSandHeight(rx, rz)) {
-            let lo = prevT;
-            let hi = t;
-            for (let b = 0; b < 3; b++) {
-              const mid = (lo + hi) * 0.5;
-              if (oy + dy * mid <= getSandHeight(ox + dx * mid, oz + dz * mid)) {
-                hi = mid;
-              } else {
-                lo = mid;
-              }
+        if (builtMapType === "shoebox") {
+          if (dy < -1e-5 && oy > 0) {
+            const tFloor = -oy / dy;
+            if (tFloor > 0 && tFloor < closestDist) {
+              closestDist = tFloor;
+              hitKind = "sand";
             }
-            closestDist = (lo + hi) * 0.5;
-            hitKind = "sand";
-            break;
           }
-          prevT = t;
+        } else {
+          const step = 2.2;
+          let prevT = 0;
+          for (let t = step; t <= closestDist; t += step) {
+            const rx = ox + dx * t;
+            const ry = oy + dy * t;
+            const rz = oz + dz * t;
+            if (ry <= 3.2 && ry <= getSandHeight(rx, rz)) {
+              let lo = prevT;
+              let hi = t;
+              for (let b = 0; b < 3; b++) {
+                const mid = (lo + hi) * 0.5;
+                if (oy + dy * mid <= getSandHeight(ox + dx * mid, oz + dz * mid)) {
+                  hi = mid;
+                } else {
+                  lo = mid;
+                }
+              }
+              closestDist = (lo + hi) * 0.5;
+              hitKind = "sand";
+              break;
+            }
+            prevT = t;
+          }
         }
       }
 
@@ -3625,6 +4636,7 @@
       }
 
       const hitPoint = muzzlePos.add(aimDir.scale(closestDist));
+      const effectiveDamage = isHardcoreActive() ? 100 : damageAmount;
 
       if (hitSoldier) {
         hitSoldier.velocity.addInPlace(aimDir.scale(4.5));
@@ -3641,11 +4653,11 @@
             type: "damage_unit",
             targetUnitId: hitSoldier.unitId,
             attackerUnitId: shooter.unitId,
-            amount: damageAmount,
+            amount: effectiveDamage,
             shotDir: { x: aimDir.x, y: aimDir.y, z: aimDir.z }
           });
         } else {
-          applyDamage(hitSoldier, damageAmount, aimDir, shooter);
+          applyDamage(hitSoldier, effectiveDamage, aimDir, shooter);
         }
       } else if (hitKind === "ball" && physicsBall) {
         const impulse = aimDir.scale(11);
@@ -3662,7 +4674,7 @@
           });
         }
       } else if (hitKind === "sand") {
-        spawnImpactBurst(hitPoint, true, "#e6c373");
+        spawnImpactBurst(hitPoint, true, builtMapType === "shoebox" ? "#c29663" : "#e6c373");
       } else if (hitKind === "toy") {
         spawnImpactBurst(hitPoint, false, "#fff0a0");
       }
@@ -3712,7 +4724,7 @@
       const muzzlePos = getMuzzleWorldPosition(player);
       const shotDir = aimPoint.subtract(muzzlePos).normalize();
 
-      fireWeapon(player, shotDir, 34);
+      fireWeapon(player, shotDir, isHardcoreActive() ? 100 : 34);
     }
 
     function hasLineOfSight(fromSoldier, toSoldier) {
@@ -3783,9 +4795,9 @@
       soldier.velocity.y -= 24.0 * dt;
       pos.y += soldier.velocity.y * dt;
 
-      // Keep inside wooden sandbox walls
-      pos.x = Math.max(-WORLD_LIMIT + 1.2, Math.min(WORLD_LIMIT - 1.2, pos.x));
-      pos.z = Math.max(-WORLD_LIMIT + 1.2, Math.min(WORLD_LIMIT - 1.2, pos.z));
+      // Keep inside wooden sandbox / cardboard shoe box walls
+      pos.x = Math.max(-WORLD_LIMIT_X + 1.15, Math.min(WORLD_LIMIT_X - 1.15, pos.x));
+      pos.z = Math.max(-WORLD_LIMIT_Z + 1.15, Math.min(WORLD_LIMIT_Z - 1.15, pos.z));
 
       // Push out of static sandbox toys
       for (let i = 0; i < obstacles.length; i++) {
@@ -3885,19 +4897,20 @@
       pos.z += vel.z * dt;
 
       // Bounce off sandbox wooden walls
-      const limit = WORLD_LIMIT - ball.radius;
-      if (pos.x < -limit) {
-        pos.x = -limit;
+      const limitX = WORLD_LIMIT_X - ball.radius;
+      const limitZ = WORLD_LIMIT_Z - ball.radius;
+      if (pos.x < -limitX) {
+        pos.x = -limitX;
         vel.x = Math.abs(vel.x) * 0.75;
-      } else if (pos.x > limit) {
-        pos.x = limit;
+      } else if (pos.x > limitX) {
+        pos.x = limitX;
         vel.x = -Math.abs(vel.x) * 0.75;
       }
-      if (pos.z < -limit) {
-        pos.z = -limit;
+      if (pos.z < -limitZ) {
+        pos.z = -limitZ;
         vel.z = Math.abs(vel.z) * 0.75;
-      } else if (pos.z > limit) {
-        pos.z = limit;
+      } else if (pos.z > limitZ) {
+        pos.z = limitZ;
         vel.z = -Math.abs(vel.z) * 0.75;
       }
 
@@ -3979,8 +4992,11 @@
     const setupModalEl = document.getElementById("setup-modal");
     const friendlyInputEl = document.getElementById("friendly-input");
     const enemyInputEl = document.getElementById("enemy-input");
+    const mapSelectEl = document.getElementById("map-select");
     const mapSizeSelectEl = document.getElementById("map-size-select");
     const timeLimitSelectEl = document.getElementById("time-limit-select");
+    const hardcoreCheckboxEl = document.getElementById("hardcore-checkbox");
+    const instructionsTitleEl = document.getElementById("instructions-title");
     const startMatchBtn = document.getElementById("start-match-btn");
     const hostMpBtn = document.getElementById("host-mp-btn");
     const joinMpBtn = document.getElementById("join-mp-btn");
@@ -4090,7 +5106,8 @@
       return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
     }
 
-    function getMapSizeLabel(limit) {
+    function getMapSizeLabel(limit, mapType) {
+      if (mapType === "shoebox" || limit <= 50) return "Shoe Box";
       if (limit <= 65) return "Medium";
       if (limit >= 95) return "Huge";
       return "Large";
@@ -4136,7 +5153,8 @@
                 const code = escapeHtml(rm.roomCode);
                 const host = escapeHtml(rm.hostName || "Host");
                 const pCount = Array.isArray(rm.players) ? rm.players.length : 1;
-                const mapLbl = getMapSizeLabel(rm.worldLimit || 80);
+                const mapLbl = getMapSizeLabel(rm.worldLimit || 80, rm.mapType);
+                const hcLbl = rm.hardcoreMode ? " &bull; ⚡ Hardcore" : "";
                 const remStr =
                   typeof rm.remainingSec === "number"
                     ? formatTimeMMSS(rm.remainingSec)
@@ -4145,7 +5163,7 @@
                   <div class="match-row">
                     <div class="match-info">
                       <span class="match-title">${code} &bull; Host: ${host}</span>
-                      <span class="match-meta">${rm.greenTotal}v${rm.tanTotal} &bull; ${mapLbl} &bull; ${remStr} left &bull; ${pCount} Online</span>
+                      <span class="match-meta">${rm.greenTotal}v${rm.tanTotal} &bull; ${mapLbl}${hcLbl} &bull; ${remStr} left &bull; ${pCount} Online</span>
                     </div>
                     <button type="button" class="join-row-btn" data-room="${code}">Join</button>
                   </div>
@@ -4211,7 +5229,19 @@
       configuredEnemyCount = clampInt(enemyInputEl.value, 1, 999999, 4);
       friendlyInputEl.value = configuredFriendlyCount;
       enemyInputEl.value = configuredEnemyCount;
-      configuredMapLimit = clampInt(mapSizeSelectEl.value, 50, 130, 80);
+      configuredMapType =
+        mapSelectEl && mapSelectEl.value === "shoebox" ? "shoebox" : "sandbox";
+      if (configuredMapType === "shoebox") {
+        configuredMapLimit = 28;
+        if (mapSizeSelectEl) mapSizeSelectEl.value = "28";
+      } else {
+        const rawLim = clampInt(mapSizeSelectEl.value, 28, 130, 80);
+        configuredMapLimit = rawLim <= 50 ? 80 : rawLim;
+        if (mapSizeSelectEl && Number(mapSizeSelectEl.value) <= 50) {
+          mapSizeSelectEl.value = String(configuredMapLimit);
+        }
+      }
+      configuredHardcoreMode = Boolean(hardcoreCheckboxEl && hardcoreCheckboxEl.checked);
       configuredDurationSec = clampInt(timeLimitSelectEl.value, 60, 1800, 300);
     }
 
@@ -4253,7 +5283,9 @@
             team: chosenTeam,
             greenTotal: configuredFriendlyCount + 1,
             tanTotal: configuredEnemyCount,
-            worldLimit: configuredMapLimit,
+            mapType: configuredMapType,
+            worldLimit: configuredMapType === "shoebox" ? 28 : configuredMapLimit,
+            hardcoreMode: configuredHardcoreMode,
             durationSec: configuredDurationSec
           })
         );
@@ -4455,8 +5487,22 @@
           mpState.roomCode = msg.roster.roomCode;
           mpState.hostId = msg.roster.hostId;
 
-          if (msg.roster.worldLimit) {
-            configuredMapLimit = msg.roster.worldLimit;
+          if (msg.roster.mapType === "shoebox" || Number(msg.roster.worldLimit) <= 50) {
+            configuredMapType = "shoebox";
+            configuredMapLimit = 28;
+            if (mapSelectEl) mapSelectEl.value = "shoebox";
+            if (mapSizeSelectEl) mapSizeSelectEl.value = "28";
+          } else {
+            configuredMapType = "sandbox";
+            if (msg.roster.worldLimit) {
+              configuredMapLimit = msg.roster.worldLimit;
+              if (mapSizeSelectEl) mapSizeSelectEl.value = String(configuredMapLimit);
+            }
+            if (mapSelectEl) mapSelectEl.value = "sandbox";
+          }
+          if (typeof msg.roster.hardcoreMode === "boolean") {
+            configuredHardcoreMode = msg.roster.hardcoreMode;
+            if (hardcoreCheckboxEl) hardcoreCheckboxEl.checked = configuredHardcoreMode;
           }
           if (msg.roster.durationSec) {
             configuredDurationSec = msg.roster.durationSec;
@@ -4490,6 +5536,21 @@
         case "roster_update": {
           mpState.roster = msg.roster;
           mpState.hostId = msg.roster.hostId;
+          if (msg.roster.mapType === "shoebox" || Number(msg.roster.worldLimit) <= 50) {
+            configuredMapType = "shoebox";
+            configuredMapLimit = 28;
+            if (mapSelectEl) mapSelectEl.value = "shoebox";
+            if (mapSizeSelectEl) mapSizeSelectEl.value = "28";
+          } else if (msg.roster.worldLimit) {
+            configuredMapType = "sandbox";
+            configuredMapLimit = msg.roster.worldLimit;
+            if (mapSelectEl) mapSelectEl.value = "sandbox";
+            if (mapSizeSelectEl) mapSizeSelectEl.value = String(configuredMapLimit);
+          }
+          if (typeof msg.roster.hardcoreMode === "boolean") {
+            configuredHardcoreMode = msg.roster.hardcoreMode;
+            if (hardcoreCheckboxEl) hardcoreCheckboxEl.checked = configuredHardcoreMode;
+          }
           updateMpStatusBadge();
 
           if (typeof msg.roster.remainingSec === "number") {
@@ -4510,7 +5571,7 @@
           }
 
           const expectedCount = msg.roster.greenTotal + msg.roster.tanTotal;
-          if (soldiers.length !== expectedCount) {
+          if (soldiers.length !== expectedCount || getActiveMapType() !== builtMapType) {
             spawnAllSoldiers();
           } else {
             syncRosterHumanFlags(msg.roster);
@@ -4634,7 +5695,7 @@
           spawnTracer(mPos, hPos, tracerColor);
 
           if (msg.hitKind === "sand") {
-            spawnImpactBurst(hPos, true, "#e6c373");
+            spawnImpactBurst(hPos, true, builtMapType === "shoebox" ? "#c29663" : "#e6c373");
           } else if (msg.hitKind === "green") {
             spawnImpactBurst(hPos, false, "#4be03e");
             playImpactHitSound(hPos, true);
@@ -4709,7 +5770,23 @@
         case "match_restarted": {
           mpState.roster = msg.roster;
           mpState.hostId = msg.roster.hostId;
-          if (msg.roster.worldLimit) configuredMapLimit = msg.roster.worldLimit;
+          if (msg.roster.mapType === "shoebox" || Number(msg.roster.worldLimit) <= 50) {
+            configuredMapType = "shoebox";
+            configuredMapLimit = 28;
+            if (mapSelectEl) mapSelectEl.value = "shoebox";
+            if (mapSizeSelectEl) mapSizeSelectEl.value = "28";
+          } else {
+            configuredMapType = "sandbox";
+            if (msg.roster.worldLimit) {
+              configuredMapLimit = msg.roster.worldLimit;
+              if (mapSizeSelectEl) mapSizeSelectEl.value = String(configuredMapLimit);
+            }
+            if (mapSelectEl) mapSelectEl.value = "sandbox";
+          }
+          if (typeof msg.roster.hardcoreMode === "boolean") {
+            configuredHardcoreMode = msg.roster.hardcoreMode;
+            if (hardcoreCheckboxEl) hardcoreCheckboxEl.checked = configuredHardcoreMode;
+          }
           if (msg.roster.durationSec) configuredDurationSec = msg.roster.durationSec;
           updateMpStatusBadge();
           isSetupOpen = false;
@@ -4748,8 +5825,28 @@
     });
     friendlyInputEl.addEventListener("change", readHostSetupInputs);
     enemyInputEl.addEventListener("change", readHostSetupInputs);
-    mapSizeSelectEl.addEventListener("change", readHostSetupInputs);
+    if (mapSelectEl) {
+      mapSelectEl.addEventListener("change", () => {
+        if (mapSelectEl.value === "shoebox") {
+          mapSizeSelectEl.value = "28";
+        } else if (Number(mapSizeSelectEl.value) <= 50) {
+          mapSizeSelectEl.value = "80";
+        }
+        readHostSetupInputs();
+      });
+    }
+    mapSizeSelectEl.addEventListener("change", () => {
+      if (Number(mapSizeSelectEl.value) <= 50) {
+        if (mapSelectEl) mapSelectEl.value = "shoebox";
+      } else {
+        if (mapSelectEl) mapSelectEl.value = "sandbox";
+      }
+      readHostSetupInputs();
+    });
     timeLimitSelectEl.addEventListener("change", readHostSetupInputs);
+    if (hardcoreCheckboxEl) {
+      hardcoreCheckboxEl.addEventListener("change", readHostSetupInputs);
+    }
 
     function tryLockPointer() {
       if (
@@ -4816,7 +5913,9 @@
           type: "restart_match",
           greenTotal: gTotal,
           tanTotal: tTotal,
-          worldLimit: configuredMapLimit,
+          mapType: configuredMapType,
+          worldLimit: configuredMapType === "shoebox" ? 28 : configuredMapLimit,
+          hardcoreMode: configuredHardcoreMode,
           durationSec: configuredDurationSec
         });
       }
@@ -4830,7 +5929,8 @@
     function applyDamage(target, amount, shotDir, attacker) {
       if (!target.alive || gameEnded || isSetupOpen) return;
 
-      target.health = Math.max(0, target.health - amount);
+      const finalAmount = isHardcoreActive() ? Math.max(amount, target.maxHealth) : amount;
+      target.health = Math.max(0, target.health - finalAmount);
       target.model.flinchTimer = 1.0;
 
       if (target.model.overheadBarFill) {
@@ -4892,6 +5992,16 @@
 
       if (matchTimerEl) {
         matchTimerEl.textContent = formatTimeMMSS(matchTimeRemaining);
+      }
+
+      if (instructionsTitleEl) {
+        const mapTitle =
+          builtMapType === "shoebox"
+            ? "THE SHOE BOX — BEDROOM CQC"
+            : "BACKYARD SANDBOX BATTLE";
+        instructionsTitleEl.textContent = isHardcoreActive()
+          ? `${mapTitle} [HARDCORE]`
+          : mapTitle;
       }
 
       // Single-pass aggregation over soldiers array (zero temporary arrays allocated)
@@ -5044,7 +6154,7 @@
         const dx = ai.position.x - obs.cx;
         const dz = ai.position.z - obs.cz;
         const dist = Math.max(0.01, Math.hypot(dx, dz));
-        const safeDist = obs.radius + ai.radius + 2.8;
+        const safeDist = obs.radius + ai.radius + (builtMapType === "shoebox" ? 1.8 : 2.8);
 
         if (dist < safeDist) {
           // Vector from AI toward obstacle center
@@ -5207,7 +6317,7 @@
           nearestTarget.position.z + (Math.random() - 0.5) * spread
         );
         const shotDir = aimPos.subtract(muzzlePos).normalize();
-        const dmg = ai.team === "green" ? 20 : 12;
+        const dmg = isHardcoreActive() ? 100 : ai.team === "green" ? 20 : 12;
         fireWeapon(ai, shotDir, dmg);
       }
     }
@@ -5507,24 +6617,25 @@
           .add(right.scale(shoulderOffset));
         idealCamPos.y = player.position.y + camHeight + Math.sin(player.pitch) * 2.2;
 
-        // Prevent camera from clipping outside the wooden sandbox walls or inside toys
+        // Prevent camera from clipping outside the wooden sandbox / shoe box walls or inside toys
         const camVec = idealCamPos.subtract(headOrigin);
         const camLen = camVec.length();
         let safeFraction = 1.0;
-        const wallBound = WORLD_LIMIT - 1.1;
+        const wallBoundX = WORLD_LIMIT_X - 1.1;
+        const wallBoundZ = WORLD_LIMIT_Z - 1.1;
 
         if (Math.abs(camVec.x) > 0.001) {
-          if (idealCamPos.x > wallBound) {
-            safeFraction = Math.min(safeFraction, (wallBound - headOrigin.x) / camVec.x);
-          } else if (idealCamPos.x < -wallBound) {
-            safeFraction = Math.min(safeFraction, (-wallBound - headOrigin.x) / camVec.x);
+          if (idealCamPos.x > wallBoundX) {
+            safeFraction = Math.min(safeFraction, (wallBoundX - headOrigin.x) / camVec.x);
+          } else if (idealCamPos.x < -wallBoundX) {
+            safeFraction = Math.min(safeFraction, (-wallBoundX - headOrigin.x) / camVec.x);
           }
         }
         if (Math.abs(camVec.z) > 0.001) {
-          if (idealCamPos.z > wallBound) {
-            safeFraction = Math.min(safeFraction, (wallBound - headOrigin.z) / camVec.z);
-          } else if (idealCamPos.z < -wallBound) {
-            safeFraction = Math.min(safeFraction, (-wallBound - headOrigin.z) / camVec.z);
+          if (idealCamPos.z > wallBoundZ) {
+            safeFraction = Math.min(safeFraction, (wallBoundZ - headOrigin.z) / camVec.z);
+          } else if (idealCamPos.z < -wallBoundZ) {
+            safeFraction = Math.min(safeFraction, (-wallBoundZ - headOrigin.z) / camVec.z);
           }
         }
 

@@ -107,18 +107,23 @@ function resetRoomMatchState(room) {
   }
 }
 
-function getOrCreateRoom(roomCode, greenTotal, tanTotal, hostName, worldLimit, durationSec) {
+function getOrCreateRoom(roomCode, greenTotal, tanTotal, hostName, worldLimit, durationSec, mapType, hardcoreMode) {
   let room = rooms.get(roomCode);
   if (!room) {
     const dur = Math.max(60, Math.min(1800, Number(durationSec) || 300));
-    const lim = Math.max(50, Math.min(130, Number(worldLimit) || 80));
+    const resolvedMap = mapType === "shoebox" || Number(worldLimit) <= 50 ? "shoebox" : "sandbox";
+    const lim = resolvedMap === "shoebox"
+      ? 28
+      : Math.max(50, Math.min(130, Number(worldLimit) || 80));
     room = {
       code: roomCode,
       hostId: null,
       hostName: hostName || "Host",
       greenTotal: Math.max(1, Math.floor(Number(greenTotal) || 4)),
       tanTotal: Math.max(1, Math.floor(Number(tanTotal) || 4)),
+      mapType: resolvedMap,
       worldLimit: lim,
+      hardcoreMode: Boolean(hardcoreMode),
       durationSec: dur,
       matchEndTime: Date.now() + dur * 1000,
       matchEnded: false,
@@ -157,7 +162,9 @@ function serializeRoster(room) {
     hostName: room.hostName || "Host",
     greenTotal: room.greenTotal,
     tanTotal: room.tanTotal,
+    mapType: room.mapType || "sandbox",
     worldLimit: room.worldLimit,
+    hardcoreMode: Boolean(room.hardcoreMode),
     durationSec: room.durationSec,
     remainingSec,
     matchEnded: room.matchEnded,
@@ -217,7 +224,11 @@ wss.on("connection", (ws) => {
         const name = String(msg.name || "Soldier").slice(0, 18);
         const requestedGreen = Number(msg.greenTotal) || 4;
         const requestedTan = Number(msg.tanTotal) || 4;
-        const requestedLimit = Number(msg.worldLimit) || 80;
+        const requestedMapType =
+          msg.mapType === "shoebox" || Number(msg.worldLimit) <= 50 ? "shoebox" : "sandbox";
+        const requestedLimit =
+          requestedMapType === "shoebox" ? 28 : Number(msg.worldLimit) || 80;
+        const requestedHardcore = Boolean(msg.hardcoreMode);
         const requestedDuration = Number(msg.durationSec) || 300;
 
         const room = getOrCreateRoom(
@@ -226,7 +237,9 @@ wss.on("connection", (ws) => {
           requestedTan,
           name,
           requestedLimit,
-          requestedDuration
+          requestedDuration,
+          requestedMapType,
+          requestedHardcore
         );
 
         // If this device clicked Host (or room had no host), apply their match settings & reset round
@@ -235,7 +248,12 @@ wss.on("connection", (ws) => {
           room.hostName = name;
           room.greenTotal = Math.max(1, Math.floor(requestedGreen));
           room.tanTotal = Math.max(1, Math.floor(requestedTan));
-          room.worldLimit = Math.max(50, Math.min(130, requestedLimit));
+          room.mapType = requestedMapType;
+          room.worldLimit =
+            requestedMapType === "shoebox"
+              ? 28
+              : Math.max(50, Math.min(130, requestedLimit));
+          room.hardcoreMode = requestedHardcore;
           room.durationSec = Math.max(60, Math.min(1800, requestedDuration));
           resetRoomMatchState(room);
         }
@@ -250,6 +268,7 @@ wss.on("connection", (ws) => {
 
         const unitId = `${team}_${slotIndex}`;
         getUnitStat(room, unitId);
+        const spawnZ = room.mapType === "shoebox" ? 24 : 30;
         const clientInfo = {
           id: clientId,
           ws,
@@ -259,7 +278,7 @@ wss.on("connection", (ws) => {
           unitId,
           x: 0,
           y: 0,
-          z: team === "green" ? -30 : 28,
+          z: team === "green" ? -spawnZ : spawnZ - 2,
           yaw: team === "green" ? 0 : Math.PI,
           pitch: 0,
           health: 100,
@@ -374,7 +393,8 @@ wss.on("connection", (ws) => {
         if (!currentRoom || currentRoom.matchEnded) return;
         const targetUnitId = String(msg.targetUnitId || "");
         const attackerUnitId = msg.attackerUnitId ? String(msg.attackerUnitId) : null;
-        const amount = Math.max(0, Number(msg.amount) || 0);
+        const rawAmount = Math.max(0, Number(msg.amount) || 0);
+        const amount = currentRoom.hardcoreMode ? Math.max(rawAmount, 100) : rawAmount;
         if (!targetUnitId || amount <= 0) return;
 
         const targetStat = getUnitStat(currentRoom, targetUnitId);
@@ -495,8 +515,19 @@ wss.on("connection", (ws) => {
         if (msg.tanTotal) {
           currentRoom.tanTotal = Math.max(1, Math.floor(Number(msg.tanTotal)));
         }
+        if (msg.mapType === "shoebox" || msg.mapType === "sandbox") {
+          currentRoom.mapType = msg.mapType;
+        }
         if (msg.worldLimit) {
-          currentRoom.worldLimit = Math.max(50, Math.min(130, Number(msg.worldLimit)));
+          if (currentRoom.mapType === "shoebox" || Number(msg.worldLimit) <= 50) {
+            currentRoom.mapType = "shoebox";
+            currentRoom.worldLimit = 28;
+          } else {
+            currentRoom.worldLimit = Math.max(50, Math.min(130, Number(msg.worldLimit)));
+          }
+        }
+        if (typeof msg.hardcoreMode === "boolean") {
+          currentRoom.hardcoreMode = msg.hardcoreMode;
         }
         if (msg.durationSec) {
           currentRoom.durationSec = Math.max(60, Math.min(1800, Number(msg.durationSec)));
