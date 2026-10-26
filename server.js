@@ -7,12 +7,28 @@ const PORT = process.env.PORT || 3000;
 const INDEX_PATH = path.join(__dirname, "index.html");
 
 // ============================================================================
-// 1. HTTP SERVER (Serves index.html and health check)
+// 1. HTTP SERVER (Serves index.html, /rooms, and /health)
 // ============================================================================
+function getRoomsSummary() {
+  const summary = [];
+  for (const room of rooms.values()) {
+    summary.push(serializeRoster(room));
+  }
+  return summary;
+}
+
 const server = http.createServer((req, res) => {
-  if (req.url === "/health") {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+
+  if (req.url === "/health" || req.url === "/rooms") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: true, rooms: rooms.size }));
+    res.end(
+      JSON.stringify({
+        ok: true,
+        roomCount: rooms.size,
+        rooms: getRoomsSummary()
+      })
+    );
     return;
   }
 
@@ -180,6 +196,10 @@ wss.on("connection", (ws) => {
         room.clients.set(clientId, clientInfo);
         currentRoom = room;
 
+        console.log(
+          `[${new Date().toISOString()}] [Room ${room.code}] ${name} (${clientId}) joined ${team.toUpperCase()} as ${unitId} (${room.clients.size} online)`
+        );
+
         // Send welcome packet to joining client
         ws.send(
           JSON.stringify({
@@ -197,6 +217,8 @@ wss.on("connection", (ws) => {
           room,
           {
             type: "roster_update",
+            event: "player_joined",
+            player: { id: clientId, name, team, unitId },
             roster: serializeRoster(room)
           },
           clientId
@@ -334,7 +356,14 @@ wss.on("connection", (ws) => {
 });
 
 function removeClientFromRoom(room, clientId) {
+  const leaving = room.clients.get(clientId);
   room.clients.delete(clientId);
+
+  if (leaving) {
+    console.log(
+      `[${new Date().toISOString()}] [Room ${room.code}] ${leaving.name} (${clientId}) left (${room.clients.size} remaining)`
+    );
+  }
 
   if (room.clients.size === 0) {
     rooms.delete(room.code);
@@ -349,6 +378,10 @@ function removeClientFromRoom(room, clientId) {
 
   broadcastToRoom(room, {
     type: "roster_update",
+    event: "player_left",
+    player: leaving
+      ? { id: leaving.id, name: leaving.name, team: leaving.team, unitId: leaving.unitId }
+      : null,
     roster: serializeRoster(room)
   });
 }

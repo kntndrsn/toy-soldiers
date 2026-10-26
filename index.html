@@ -520,6 +520,47 @@
       display: none;
     }
 
+    /* Multiplayer Join / Leave Toast Banner */
+    #mp-toast-container {
+      position: absolute;
+      top: 62px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      pointer-events: none;
+      z-index: 15;
+    }
+
+    .mp-toast {
+      background: rgba(16, 24, 18, 0.88);
+      border: 1.5px solid #7ad7ff;
+      color: #ffffff;
+      padding: 7px 16px;
+      border-radius: 999px;
+      font-size: 13.5px;
+      font-weight: bold;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    #online-roster-panel {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.18);
+      font-size: 12px;
+      display: none;
+    }
+
+    #online-roster-title {
+      font-weight: bold;
+      color: #7ad7ff;
+      margin-bottom: 4px;
+      letter-spacing: 0.3px;
+    }
+
     @media (max-width: 768px) {
       #scoreboard {
         top: 12px;
@@ -576,6 +617,8 @@
       <span class="team-badge-tan">TAN TEAM: <span id="tan-count">4</span> / <span id="tan-total">4</span></span>
     </div>
 
+    <div id="mp-toast-container"></div>
+
     <div id="crosshair"></div>
 
     <div id="status-panel">
@@ -584,6 +627,10 @@
         <div id="health-bar-fill"></div>
       </div>
       <div id="squad-list"></div>
+      <div id="online-roster-panel">
+        <div id="online-roster-title">ONLINE PLAYERS IN ROOM</div>
+        <div id="online-roster-list"></div>
+      </div>
     </div>
 
     <!-- Start-of-Match Team & Multiplayer Configuration Modal -->
@@ -2943,6 +2990,50 @@
     const mpUrlInputEl = document.getElementById("mp-url-input");
     const mpStatusBadgeEl = document.getElementById("mp-status-badge");
     const mpModalStatusEl = document.getElementById("mp-modal-status");
+    const mpToastContainerEl = document.getElementById("mp-toast-container");
+    const onlineRosterPanelEl = document.getElementById("online-roster-panel");
+    const onlineRosterListEl = document.getElementById("online-roster-list");
+
+    function showMpToast(text, borderColor = "#7ad7ff") {
+      if (!mpToastContainerEl) return;
+      const toast = document.createElement("div");
+      toast.className = "mp-toast";
+      toast.style.borderColor = borderColor;
+      toast.textContent = text;
+      mpToastContainerEl.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = "0";
+        setTimeout(() => toast.remove(), 320);
+      }, 4200);
+    }
+
+    function pollServerRoomsPreview() {
+      if (!isSetupOpen) return;
+      const rawWs = (mpUrlInputEl.value || "wss://toy-soldiers.duckdns.org").trim();
+      const httpBase = rawWs
+        .replace(/^wss:/i, "https:")
+        .replace(/^ws:/i, "http:")
+        .replace(/\/+$/, "");
+
+      fetch(`${httpBase}/rooms`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (!data || !Array.isArray(data.rooms)) return;
+          if (data.rooms.length === 0) {
+            mpModalStatusEl.textContent = "Server Online (0 active rooms)";
+            mpModalStatusEl.style.color = "#84ff78";
+          } else {
+            const summary = data.rooms
+              .map((rm) => `${rm.roomCode}: ${rm.players.length} player(s)`)
+              .join(" | ");
+            mpModalStatusEl.textContent = `Active: ${summary}`;
+            mpModalStatusEl.style.color = "#7ad7ff";
+          }
+        })
+        .catch(() => {});
+    }
+    setInterval(pollServerRoomsPreview, 4000);
+    setTimeout(pollServerRoomsPreview, 300);
 
     // Pre-fill WebSocket URL based on current page location (or default to toy-soldiers.duckdns.org)
     if (window.location.host && !window.location.host.endsWith("github.io")) {
@@ -3080,6 +3171,11 @@
           isSetupOpen = false;
           updateMpStatusBadge();
           resetGame();
+          const pCount = msg.roster.players ? msg.roster.players.length : 1;
+          showMpToast(
+            `Joined Room ${mpState.roomCode} as ${msg.team.toUpperCase()} (${pCount} player${pCount === 1 ? "" : "s"} online)`,
+            "#84ff78"
+          );
           tryLockPointer();
           break;
         }
@@ -3088,6 +3184,19 @@
           mpState.roster = msg.roster;
           mpState.hostId = msg.roster.hostId;
           updateMpStatusBadge();
+
+          if (msg.event === "player_joined" && msg.player) {
+            const tColor = msg.player.team === "green" ? "#84ff78" : "#ffd584";
+            showMpToast(
+              `🔔 ${msg.player.name} joined ${msg.player.team.toUpperCase()} TEAM! (${msg.roster.players.length} online)`,
+              tColor
+            );
+          } else if (msg.event === "player_left" && msg.player) {
+            showMpToast(
+              `${msg.player.name} left the room (${msg.roster.players.length} online)`,
+              "#ff9e7b"
+            );
+          }
 
           const expectedCount = msg.roster.greenTotal + msg.roster.tanTotal;
           if (soldiers.length !== expectedCount) {
@@ -3375,6 +3484,21 @@
           `;
         })
         .join("");
+
+      // Render Online Human Players Roster when in Multiplayer Mode
+      if (mpState.active && mpState.roster && Array.isArray(mpState.roster.players)) {
+        onlineRosterPanelEl.style.display = "block";
+        onlineRosterListEl.innerHTML = mpState.roster.players
+          .map((p) => {
+            const badgeColor = p.team === "green" ? "#7dff70" : "#ffd584";
+            const youTag = p.id === mpState.clientId ? " (YOU)" : "";
+            const hostTag = p.id === mpState.hostId ? " ★" : "";
+            return `<div style="color:${badgeColor}; margin-top:2px;">● ${p.name}${youTag}${hostTag} — ${p.team.toUpperCase()}</div>`;
+          })
+          .join("");
+      } else {
+        onlineRosterPanelEl.style.display = "none";
+      }
     }
 
     function checkMatchOutcome() {
