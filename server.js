@@ -893,6 +893,7 @@ const wss = new WebSocketServer({
 // Map<roomCode, RoomState>
 const rooms = new Map();
 let nextClientId = 1;
+let nextRoomSyncSlot = 0;
 
 function safeSend(ws, payload) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -946,6 +947,7 @@ function getUnitStat(room, unitId) {
     st = { kills: 0, deaths: 0, health: 100, alive: true };
     room.unitStats.set(unitId, st);
     room.statsDirty = true;
+    room.statsDirtyForSync = true;
   }
   return st;
 }
@@ -983,6 +985,7 @@ function resetRoomMatchState(room) {
     c.alive = true;
   }
   room.statsDirty = true;
+  room.statsDirtyForSync = true;
 }
 
 function getOrCreateRoom(
@@ -1005,6 +1008,7 @@ function getOrCreateRoom(
       : Math.max(50, Math.min(130, Number(worldLimit) || 80));
     room = {
       code: roomCode,
+      syncSlot: nextRoomSyncSlot++ & 3, // Stagger 1s timer_sync across 4 x 250ms ticks
       hostId: null,
       hostName: hostName || "Host",
       password: String(password || "").trim().slice(0, 32),
@@ -1018,8 +1022,11 @@ function getOrCreateRoom(
       matchEnded: false,
       unitStats: new Map(),
       statsDirty: true,
+      statsDirtyForSync: true,
       cachedUnitStats: null,
-      dirtyPlayers: new Map(), // Map<clientId, PlayerStateDelta> for 25 Hz batching in 3+ player rooms
+      dirtyPlayers: new Map(), // Map<clientId, PlayerStateDelta> coalesced at 25 Hz
+      pendingShots: [],        // Array<ShotEvent> coalesced at 25 Hz
+      pendingWorldState: null, // Latest host_world_state coalesced at 25 Hz
       clients: new Map(), // Map<clientId, ClientInfo>
       matchId: 1
     };
@@ -1339,75 +1346,50 @@ wss.on("connection", (ws, req) => {
         // Skip broadcast if this player is the only human in the room
         if (currentRoom.clients.size <= 1) break;
 
-        // For 2-player rooms, dispatch immediately; for 3+ player rooms, coalesce into the 25 Hz room batch
-        if (currentRoom.clients.size === 2) {
-          broadcastToRoom(
-            currentRoom,
-            {
-              type: "remote_player_state",
-              clientId,
-              unitId: c.unitId,
-              x: c.x,
-              y: c.y,
-              z: c.z,
-              yaw: c.yaw,
-              pitch: c.pitch,
-              moveBlend: c.moveBlend,
-              strideDir: c.strideDir
-            },
-            clientId
-          );
-        } else {
-          currentRoom.dirtyPlayers.set(clientId, {
-            clientId,
-            unitId: c.unitId,
-            x: c.x,
-            y: c.y,
-            z: c.z,
-            yaw: c.yaw,
-            pitch: c.pitch,
-            moveBlend: c.moveBlend,
-            strideDir: c.strideDir
-          });
-        }
+        // Coalesce into the room's 25 Hz (40ms) tick flush
+        currentRoom.dirtyPlayers.set(clientId, {
+          clientId,
+          unitId: c.unitId,
+          x: c.x,
+          y: c.y,
+          z: c.z,
+          yaw: c.yaw,
+          pitch: c.pitch,
+          moveBlend: c.moveBlend,
+          strideDir: c.strideDir
+        });
         break;
       }
 
       // Room Host broadcasts AI soldier states & dynamic beach ball state (~12-20 Hz)
       case "host_world_state": {
         if (!currentRoom || currentRoom.hostId !== clientId) break;
-        if (currentRoom.clients.size <= 1) break; // Skip serialization if host is the only player in room
-        const remainingSec = Math.max(0, (currentRoom.matchEndTime - Date.now()) / 1000);
-        broadcastToRoom(
-          currentRoom,
-          {
-            type: "world_state",
-            remainingSec,
-            matchEnded: currentRoom.matchEnded,
-            aiPacked: msg.aiPacked || null,
-            aiUnits: msg.aiUnits || null,
-            ball: msg.ball || null
-          },
-          clientId
-        );
+        if (currentRoom.clients.size <= 1) break; // Skip if host is the only player in room
+        const remainingSec =
+          Math.round(Math.max(0, (currentRoom.matchEndTime - now) / 1000) * 10) / 10;
+        currentRoom.pendingWorldState = {
+          remainingSec,
+          matchEnded: currentRoom.matchEnded,
+          aiPacked: msg.aiPacked || null,
+          aiUnits: msg.aiUnits || null,
+          ball: msg.ball || null
+        };
         break;
       }
 
-      // Weapon fired (renders tracer & muzzle flash on all clients)
+      // Weapon fired (coalesced into the 25 Hz room flush to avoid O(N^2) per-shot socket writes)
       case "fire_shot": {
         if (!currentRoom || currentRoom.clients.size <= 1) break;
-        broadcastToRoom(
-          currentRoom,
-          {
-            type: "remote_shot",
+        if (currentRoom.pendingShots.length < 32) {
+          currentRoom.pendingShots.push({
+            shooterClientId: clientId,
             shooterUnitId: msg.shooterUnitId,
             team: msg.team,
             muzzlePos: msg.muzzlePos,
             hitPoint: msg.hitPoint,
             hitKind: msg.hitKind
-          },
-          clientId
-        );
+          });
+        }
         break;
       }
 
@@ -1435,6 +1417,7 @@ wss.on("connection", (ws, req) => {
           }
         }
         currentRoom.statsDirty = true;
+        currentRoom.statsDirtyForSync = true;
 
         const deltaStats = { [targetUnitId]: targetStat };
         if (attackerUnitId && attackerUnitId !== targetUnitId) {
@@ -1487,6 +1470,7 @@ wss.on("connection", (ws, req) => {
         targetStat.health = 100;
         targetStat.alive = true;
         currentRoom.statsDirty = true;
+        currentRoom.statsDirtyForSync = true;
 
         const isSelf = targetUnitId === c.unitId;
         if (isSelf) {
@@ -1637,17 +1621,25 @@ function removeClientFromRoom(room, clientId) {
   });
 }
 
-// 25 Hz (40ms) Coalesced Player State Broadcast Loop for 3+ player rooms
-// Cuts O(N^2) per-packet socket writes by up to 7x in full rooms!
+// 25 Hz (40ms) Unified Room Broadcast Flush (Coalesces player_state, fire_shot & host_world_state)
+// Eliminates O(N^2) per-packet JSON.stringify & ws.send storms across all active rooms!
 setInterval(() => {
   for (const room of rooms.values()) {
-    if (!room.dirtyPlayers || room.dirtyPlayers.size === 0) continue;
+    const hasPlayers = room.dirtyPlayers && room.dirtyPlayers.size > 0;
+    const hasShots = room.pendingShots && room.pendingShots.length > 0;
+    const hasWorld = room.pendingWorldState !== null;
+
+    if (!hasPlayers && !hasShots && !hasWorld) continue;
+
     if (room.clients.size <= 1) {
-      room.dirtyPlayers.clear();
+      if (hasPlayers) room.dirtyPlayers.clear();
+      if (hasShots) room.pendingShots.length = 0;
+      room.pendingWorldState = null;
       continue;
     }
 
-    if (room.dirtyPlayers.size === 1) {
+    // Fast path: only 1 player moved and nothing else happened
+    if (hasPlayers && room.dirtyPlayers.size === 1 && !hasShots && !hasWorld) {
       const single = room.dirtyPlayers.values().next().value;
       room.dirtyPlayers.clear();
       broadcastToRoom(
@@ -1666,14 +1658,73 @@ setInterval(() => {
         },
         single.clientId
       );
-    } else {
-      const states = Array.from(room.dirtyPlayers.values());
-      room.dirtyPlayers.clear();
+      continue;
+    }
+
+    // Fast path: only 1 shot fired and nothing else happened
+    if (!hasPlayers && hasShots && room.pendingShots.length === 1 && !hasWorld) {
+      const s = room.pendingShots[0];
+      room.pendingShots.length = 0;
+      broadcastToRoom(
+        room,
+        {
+          type: "remote_shot",
+          shooterUnitId: s.shooterUnitId,
+          team: s.team,
+          muzzlePos: s.muzzlePos,
+          hitPoint: s.hitPoint,
+          hitKind: s.hitKind
+        },
+        s.shooterClientId
+      );
+      continue;
+    }
+
+    // Fast path: only host_world_state updated
+    if (!hasPlayers && !hasShots && hasWorld) {
+      const wsData = room.pendingWorldState;
+      room.pendingWorldState = null;
+      broadcastToRoom(
+        room,
+        {
+          type: "world_state",
+          remainingSec: wsData.remainingSec,
+          matchEnded: wsData.matchEnded,
+          aiPacked: wsData.aiPacked,
+          aiUnits: wsData.aiUnits,
+          ball: wsData.ball
+        },
+        room.hostId
+      );
+      continue;
+    }
+
+    // Unified room_tick or remote_players_batch packet (1 JSON.stringify + 1 ws.send per client!)
+    const playersArr = hasPlayers ? Array.from(room.dirtyPlayers.values()) : null;
+    const shotsArr = hasShots ? room.pendingShots.slice() : null;
+    const worldObj = room.pendingWorldState;
+
+    if (hasPlayers) room.dirtyPlayers.clear();
+    if (hasShots) room.pendingShots.length = 0;
+    room.pendingWorldState = null;
+
+    if (playersArr && !shotsArr && !worldObj) {
       broadcastToRoom(
         room,
         {
           type: "remote_players_batch",
-          players: states
+          players: playersArr
+        },
+        null
+      );
+    } else {
+      broadcastToRoom(
+        room,
+        {
+          type: "room_tick",
+          players: playersArr,
+          shots: shotsArr,
+          world: worldObj
         },
         null
       );
@@ -1691,6 +1742,7 @@ setInterval(() => {
   const tickStart = process.hrtime.bigint();
   tickCounter++;
   const now = Date.now();
+  const currentSyncSlot = tickCounter & 3;
 
   for (const room of rooms.values()) {
     if (room.clients.size === 0) continue;
@@ -1713,18 +1765,19 @@ setInterval(() => {
       continue;
     }
 
-    // Broadcast authoritative clock & K/D stats once per second to keep all clients locked in sync
-    if (!room.matchEnded && tickCounter % 4 === 0) {
-      broadcastToRoom(
-        room,
-        {
-          type: "timer_sync",
-          remainingSec,
-          matchEnded: room.matchEnded,
-          unitStats: serializeUnitStats(room)
-        },
-        null
-      );
+    // Staggered 1-second authoritative clock sync (only 25% of rooms broadcast on each 250ms tick,
+    // and full unitStats is only attached if stats changed since the last sync!)
+    if (!room.matchEnded && room.syncSlot === currentSyncSlot) {
+      const syncPayload = {
+        type: "timer_sync",
+        remainingSec: Math.round(remainingSec * 10) / 10,
+        matchEnded: room.matchEnded
+      };
+      if (room.statsDirtyForSync) {
+        syncPayload.unitStats = serializeUnitStats(room);
+        room.statsDirtyForSync = false;
+      }
+      broadcastToRoom(room, syncPayload, null);
     }
   }
 
@@ -1758,10 +1811,15 @@ setInterval(() => {
       clientList.length > 0
         ? Number((clientList.reduce((acc, c) => acc + (c.fps || 0), 0) / clientList.length).toFixed(1))
         : null;
+    const recentTicks = perfMetrics.tickHistoryMs.slice(-4);
+    const avgLastSecTickMs =
+      recentTicks.length > 0
+        ? recentTicks.reduce((a, b) => a + b, 0) / recentTicks.length
+        : lastServerTickMs;
 
     perfMetrics.history.push({
       t: now,
-      tickMs: Number(lastServerTickMs.toFixed(3)),
+      tickMs: Number(avgLastSecTickMs.toFixed(3)),
       rssMB: cachedRssMB,
       inboundPktPerSec: perfMetrics.inboundPktsSec,
       outboundPktPerSec: perfMetrics.outboundPktsSec,
