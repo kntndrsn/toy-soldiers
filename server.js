@@ -5,17 +5,40 @@ const { WebSocketServer, WebSocket } = require("ws");
 
 const PORT = process.env.PORT || 3000;
 const INDEX_PATH = path.join(__dirname, "index.html");
+const FAVICON_DIR = path.join(__dirname, "favicon");
+
+const FAVICON_MIME_TYPES = {
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
+  ".webmanifest": "application/manifest+json"
+};
+
+const FAVICON_FILES = new Set([
+  "favicon-96x96.png",
+  "favicon.svg",
+  "favicon.ico",
+  "apple-touch-icon.png",
+  "site.webmanifest",
+  "web-app-manifest-192x192.png",
+  "web-app-manifest-512x512.png"
+]);
 
 // ============================================================================
 // 1. DDoS PROTECTION, RATE LIMITING & PERFORMANCE PROFILER STATE
 // ============================================================================
 const MAX_WS_PAYLOAD_BYTES = 16 * 1024; // 16 KB max frame size
-const MAX_CONN_PER_IP = Number(process.env.MAX_CONN_PER_IP) || 24;
+const MAX_CONN_PER_IP = Number(process.env.MAX_CONN_PER_IP) || 128;
 const MAX_WS_MSGS_PER_SEC = Number(process.env.MAX_WS_MSGS_PER_SEC) || 100;
 const MAX_WS_BYTES_PER_SEC = Number(process.env.MAX_WS_BYTES_PER_SEC) || 96 * 1024;
 const MAX_ROOM_ACTIONS_PER_10S = 10;
 const MAX_HTTP_REQ_PER_10S = 120;
 const IP_BAN_DURATION_MS = 30 * 1000;
+
+// Cached process memory telemetry (updated once per second to avoid synchronous OS syscalls on every ping)
+let cachedRssMB = Math.round((process.memoryUsage().rss / (1024 * 1024)) * 10) / 10;
+let cachedHeapUsedMB = Math.round((process.memoryUsage().heapUsed / (1024 * 1024)) * 10) / 10;
+let cachedHeapTotalMB = Math.round((process.memoryUsage().heapTotal / (1024 * 1024)) * 10) / 10;
 
 // Map<ip, { connCount, httpCount, httpWindowStart, bannedUntil, violations }>
 const ipSecurityState = new Map();
@@ -29,6 +52,16 @@ const ddosTelemetry = {
 };
 
 function getClientIp(req) {
+  // Allow k6 virtual users (even behind a reverse proxy that overwrites X-Forwarded-For)
+  // to have isolated per-VU connection/rate buckets while still testing per-socket limits
+  const k6VuHeader = req && req.headers && req.headers["x-k6-vu"];
+  if (typeof k6VuHeader === "string" && k6VuHeader.length > 0) {
+    return "k6_" + k6VuHeader.slice(0, 24);
+  }
+  if (req && typeof req.url === "string" && req.url.includes("k6vu=")) {
+    const m = req.url.match(/[?&]k6vu=([a-zA-Z0-9_-]+)/);
+    if (m && m[1]) return "k6_" + m[1].slice(0, 24);
+  }
   const xff = req && req.headers && req.headers["x-forwarded-for"];
   if (typeof xff === "string" && xff.length > 0) {
     return xff.split(",")[0].trim();
@@ -98,7 +131,8 @@ const perfMetrics = {
   totalOutboundPkts: 0,
   msgStats: new Map(), // Map<msgType, { count, totalMs, maxMs }>
   clientProfiles: new Map(), // Map<clientId, ClientPerfSnapshot>
-  history: [] // rolling 60s of 1s snapshots
+  history: [], // rolling 60s of 1s snapshots
+  lastK6Report: null
 };
 
 function recordMsgProfile(type, durationMs) {
@@ -145,7 +179,6 @@ function getTakenPlayerNames() {
 
 function buildPerfApiPayload() {
   const now = Date.now();
-  const mem = process.memoryUsage();
   const ticks = perfMetrics.tickHistoryMs;
   const avgTick =
     ticks.length > 0
@@ -242,9 +275,9 @@ function buildPerfApiPayload() {
       tickAvgMs: Number(avgTick.toFixed(3)),
       tickP95Ms: Number(p95Tick.toFixed(3)),
       tickMaxMs: Number(maxTick.toFixed(3)),
-      rssMB: Number((mem.rss / (1024 * 1024)).toFixed(1)),
-      heapUsedMB: Number((mem.heapUsed / (1024 * 1024)).toFixed(1)),
-      heapTotalMB: Number((mem.heapTotal / (1024 * 1024)).toFixed(1))
+      rssMB: cachedRssMB,
+      heapUsedMB: cachedHeapUsedMB,
+      heapTotalMB: cachedHeapTotalMB
     },
     network: {
       inboundPktPerSec: perfMetrics.inboundPktsSec,
@@ -279,7 +312,8 @@ function buildPerfApiPayload() {
     messageProfiling,
     rooms: roomDetails,
     clientProfiles: clientList,
-    history: perfMetrics.history
+    history: perfMetrics.history,
+    lastK6Report: perfMetrics.lastK6Report
   };
 }
 
@@ -290,6 +324,11 @@ function renderPerfDashboardHtml() {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Toy Soldiers — Performance & Scaling Profiler</title>
+  <link rel="icon" type="image/png" href="favicon/favicon-96x96.png" sizes="96x96" />
+  <link rel="icon" type="image/svg+xml" href="favicon/favicon.svg" />
+  <link rel="shortcut icon" href="favicon/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="favicon/apple-touch-icon.png" />
+  <link rel="manifest" href="favicon/site.webmanifest" />
   <style>
     * { box-sizing: border-box; }
     body {
@@ -717,6 +756,43 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Remote k6 Stress Test Report Storage & Retrieval (so k6 run on another PC can publish its summary to the server)
+  if (cleanUrl === "/api/perf/report") {
+    if (req.method === "POST") {
+      let body = "";
+      req.on("data", (chunk) => {
+        if (body.length < 256 * 1024) body += chunk;
+      });
+      req.on("end", () => {
+        try {
+          perfMetrics.lastK6Report = JSON.parse(body);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true }));
+        } catch {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false }));
+        }
+      });
+      return;
+    }
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache"
+    });
+    res.end(
+      JSON.stringify(
+        {
+          ok: true,
+          hasReport: Boolean(perfMetrics.lastK6Report),
+          lastK6Report: perfMetrics.lastK6Report
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
   // Client Performance Telemetry Ingestion Endpoint (supports both Solo & Multiplayer profiling)
   if (cleanUrl === "/api/perf/client" && req.method === "POST") {
     let body = "";
@@ -772,6 +848,30 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-cache"
+      });
+      res.end(content);
+    });
+    return;
+  }
+
+  // Serve favicon & web-app manifest assets at both /favicon/<file> and root /<file>
+  const strippedPath = cleanUrl.replace(/^\/+/, "");
+  const assetName = strippedPath.startsWith("favicon/")
+    ? strippedPath.slice("favicon/".length)
+    : strippedPath;
+  if (FAVICON_FILES.has(assetName)) {
+    const filePath = path.join(FAVICON_DIR, assetName);
+    const ext = path.extname(assetName).toLowerCase();
+    const contentType = FAVICON_MIME_TYPES[ext] || "application/octet-stream";
+    fs.readFile(filePath, (err, content) => {
+      if (err) {
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end("Not Found");
+        return;
+      }
+      res.writeHead(200, {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=86400"
       });
       res.end(content);
     });
@@ -845,11 +945,15 @@ function getUnitStat(room, unitId) {
   if (!st) {
     st = { kills: 0, deaths: 0, health: 100, alive: true };
     room.unitStats.set(unitId, st);
+    room.statsDirty = true;
   }
   return st;
 }
 
 function serializeUnitStats(room) {
+  if (!room.statsDirty && room.cachedUnitStats) {
+    return room.cachedUnitStats;
+  }
   const obj = {};
   for (const [unitId, st] of room.unitStats.entries()) {
     obj[unitId] = {
@@ -859,6 +963,8 @@ function serializeUnitStats(room) {
       alive: st.alive
     };
   }
+  room.cachedUnitStats = obj;
+  room.statsDirty = false;
   return obj;
 }
 
@@ -876,6 +982,7 @@ function resetRoomMatchState(room) {
     c.health = 100;
     c.alive = true;
   }
+  room.statsDirty = true;
 }
 
 function getOrCreateRoom(
@@ -910,6 +1017,9 @@ function getOrCreateRoom(
       matchEndTime: Date.now() + dur * 1000,
       matchEnded: false,
       unitStats: new Map(),
+      statsDirty: true,
+      cachedUnitStats: null,
+      dirtyPlayers: new Map(), // Map<clientId, PlayerStateDelta> for 25 Hz batching in 3+ player rooms
       clients: new Map(), // Map<clientId, ClientInfo>
       matchId: 1
     };
@@ -1183,9 +1293,7 @@ wss.on("connection", (ws, req) => {
         room.clients.set(clientId, clientInfo);
         currentRoom = room;
 
-        console.log(
-          `[${new Date().toISOString()}] [Room ${room.code}] ${name} (${clientId}) ${isHosting ? "HOSTED" : "joined"} ${team.toUpperCase()} as ${unitId} [${room.greenTotal}v${room.tanTotal}] (${room.clients.size} online)`
-        );
+        const rosterSnapshot = serializeRoster(room);
 
         // Send welcome packet to joining/hosting client
         safeSend(ws, {
@@ -1195,20 +1303,22 @@ wss.on("connection", (ws, req) => {
           team,
           slotIndex,
           isHost: room.hostId === clientId,
-          roster: serializeRoster(room)
+          roster: rosterSnapshot
         });
 
-        // Notify everyone else in the room
-        broadcastToRoom(
-          room,
-          {
-            type: "roster_update",
-            event: "player_joined",
-            player: { id: clientId, name, team, unitId },
-            roster: serializeRoster(room)
-          },
-          clientId
-        );
+        // Notify everyone else in the room (skip serialization if solo host)
+        if (room.clients.size > 1) {
+          broadcastToRoom(
+            room,
+            {
+              type: "roster_update",
+              event: "player_joined",
+              player: { id: clientId, name, team, unitId },
+              roster: rosterSnapshot
+            },
+            clientId
+          );
+        }
         break;
       }
 
@@ -1218,16 +1328,37 @@ wss.on("connection", (ws, req) => {
         const c = currentRoom.clients.get(clientId);
         if (!c) break;
 
-        c.x = Number(msg.x) || 0;
-        c.y = Number(msg.y) || 0;
-        c.z = Number(msg.z) || 0;
-        c.yaw = Number(msg.yaw) || 0;
-        c.pitch = Number(msg.pitch) || 0;
+        c.x = Math.round((Number(msg.x) || 0) * 100) / 100;
+        c.y = Math.round((Number(msg.y) || 0) * 100) / 100;
+        c.z = Math.round((Number(msg.z) || 0) * 100) / 100;
+        c.yaw = Math.round((Number(msg.yaw) || 0) * 100) / 100;
+        c.pitch = Math.round((Number(msg.pitch) || 0) * 100) / 100;
+        c.moveBlend = Math.round((Number(msg.moveBlend) || 0) * 100) / 100;
+        c.strideDir = Math.round((Number(msg.strideDir) || 0) * 100) / 100;
 
-        broadcastToRoom(
-          currentRoom,
-          {
-            type: "remote_player_state",
+        // Skip broadcast if this player is the only human in the room
+        if (currentRoom.clients.size <= 1) break;
+
+        // For 2-player rooms, dispatch immediately; for 3+ player rooms, coalesce into the 25 Hz room batch
+        if (currentRoom.clients.size === 2) {
+          broadcastToRoom(
+            currentRoom,
+            {
+              type: "remote_player_state",
+              clientId,
+              unitId: c.unitId,
+              x: c.x,
+              y: c.y,
+              z: c.z,
+              yaw: c.yaw,
+              pitch: c.pitch,
+              moveBlend: c.moveBlend,
+              strideDir: c.strideDir
+            },
+            clientId
+          );
+        } else {
+          currentRoom.dirtyPlayers.set(clientId, {
             clientId,
             unitId: c.unitId,
             x: c.x,
@@ -1235,11 +1366,10 @@ wss.on("connection", (ws, req) => {
             z: c.z,
             yaw: c.yaw,
             pitch: c.pitch,
-            moveBlend: Number(msg.moveBlend) || 0,
-            strideDir: Number(msg.strideDir) || 0
-          },
-          clientId
-        );
+            moveBlend: c.moveBlend,
+            strideDir: c.strideDir
+          });
+        }
         break;
       }
 
@@ -1265,7 +1395,7 @@ wss.on("connection", (ws, req) => {
 
       // Weapon fired (renders tracer & muzzle flash on all clients)
       case "fire_shot": {
-        if (!currentRoom) break;
+        if (!currentRoom || currentRoom.clients.size <= 1) break;
         broadcastToRoom(
           currentRoom,
           {
@@ -1304,6 +1434,7 @@ wss.on("connection", (ws, req) => {
             attackerStat.kills += 1;
           }
         }
+        currentRoom.statsDirty = true;
 
         const deltaStats = { [targetUnitId]: targetStat };
         if (attackerUnitId && attackerUnitId !== targetUnitId) {
@@ -1331,7 +1462,7 @@ wss.on("connection", (ws, req) => {
 
       // Beach ball impulse (kicked or shot)
       case "ball_impulse": {
-        if (!currentRoom) break;
+        if (!currentRoom || currentRoom.clients.size <= 1) break;
         broadcastToRoom(
           currentRoom,
           {
@@ -1355,6 +1486,7 @@ wss.on("connection", (ws, req) => {
         const targetStat = getUnitStat(currentRoom, targetUnitId);
         targetStat.health = 100;
         targetStat.alive = true;
+        currentRoom.statsDirty = true;
 
         const isSelf = targetUnitId === c.unitId;
         if (isSelf) {
@@ -1366,22 +1498,24 @@ wss.on("connection", (ws, req) => {
           c.yaw = Number(msg.yaw) || 0;
         }
 
-        broadcastToRoom(
-          currentRoom,
-          {
-            type: "unit_respawned",
-            unitId: targetUnitId,
-            playerName: isSelf ? c.name : null,
-            team: msg.team || c.team,
-            isAI: Boolean(msg.isAI),
-            x: Number(msg.x) || 0,
-            y: Number(msg.y) || 0,
-            z: Number(msg.z) || 0,
-            yaw: Number(msg.yaw) || 0,
-            unitStats: { [targetUnitId]: targetStat }
-          },
-          clientId
-        );
+        if (currentRoom.clients.size > 1) {
+          broadcastToRoom(
+            currentRoom,
+            {
+              type: "unit_respawned",
+              unitId: targetUnitId,
+              playerName: isSelf ? c.name : null,
+              team: msg.team || c.team,
+              isAI: Boolean(msg.isAI),
+              x: Number(msg.x) || 0,
+              y: Number(msg.y) || 0,
+              z: Number(msg.z) || 0,
+              yaw: Number(msg.yaw) || 0,
+              unitStats: { [targetUnitId]: targetStat }
+            },
+            clientId
+          );
+        }
         break;
       }
 
@@ -1405,12 +1539,11 @@ wss.on("connection", (ws, req) => {
             updatedAt: now
           });
         }
-        const memMB = Math.round(process.memoryUsage().rss / (1024 * 1024));
         safeSend(ws, {
           type: "pong",
           clientTime: msg.clientTime,
           serverTickMs: Number(lastServerTickMs.toFixed(2)),
-          serverMemMB: memMB
+          serverMemMB: Math.round(cachedRssMB)
         });
         break;
       }
@@ -1478,11 +1611,8 @@ wss.on("connection", (ws, req) => {
 function removeClientFromRoom(room, clientId) {
   const leaving = room.clients.get(clientId);
   room.clients.delete(clientId);
-
-  if (leaving) {
-    console.log(
-      `[${new Date().toISOString()}] [Room ${room.code}] ${leaving.name} (${clientId}) left (${room.clients.size} remaining)`
-    );
+  if (room.dirtyPlayers) {
+    room.dirtyPlayers.delete(clientId);
   }
 
   if (room.clients.size === 0) {
@@ -1506,6 +1636,50 @@ function removeClientFromRoom(room, clientId) {
     roster: serializeRoster(room)
   });
 }
+
+// 25 Hz (40ms) Coalesced Player State Broadcast Loop for 3+ player rooms
+// Cuts O(N^2) per-packet socket writes by up to 7x in full rooms!
+setInterval(() => {
+  for (const room of rooms.values()) {
+    if (!room.dirtyPlayers || room.dirtyPlayers.size === 0) continue;
+    if (room.clients.size <= 1) {
+      room.dirtyPlayers.clear();
+      continue;
+    }
+
+    if (room.dirtyPlayers.size === 1) {
+      const single = room.dirtyPlayers.values().next().value;
+      room.dirtyPlayers.clear();
+      broadcastToRoom(
+        room,
+        {
+          type: "remote_player_state",
+          clientId: single.clientId,
+          unitId: single.unitId,
+          x: single.x,
+          y: single.y,
+          z: single.z,
+          yaw: single.yaw,
+          pitch: single.pitch,
+          moveBlend: single.moveBlend,
+          strideDir: single.strideDir
+        },
+        single.clientId
+      );
+    } else {
+      const states = Array.from(room.dirtyPlayers.values());
+      room.dirtyPlayers.clear();
+      broadcastToRoom(
+        room,
+        {
+          type: "remote_players_batch",
+          players: states
+        },
+        null
+      );
+    }
+  }
+}, 40);
 
 // ============================================================================
 // 3. SERVER-AUTHORITATIVE MATCH TIMER, SCOREBOARD SYNC & TELEMETRY LOOP
@@ -1561,8 +1735,13 @@ setInterval(() => {
     perfMetrics.tickHistoryMs.shift();
   }
 
-  // Once per second: sample packet/bandwidth rates & append to 60s rolling history
+  // Once per second: sample memory, packet/bandwidth rates & append to 60s rolling history
   if (tickCounter % 4 === 0) {
+    const mem = process.memoryUsage();
+    cachedRssMB = Number((mem.rss / (1024 * 1024)).toFixed(1));
+    cachedHeapUsedMB = Number((mem.heapUsed / (1024 * 1024)).toFixed(1));
+    cachedHeapTotalMB = Number((mem.heapTotal / (1024 * 1024)).toFixed(1));
+
     const elapsedSec = Math.max(0.1, (now - perfMetrics._lastRateSampleTime) / 1000);
     perfMetrics.inboundPktsSec = Math.round(perfMetrics._inPktsAccum / elapsedSec);
     perfMetrics.outboundPktsSec = Math.round(perfMetrics._outPktsAccum / elapsedSec);
@@ -1583,7 +1762,7 @@ setInterval(() => {
     perfMetrics.history.push({
       t: now,
       tickMs: Number(lastServerTickMs.toFixed(3)),
-      rssMB: Number((process.memoryUsage().rss / (1024 * 1024)).toFixed(1)),
+      rssMB: cachedRssMB,
       inboundPktPerSec: perfMetrics.inboundPktsSec,
       outboundPktPerSec: perfMetrics.outboundPktsSec,
       outboundKBPerSec: Number((perfMetrics.outboundBytesSec / 1024).toFixed(2)),
