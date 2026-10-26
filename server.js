@@ -116,8 +116,8 @@ function getOrCreateRoom(roomCode, greenTotal, tanTotal, hostName, worldLimit, d
       code: roomCode,
       hostId: null,
       hostName: hostName || "Host",
-      greenTotal: Math.max(1, Math.min(13, greenTotal || 4)),
-      tanTotal: Math.max(1, Math.min(16, tanTotal || 4)),
+      greenTotal: Math.max(1, Math.floor(Number(greenTotal) || 4)),
+      tanTotal: Math.max(1, Math.floor(Number(tanTotal) || 4)),
       worldLimit: lim,
       durationSec: dur,
       matchEndTime: Date.now() + dur * 1000,
@@ -233,8 +233,8 @@ wss.on("connection", (ws) => {
         if (isHosting || !room.hostId) {
           room.hostId = clientId;
           room.hostName = name;
-          room.greenTotal = Math.max(1, Math.min(13, requestedGreen));
-          room.tanTotal = Math.max(1, Math.min(16, requestedTan));
+          room.greenTotal = Math.max(1, Math.floor(requestedGreen));
+          room.tanTotal = Math.max(1, Math.floor(requestedTan));
           room.worldLimit = Math.max(50, Math.min(130, requestedLimit));
           room.durationSec = Math.max(60, Math.min(1800, requestedDuration));
           resetRoomMatchState(room);
@@ -466,14 +466,28 @@ wss.on("connection", (ws) => {
         break;
       }
 
+      // Ping / Pong + Server Performance Telemetry
+      case "ping": {
+        const memMB = Math.round(process.memoryUsage().rss / (1024 * 1024));
+        ws.send(
+          JSON.stringify({
+            type: "pong",
+            clientTime: msg.clientTime,
+            serverTickMs: Number(lastServerTickMs.toFixed(2)),
+            serverMemMB: memMB
+          })
+        );
+        break;
+      }
+
       // Restart match for everyone in the room
       case "restart_match": {
         if (!currentRoom) return;
         if (msg.greenTotal) {
-          currentRoom.greenTotal = Math.max(1, Math.min(13, Number(msg.greenTotal)));
+          currentRoom.greenTotal = Math.max(1, Math.floor(Number(msg.greenTotal)));
         }
         if (msg.tanTotal) {
-          currentRoom.tanTotal = Math.max(1, Math.min(16, Number(msg.tanTotal)));
+          currentRoom.tanTotal = Math.max(1, Math.floor(Number(msg.tanTotal)));
         }
         if (msg.worldLimit) {
           currentRoom.worldLimit = Math.max(50, Math.min(130, Number(msg.worldLimit)));
@@ -537,7 +551,10 @@ function removeClientFromRoom(room, clientId) {
 // 3. SERVER-AUTHORITATIVE MATCH TIMER & SCOREBOARD SYNC LOOP
 // ============================================================================
 let tickCounter = 0;
+let lastServerTickMs = 0.1;
+
 setInterval(() => {
+  const tickStart = process.hrtime.bigint();
   tickCounter++;
   const now = Date.now();
 
@@ -576,6 +593,9 @@ setInterval(() => {
       );
     }
   }
+
+  const tickEnd = process.hrtime.bigint();
+  lastServerTickMs = Number(tickEnd - tickStart) / 1e6;
 }, 250);
 
 server.listen(PORT, () => {
