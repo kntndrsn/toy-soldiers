@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Plastic Army Men - Third-Person Shooter</title>
+  <title>Plastic Army Men - 4v4 Backyard Sandbox Shooter</title>
   <style>
     * {
       box-sizing: border-box;
@@ -16,7 +16,7 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #87ceeb;
+      background: #7ec8f2;
       font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     }
 
@@ -38,27 +38,54 @@
       position: absolute;
       top: 16px;
       left: 16px;
-      background: rgba(0, 0, 0, 0.55);
-      padding: 10px 14px;
-      border-radius: 6px;
-      border-left: 4px solid #3fa336;
-      font-size: 14px;
-      line-height: 1.5;
+      background: rgba(20, 25, 18, 0.65);
+      padding: 12px 16px;
+      border-radius: 8px;
+      border-left: 4px solid #4be03e;
+      font-size: 13.5px;
+      line-height: 1.55;
+      backdrop-filter: blur(3px);
     }
 
     #instructions strong {
-      color: #8df57e;
+      color: #98ff8c;
     }
 
-    /* Health & Enemy Status (Bottom Left) */
+    /* Team Scoreboard (Top Center) */
+    #scoreboard {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 18px;
+      background: rgba(20, 20, 20, 0.68);
+      padding: 10px 22px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      font-size: 15px;
+      font-weight: bold;
+      letter-spacing: 0.4px;
+    }
+
+    .team-badge-green {
+      color: #7dff70;
+    }
+
+    .team-badge-tan {
+      color: #ffd584;
+    }
+
+    /* Health & Squad Status (Bottom Left) */
     #status-panel {
       position: absolute;
       bottom: 20px;
       left: 20px;
-      background: rgba(0, 0, 0, 0.55);
-      padding: 12px 16px;
-      border-radius: 6px;
-      min-width: 220px;
+      background: rgba(20, 25, 18, 0.68);
+      padding: 14px 18px;
+      border-radius: 8px;
+      min-width: 245px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
     }
 
     #health-label {
@@ -83,10 +110,33 @@
       transition: width 0.15s ease, background-color 0.15s ease;
     }
 
-    #enemy-counter {
-      margin-top: 8px;
-      font-size: 14px;
-      color: #f0d59c;
+    #squad-list {
+      margin-top: 10px;
+      font-size: 12.5px;
+      color: #d6f5d0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .squad-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .mini-bar-bg {
+      width: 90px;
+      height: 7px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .mini-bar-fill {
+      height: 100%;
+      background: #67e85f;
+      width: 100%;
     }
 
     /* Center Crosshair */
@@ -94,8 +144,8 @@
       position: absolute;
       top: 50%;
       left: 50%;
-      width: 18px;
-      height: 18px;
+      width: 20px;
+      height: 20px;
       transform: translate(-50%, -50%);
     }
 
@@ -103,22 +153,22 @@
     #crosshair::after {
       content: "";
       position: absolute;
-      background: rgba(255, 255, 255, 0.85);
-      box-shadow: 0 0 2px #000;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 0 3px #000;
     }
 
     #crosshair::before {
-      top: 8px;
+      top: 9px;
       left: 0;
-      width: 18px;
+      width: 20px;
       height: 2px;
     }
 
     #crosshair::after {
       top: 0;
-      left: 8px;
+      left: 9px;
       width: 2px;
-      height: 18px;
+      height: 20px;
     }
 
     /* Win / Game Over Message */
@@ -127,40 +177,41 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: rgba(0, 0, 0, 0.8);
-      padding: 28px 40px;
-      border-radius: 8px;
+      background: rgba(15, 18, 15, 0.88);
+      padding: 30px 44px;
+      border-radius: 10px;
       text-align: center;
       display: none;
       pointer-events: auto;
       border: 2px solid #ffffff;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
     }
 
     #end-title {
-      font-size: 32px;
+      font-size: 34px;
       font-weight: bold;
       margin: 0 0 10px 0;
     }
 
     #end-subtitle {
       font-size: 16px;
-      margin: 0 0 18px 0;
-      color: #dddddd;
+      margin: 0 0 20px 0;
+      color: #e0e0e0;
     }
 
     #restart-btn {
-      padding: 10px 22px;
+      padding: 11px 26px;
       font-size: 15px;
       font-weight: bold;
       color: #ffffff;
-      background: #2e7d26;
+      background: #2e8b24;
       border: none;
-      border-radius: 4px;
+      border-radius: 5px;
       cursor: pointer;
     }
 
     #restart-btn:hover {
-      background: #3b9c31;
+      background: #3ca830;
     }
   </style>
 </head>
@@ -168,21 +219,27 @@
   <!-- On-Screen HUD -->
   <div id="hud">
     <div id="instructions">
-      <strong>PLASTIC ARMY MEN</strong><br />
-      <strong>WASD</strong> : Move Soldier<br />
-      <strong>Mouse</strong> : Aim / Look (Click canvas to lock mouse)<br />
+      <strong>BACKYARD SANDBOX: 4 vs 4</strong><br />
+      <strong>WASD</strong> : Move Green Soldier<br />
+      <strong>Mouse</strong> : Aim / Look (Click to lock cursor)<br />
       <strong>Left-Click / Space</strong> : Fire Rifle<br />
-      <strong>Goal</strong> : Eliminate all Tan Soldiers
+      <strong>Goal</strong> : Lead your 4-man Green Squad to defeat the 4 Tan Soldiers
+    </div>
+
+    <div id="scoreboard">
+      <span class="team-badge-green">GREEN TEAM: <span id="green-count">4</span> / 4</span>
+      <span>vs</span>
+      <span class="team-badge-tan">TAN TEAM: <span id="tan-count">4</span> / 4</span>
     </div>
 
     <div id="crosshair"></div>
 
     <div id="status-panel">
-      <div id="health-label">HEALTH: <span id="health-value">100</span>%</div>
+      <div id="health-label">YOUR HEALTH: <span id="health-value">100</span>%</div>
       <div id="health-bar-bg">
         <div id="health-bar-fill"></div>
       </div>
-      <div id="enemy-counter">Tan Soldiers Left: <span id="enemy-count">0</span></div>
+      <div id="squad-list"></div>
     </div>
 
     <div id="end-message">
@@ -200,14 +257,14 @@
     // 1. SCENE, CAMERA, AND RENDERER SETUP
     // =========================================================================
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb); // Open sky blue
-    scene.fog = new THREE.Fog(0x87ceeb, 45, 130);
+    scene.background = new THREE.Color(0x82c8f5);
+    scene.fog = new THREE.Fog(0x82c8f5, 60, 165);
 
     const camera = new THREE.PerspectiveCamera(
       60,
       window.innerWidth / window.innerHeight,
       0.1,
-      200
+      250
     );
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -220,251 +277,780 @@
     // =========================================================================
     // 2. LIGHTING
     // =========================================================================
-    const hemiLight = new THREE.HemisphereLight(0xdff4ff, 0x5d6e3e, 0.65);
+    const hemiLight = new THREE.HemisphereLight(0xebf8ff, 0xc7a66b, 0.65);
     scene.add(hemiLight);
 
-    const dirLight = new THREE.DirectionalLight(0xfff6e0, 0.9);
-    dirLight.position.set(35, 55, 30);
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 1024;
-    dirLight.shadow.mapSize.height = 1024;
-    dirLight.shadow.camera.near = 1;
-    dirLight.shadow.camera.far = 140;
-    const shadowExtent = 55;
-    dirLight.shadow.camera.left = -shadowExtent;
-    dirLight.shadow.camera.right = shadowExtent;
-    dirLight.shadow.camera.top = shadowExtent;
-    dirLight.shadow.camera.bottom = -shadowExtent;
-    scene.add(dirLight);
+    const sunLight = new THREE.DirectionalLight(0xfff4d6, 0.95);
+    sunLight.position.set(42, 65, 34);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 5;
+    sunLight.shadow.camera.far = 160;
+    const shadowExtent = 56;
+    sunLight.shadow.camera.left = -shadowExtent;
+    sunLight.shadow.camera.right = shadowExtent;
+    sunLight.shadow.camera.top = shadowExtent;
+    sunLight.shadow.camera.bottom = -shadowExtent;
+    scene.add(sunLight);
 
     // =========================================================================
-    // 3. MATERIALS (SHINY PLASTIC FOR SOLDIERS, SIMPLE FOR SANDBOX)
+    // 3. MATERIALS (PLASTIC SOLDIERS, SAND, WOOD, AND SANDBOX TOYS)
     // =========================================================================
     const greenPlasticMat = new THREE.MeshPhongMaterial({
-      color: 0x266b1f,
-      specular: 0x77aa70,
+      color: 0x2a7a22,
+      specular: 0x88bb80,
       shininess: 75
+    });
+
+    const greenDarkPlasticMat = new THREE.MeshPhongMaterial({
+      color: 0x1b4f15,
+      specular: 0x669960,
+      shininess: 85
     });
 
     const tanPlasticMat = new THREE.MeshPhongMaterial({
-      color: 0xc8a464,
+      color: 0xd0a864,
       specular: 0xffe8bd,
       shininess: 75
     });
 
-    const darkPlasticMat = new THREE.MeshPhongMaterial({
-      color: 0x1c3617,
-      specular: 0x668866,
+    const tanDarkPlasticMat = new THREE.MeshPhongMaterial({
+      color: 0x99763c,
+      specular: 0xffe0b0,
       shininess: 85
     });
 
-    const tanGunPlasticMat = new THREE.MeshPhongMaterial({
-      color: 0x997942,
-      specular: 0xffe8bd,
-      shininess: 85
-    });
-
-    const crateMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
-    const wallMat = new THREE.MeshLambertMaterial({ color: 0x9e9582 });
-    const rockMat = new THREE.MeshLambertMaterial({ color: 0x777b7e });
+    // Toy materials
+    const redToyMat = new THREE.MeshPhongMaterial({ color: 0xe0352b, specular: 0xffaaaa, shininess: 90 });
+    const blueToyMat = new THREE.MeshPhongMaterial({ color: 0x2469d9, specular: 0xaaccff, shininess: 90 });
+    const yellowToyMat = new THREE.MeshPhongMaterial({ color: 0xf2bf18, specular: 0xfff0aa, shininess: 90 });
+    const tealToyMat = new THREE.MeshPhongMaterial({ color: 0x19a89d, specular: 0xaaf5ef, shininess: 90 });
+    const whiteToyMat = new THREE.MeshPhongMaterial({ color: 0xf4f4f4, specular: 0xffffff, shininess: 95 });
+    const tireMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
 
     // =========================================================================
-    // 4. GROUND PLANE & COVER OBJECTS (OUTDOOR SANDBOX)
+    // 4. UNEVEN SANDBOX TERRAIN & WOODEN BORDER
     // =========================================================================
-    const WORLD_LIMIT = 48;
-    const obstacles = []; // Stores bounding boxes/radii for simple collision & cover
+    const WORLD_LIMIT = 44; // Inner sandbox half-size
+    const obstacles = [];   // Bounding boxes for movement collision
+    const shootableMeshes = []; // Meshes that block bullets (terrain + toys)
 
-    // Generate a subtle procedural grass/dirt canvas texture for the ground
-    function createGroundTexture() {
+    // Analytical height function for uneven sand dunes, hollows, and mounds
+    function getSandHeight(x, z) {
+      // Clamp within sandbox when sampling
+      const cx = Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, x));
+      const cz = Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, z));
+
+      // Rolling sand dunes
+      let h =
+        Math.sin(cx * 0.085) * Math.cos(cz * 0.08) * 1.15 +
+        Math.sin((cx + cz) * 0.055) * 0.75 +
+        Math.cos(cx * 0.17 - cz * 0.14) * 0.32 +
+        Math.sin(cx * 0.35) * Math.sin(cz * 0.35) * 0.08;
+
+      // Central sculpted sandcastle hill
+      const distCenter = Math.hypot(cx - 0, cz + 2);
+      h += Math.exp(-(distCenter * distCenter) / 95) * 1.65;
+
+      // Northwest sand mound (near dump truck)
+      const distNW = Math.hypot(cx + 18, cz + 15);
+      h += Math.exp(-(distNW * distNW) / 70) * 1.45;
+
+      // Southeast scooped hollow (dug out with shovel)
+      const distSE = Math.hypot(cx - 16, cz - 14);
+      h -= Math.exp(-(distSE * distSE) / 60) * 1.1;
+
+      // Taper slightly near wooden sandbox walls
+      const edgeFade = Math.min(
+        1,
+        Math.min(WORLD_LIMIT - Math.abs(cx), WORLD_LIMIT - Math.abs(cz)) / 4
+      );
+
+      return Math.max(-0.9, h * Math.max(0.2, edgeFade));
+    }
+
+    // Generate procedural sand grain texture
+    function createSandTexture() {
       const canvas = document.createElement("canvas");
       canvas.width = 256;
       canvas.height = 256;
       const ctx = canvas.getContext("2d");
 
-      ctx.fillStyle = "#4f7d36";
+      ctx.fillStyle = "#e2c178";
       ctx.fillRect(0, 0, 256, 256);
 
-      // Add subtle grass & dirt speckles
-      for (let i = 0; i < 1800; i++) {
-        ctx.fillStyle = Math.random() > 0.25 ? "#446e2d" : "#6b5a38";
+      const palette = ["#d4b066", "#edd08a", "#c8a258", "#f2d899", "#bfa05a"];
+      for (let i = 0; i < 4500; i++) {
+        ctx.fillStyle = palette[i % palette.length];
+        const sz = (i % 3) + 1;
         ctx.fillRect(
           Math.floor(Math.random() * 256),
           Math.floor(Math.random() * 256),
-          3,
-          3
+          sz,
+          sz
         );
       }
 
       const texture = new THREE.CanvasTexture(canvas);
       texture.wrapS = THREE.RepeatWrapping;
       texture.wrapT = THREE.RepeatWrapping;
-      texture.repeat.set(24, 24);
+      texture.repeat.set(18, 18);
       return texture;
     }
 
-    const groundGeo = new THREE.PlaneGeometry(WORLD_LIMIT * 2, WORLD_LIMIT * 2);
-    const groundMat = new THREE.MeshLambertMaterial({ map: createGroundTexture() });
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    scene.add(ground);
+    // Generate procedural wood plank texture for sandbox frame
+    function createWoodTexture() {
+      const canvas = document.createElement("canvas");
+      canvas.width = 256;
+      canvas.height = 64;
+      const ctx = canvas.getContext("2d");
 
-    // Helper to add a cover object (crate, low wall, or rock)
-    function addObstacle(mesh, width, height, depth) {
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      scene.add(mesh);
+      ctx.fillStyle = "#8c5828";
+      ctx.fillRect(0, 0, 256, 64);
 
-      const box = new THREE.Box3().setFromCenterAndSize(
-        mesh.position,
-        new THREE.Vector3(width, height, depth)
+      for (let i = 0; i < 90; i++) {
+        ctx.fillStyle = i % 2 === 0 ? "rgba(60, 32, 10, 0.25)" : "rgba(180, 120, 65, 0.2)";
+        ctx.fillRect(0, Math.floor(Math.random() * 64), 256, 2);
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(6, 1);
+      return texture;
+    }
+
+    const sandMat = new THREE.MeshPhongMaterial({
+      map: createSandTexture(),
+      specular: 0x3a301e,
+      shininess: 12
+    });
+
+    const sandCastleMat = new THREE.MeshPhongMaterial({
+      map: sandMat.map,
+      color: 0xdab66b,
+      specular: 0x2e2414,
+      shininess: 8
+    });
+
+    // Build high-res uneven sand mesh
+    const sandGeo = new THREE.PlaneGeometry(WORLD_LIMIT * 2, WORLD_LIMIT * 2, 96, 96);
+    sandGeo.rotateX(-Math.PI / 2);
+    const posAttr = sandGeo.attributes.position;
+    for (let i = 0; i < posAttr.count; i++) {
+      const vx = posAttr.getX(i);
+      const vz = posAttr.getZ(i);
+      posAttr.setY(i, getSandHeight(vx, vz));
+    }
+    sandGeo.computeVertexNormals();
+
+    const sandMesh = new THREE.Mesh(sandGeo, sandMat);
+    sandMesh.receiveShadow = true;
+    scene.add(sandMesh);
+    shootableMeshes.push(sandMesh);
+
+    // Outer backyard lawn surrounding the wooden sandbox
+    const lawnGeo = new THREE.RingGeometry(WORLD_LIMIT * 1.38, 180, 32);
+    lawnGeo.rotateX(-Math.PI / 2);
+    lawnGeo.rotateY(Math.PI / 4);
+    const lawnMat = new THREE.MeshLambertMaterial({ color: 0x487a32 });
+    const lawnMesh = new THREE.Mesh(lawnGeo, lawnMat);
+    lawnMesh.position.y = -0.5;
+    lawnMesh.receiveShadow = true;
+    scene.add(lawnMesh);
+
+    // Wooden Sandbox Border Walls & Corner Seats
+    function buildSandboxFrame() {
+      const woodMat = new THREE.MeshLambertMaterial({ map: createWoodTexture() });
+      const wallThickness = 2.4;
+      const wallHeight = 3.4;
+      const fullSpan = WORLD_LIMIT * 2 + wallThickness * 2;
+
+      const sides = [
+        { x: 0, z: -WORLD_LIMIT - wallThickness / 2, w: fullSpan, d: wallThickness },
+        { x: 0, z: WORLD_LIMIT + wallThickness / 2, w: fullSpan, d: wallThickness },
+        { x: -WORLD_LIMIT - wallThickness / 2, z: 0, w: wallThickness, d: WORLD_LIMIT * 2 },
+        { x: WORLD_LIMIT + wallThickness / 2, z: 0, w: wallThickness, d: WORLD_LIMIT * 2 }
+      ];
+
+      sides.forEach((s) => {
+        const wall = new THREE.Mesh(
+          new THREE.BoxGeometry(s.w, wallHeight, s.d),
+          woodMat
+        );
+        wall.position.set(s.x, wallHeight / 2 - 0.5, s.z);
+        wall.castShadow = true;
+        wall.receiveShadow = true;
+        scene.add(wall);
+      });
+
+      // Corner bench triangles/seats
+      const cornerCoords = [
+        [-WORLD_LIMIT, -WORLD_LIMIT],
+        [WORLD_LIMIT, -WORLD_LIMIT],
+        [-WORLD_LIMIT, WORLD_LIMIT],
+        [WORLD_LIMIT, WORLD_LIMIT]
+      ];
+      cornerCoords.forEach(([cx, cz]) => {
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(6, 0.5, 6), woodMat);
+        seat.position.set(
+          cx + (cx < 0 ? 1.2 : -1.2),
+          wallHeight - 0.35,
+          cz + (cz < 0 ? 1.2 : -1.2)
+        );
+        seat.castShadow = true;
+        seat.receiveShadow = true;
+        scene.add(seat);
+      });
+    }
+
+    buildSandboxFrame();
+
+    // =========================================================================
+    // 5. SANDBOX TOYS (SANDCASTLES, BUCKETS, TOY BRICKS, DUMP TRUCK, BALL)
+    // =========================================================================
+    function registerObstacleObject(obj3D, centerX, centerZ, width, depth, height) {
+      obj3D.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+          shootableMeshes.push(child);
+        }
+      });
+      scene.add(obj3D);
+
+      const baseH = getSandHeight(centerX, centerZ);
+      const box = new THREE.Box3(
+        new THREE.Vector3(centerX - width / 2, baseH - 1, centerZ - depth / 2),
+        new THREE.Vector3(centerX + width / 2, baseH + height, centerZ + depth / 2)
       );
-      obstacles.push({ mesh, box, width, height, depth });
+      obstacles.push({ box });
     }
 
-    function buildSandboxCover() {
-      // Wooden crates
-      const crateSpecs = [
-        { x: -8, z: -8, w: 3, h: 3, d: 3 },
-        { x: 10, z: -6, w: 3.5, h: 3.5, d: 3.5 },
-        { x: -14, z: 12, w: 3, h: 3, d: 3 },
-        { x: 16, z: 15, w: 4, h: 3, d: 4 },
-        { x: -24, z: -18, w: 3.5, h: 3.5, d: 3.5 },
-        { x: 24, z: -20, w: 3.5, h: 3.5, d: 3.5 }
+    // Toy 1: Sculpted Sandcastle with Turrets & Flag
+    function createSandcastle(x, z) {
+      const group = new THREE.Group();
+      const groundY = getSandHeight(x, z);
+      group.position.set(x, groundY - 0.15, z);
+
+      // Main keep
+      const keep = new THREE.Mesh(new THREE.BoxGeometry(4.4, 2.5, 4.4), sandCastleMat);
+      keep.position.y = 1.25;
+      group.add(keep);
+
+      // 4 Corner molded bucket towers
+      const towerOffsets = [
+        [-2.1, -2.1],
+        [2.1, -2.1],
+        [-2.1, 2.1],
+        [2.1, 2.1]
       ];
-      crateSpecs.forEach((c) => {
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(c.w, c.h, c.d), crateMat);
-        mesh.position.set(c.x, c.h / 2, c.z);
-        addObstacle(mesh, c.w, c.h, c.d);
+      towerOffsets.forEach(([tx, tz]) => {
+        const tower = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.95, 1.15, 3.3, 12),
+          sandCastleMat
+        );
+        tower.position.set(tx, 1.65, tz);
+        group.add(tower);
+
+        // Crenellations on top
+        for (let i = 0; i < 4; i++) {
+          const angle = (i * Math.PI) / 2;
+          const merlon = new THREE.Mesh(
+            new THREE.BoxGeometry(0.4, 0.35, 0.4),
+            sandCastleMat
+          );
+          merlon.position.set(
+            tx + Math.cos(angle) * 0.65,
+            3.45,
+            tz + Math.sin(angle) * 0.65
+          );
+          group.add(merlon);
+        }
       });
 
-      // Low cover walls
-      const wallSpecs = [
-        { x: 0, z: -14, w: 7, h: 2.2, d: 1.4 },
-        { x: -16, z: 0, w: 1.4, h: 2.2, d: 7 },
-        { x: 18, z: 2, w: 1.4, h: 2.2, d: 7 },
-        { x: 2, z: 18, w: 8, h: 2.2, d: 1.4 },
-        { x: -6, z: -28, w: 8, h: 2.4, d: 1.5 },
-        { x: 12, z: -26, w: 7, h: 2.4, d: 1.5 }
-      ];
-      wallSpecs.forEach((w) => {
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w.w, w.h, w.d), wallMat);
-        mesh.position.set(w.x, w.h / 2, w.z);
-        addObstacle(mesh, w.w, w.h, w.d);
-      });
+      // Center spire with a little plastic flag
+      const spire = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.8, 1.1, 3.8, 12),
+        sandCastleMat
+      );
+      spire.position.set(0, 1.9, 0);
+      group.add(spire);
 
-      // Simple low-poly rocks
-      const rockSpecs = [
-        { x: -22, z: -8, r: 2.2 },
-        { x: 22, z: -12, r: 2.5 },
-        { x: -8, z: 24, r: 2.3 },
-        { x: 25, z: 24, r: 2.6 },
-        { x: -28, z: 22, r: 2.4 }
-      ];
-      rockSpecs.forEach((rk) => {
-        const mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(rk.r, 0), rockMat);
-        mesh.position.set(rk.x, rk.r * 0.75, rk.z);
-        addObstacle(mesh, rk.r * 1.7, rk.r * 1.6, rk.r * 1.7);
-      });
+      const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.05, 0.05, 1.5, 6),
+        whiteToyMat
+      );
+      pole.position.set(0, 4.4, 0);
+      group.add(pole);
+
+      const flag = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.45, 0.06), redToyMat);
+      flag.position.set(0.4, 4.9, 0);
+      group.add(flag);
+
+      registerObstacleObject(group, x, z, 6.2, 6.2, 4.2);
     }
 
-    buildSandboxCover();
+    // Toy 2: Oversized LEGO-style Plastic Building Brick
+    function createToyBrick(x, z, width, height, depth, studsX, studsZ, mat, rotY) {
+      const group = new THREE.Group();
+      const groundY = getSandHeight(x, z);
+      group.position.set(x, groundY, z);
+      group.rotation.y = rotY || 0;
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), mat);
+      body.position.y = height / 2;
+      group.add(body);
+
+      const studRadius = Math.min(width / studsX, depth / studsZ) * 0.28;
+      const studGeo = new THREE.CylinderGeometry(studRadius, studRadius, 0.28, 12);
+
+      for (let ix = 0; ix < studsX; ix++) {
+        for (let iz = 0; iz < studsZ; iz++) {
+          const stud = new THREE.Mesh(studGeo, mat);
+          const sx = -width / 2 + (width / studsX) * (ix + 0.5);
+          const sz = -depth / 2 + (depth / studsZ) * (iz + 0.5);
+          stud.position.set(sx, height + 0.14, sz);
+          group.add(stud);
+        }
+      }
+
+      const spanX = Math.abs(width * Math.cos(rotY)) + Math.abs(depth * Math.sin(rotY));
+      const spanZ = Math.abs(width * Math.sin(rotY)) + Math.abs(depth * Math.cos(rotY));
+      registerObstacleObject(group, x, z, spanX, spanZ, height + 0.3);
+    }
+
+    // Toy 3: Plastic Beach Bucket (Upright or Tipped Over)
+    function createBeachBucket(x, z, mat, tipped, rotY) {
+      const group = new THREE.Group();
+      const groundY = getSandHeight(x, z);
+      group.position.set(x, groundY, z);
+      group.rotation.y = rotY || 0;
+
+      const bucketPivot = new THREE.Group();
+      group.add(bucketPivot);
+
+      const body = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.45, 1.05, 2.7, 16),
+        mat
+      );
+      body.position.y = 1.35;
+      bucketPivot.add(body);
+
+      const rim = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.56, 1.56, 0.28, 16),
+        mat
+      );
+      rim.position.y = 2.6;
+      bucketPivot.add(rim);
+
+      const handle = new THREE.Mesh(
+        new THREE.TorusGeometry(1.45, 0.09, 8, 16, Math.PI),
+        whiteToyMat
+      );
+      handle.position.y = 2.6;
+      handle.rotation.z = 0.4;
+      bucketPivot.add(handle);
+
+      if (tipped) {
+        bucketPivot.position.y = 1.25;
+        bucketPivot.rotation.z = Math.PI / 2 - 0.12;
+      }
+
+      registerObstacleObject(group, x, z, 3.0, 3.0, 2.9);
+    }
+
+    // Toy 4: Yellow Toy Dump Truck
+    function createToyDumpTruck(x, z, rotY) {
+      const group = new THREE.Group();
+      const groundY = getSandHeight(x, z);
+      group.position.set(x, groundY + 0.1, z);
+      group.rotation.y = rotY || 0;
+
+      // Chassis
+      const chassis = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.6, 6.2), tireMat);
+      chassis.position.y = 0.85;
+      group.add(chassis);
+
+      // Cab
+      const cab = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.1, 2.2), yellowToyMat);
+      cab.position.set(0, 2.1, -1.8);
+      group.add(cab);
+
+      // Windshield cutout bar
+      const visor = new THREE.Mesh(new THREE.BoxGeometry(3.3, 0.35, 2.3), yellowToyMat);
+      visor.position.set(0, 3.1, -1.8);
+      group.add(visor);
+
+      // Dump bed
+      const bed = new THREE.Mesh(new THREE.BoxGeometry(3.5, 1.8, 3.8), yellowToyMat);
+      bed.position.set(0, 2.0, 1.3);
+      bed.rotation.x = -0.08;
+      group.add(bed);
+
+      // Sand pile inside the dump bed
+      const load = new THREE.Mesh(
+        new THREE.SphereGeometry(1.55, 10, 8),
+        sandCastleMat
+      );
+      load.scale.set(1.0, 0.55, 1.15);
+      load.position.set(0, 2.75, 1.3);
+      group.add(load);
+
+      // 6 Chunky Wheels
+      const wheelGeo = new THREE.CylinderGeometry(0.85, 0.85, 0.65, 14);
+      wheelGeo.rotateZ(Math.PI / 2);
+      const hubGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.7, 10);
+      hubGeo.rotateZ(Math.PI / 2);
+
+      const wheelPositions = [
+        [-1.85, -1.9],
+        [1.85, -1.9],
+        [-1.85, 0.4],
+        [1.85, 0.4],
+        [-1.85, 2.2],
+        [1.85, 2.2]
+      ];
+      wheelPositions.forEach(([wx, wz]) => {
+        const wheel = new THREE.Mesh(wheelGeo, tireMat);
+        wheel.position.set(wx, 0.85, wz);
+        group.add(wheel);
+
+        const hub = new THREE.Mesh(hubGeo, yellowToyMat);
+        hub.position.set(wx, 0.85, wz);
+        group.add(hub);
+      });
+
+      registerObstacleObject(group, x, z, 5.2, 6.4, 3.4);
+    }
+
+    // Toy 5: Giant Plastic Shovel Stuck in the Sand
+    function createPlasticShovel(x, z, mat, rotY) {
+      const group = new THREE.Group();
+      const groundY = getSandHeight(x, z);
+      group.position.set(x, groundY, z);
+      group.rotation.y = rotY || 0;
+      group.rotation.x = 0.45;
+
+      const scoop = new THREE.Mesh(new THREE.BoxGeometry(2.1, 2.4, 0.35), mat);
+      scoop.position.y = 0.8;
+      group.add(scoop);
+
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 3.6, 10), mat);
+      shaft.position.y = 3.4;
+      group.add(shaft);
+
+      const grip = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.15, 8, 12), mat);
+      grip.position.y = 5.5;
+      group.add(grip);
+
+      registerObstacleObject(group, x, z, 2.2, 2.2, 3.2);
+    }
+
+    // Toy 6: Colorful Beach Ball
+    function createBeachBall(x, z, radius) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 256;
+      canvas.height = 128;
+      const ctx = canvas.getContext("2d");
+      const colors = ["#e63946", "#ffffff", "#1d6fd8", "#ffffff", "#f4c41c", "#ffffff"];
+      const stripeW = 256 / colors.length;
+      colors.forEach((c, idx) => {
+        ctx.fillStyle = c;
+        ctx.fillRect(idx * stripeW, 0, stripeW, 128);
+      });
+
+      const tex = new THREE.CanvasTexture(canvas);
+      const ballMat = new THREE.MeshPhongMaterial({
+        map: tex,
+        specular: 0xffffff,
+        shininess: 95
+      });
+
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(radius, 18, 16), ballMat);
+      const groundY = getSandHeight(x, z);
+      ball.position.set(x, groundY + radius * 0.82, z);
+      ball.rotation.z = 0.35;
+      registerObstacleObject(ball, x, z, radius * 1.85, radius * 1.85, radius * 1.8);
+    }
+
+    function populateSandboxWithToys() {
+      // Center sculpted sandcastle
+      createSandcastle(0, -2);
+
+      // Toy dump truck on the northwest dune
+      createToyDumpTruck(-18, -14, 0.55);
+
+      // Colorful Beach Buckets
+      createBeachBucket(15, -12, redToyMat, false, 0.3);
+      createBeachBucket(-14, 13, blueToyMat, true, 1.1);
+      createBeachBucket(22, 16, tealToyMat, false, -0.6);
+
+      // Oversized LEGO-style plastic building bricks for tactical cover
+      createToyBrick(-9, -18, 6.0, 2.1, 3.0, 4, 2, redToyMat, 0.18);
+      createToyBrick(10, -22, 6.0, 2.1, 3.0, 4, 2, blueToyMat, -0.22);
+      createToyBrick(-20, 2, 3.0, 2.3, 6.0, 2, 4, yellowToyMat, 0.12);
+      createToyBrick(20, -1, 3.0, 2.3, 6.0, 2, 4, redToyMat, -0.15);
+      createToyBrick(-7, 18, 6.0, 2.1, 3.0, 4, 2, tealToyMat, -0.1);
+      createToyBrick(9, 17, 6.0, 2.1, 3.0, 4, 2, yellowToyMat, 0.25);
+
+      // Beach ball & plastic shovel
+      createBeachBall(15, 5, 2.0);
+      createPlasticShovel(-11, -5, tealToyMat, 0.8);
+    }
+
+    populateSandboxWithToys();
 
     // =========================================================================
-    // 5. PLASTIC SOLDIER BUILDER (LOW-POLY GEOMETRY)
+    // 6. ARTICULATED HUMAN-LIKE PLASTIC SOLDIER BUILDER & ANIMATOR
     // =========================================================================
-    function createPlasticSoldier(isPlayer) {
-      const bodyMat = isPlayer ? greenPlasticMat : tanPlasticMat;
-      const gunMat = isPlayer ? darkPlasticMat : tanGunPlasticMat;
+    function createPlasticSoldier(team, labelText) {
+      const isGreen = team === "green";
+      const bodyMat = isGreen ? greenPlasticMat : tanPlasticMat;
+      const darkMat = isGreen ? greenDarkPlasticMat : tanDarkPlasticMat;
 
       const root = new THREE.Group();
 
-      // Sub-group that tips over when the soldier dies
-      const figure = new THREE.Group();
-      root.add(figure);
+      // Waist / Pelvis Root (allows vertical bobbing, hip sway, and kneeling/falling)
+      const pelvis = new THREE.Group();
+      pelvis.position.y = 0.96;
+      root.add(pelvis);
 
-      // Classic plastic toy soldier base plate at the feet
-      const baseGeo = new THREE.CylinderGeometry(0.65, 0.7, 0.1, 12);
-      const baseMesh = new THREE.Mesh(baseGeo, bodyMat);
-      baseMesh.position.y = 0.05;
-      baseMesh.scale.set(1, 1, 1.25);
-      figure.add(baseMesh);
-
-      // Legs
-      const legGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.85, 8);
-      const leftLeg = new THREE.Mesh(legGeo, bodyMat);
-      leftLeg.position.set(-0.2, 0.5, 0);
-      figure.add(leftLeg);
-
-      const rightLeg = new THREE.Mesh(legGeo, bodyMat);
-      rightLeg.position.set(0.2, 0.5, 0);
-      figure.add(rightLeg);
-
-      // Torso
-      const torsoGeo = new THREE.BoxGeometry(0.7, 0.9, 0.4);
-      const torso = new THREE.Mesh(torsoGeo, bodyMat);
-      torso.position.set(0, 1.35, 0);
-      figure.add(torso);
-
-      // Head
-      const headGeo = new THREE.SphereGeometry(0.24, 10, 10);
-      const head = new THREE.Mesh(headGeo, bodyMat);
-      head.position.set(0, 2.02, 0);
-      figure.add(head);
-
-      // Plastic Army Helmet
-      const helmetGeo = new THREE.SphereGeometry(
-        0.29,
-        12,
-        8,
-        0,
-        Math.PI * 2,
-        0,
-        Math.PI * 0.58
+      // Rounded hips
+      const hipMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.28, 0.26, 0.24, 12),
+        bodyMat
       );
-      const helmet = new THREE.Mesh(helmetGeo, bodyMat);
-      helmet.position.set(0, 2.04, 0);
-      figure.add(helmet);
+      hipMesh.scale.set(1.15, 1, 0.82);
+      pelvis.add(hipMesh);
 
-      // Arms (posed holding rifle forward)
-      const armGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.65, 8);
-      const rightArm = new THREE.Mesh(armGeo, bodyMat);
-      rightArm.position.set(0.42, 1.45, -0.2);
-      rightArm.rotation.x = Math.PI / 2.2;
-      figure.add(rightArm);
+      // Helper to build an articulated 2-segment human leg (thigh -> knee -> calf -> boot)
+      function createLeg(sideSign) {
+        const hipJoint = new THREE.Group();
+        hipJoint.position.set(sideSign * 0.18, -0.04, 0);
+        pelvis.add(hipJoint);
 
-      const leftArm = new THREE.Mesh(armGeo, bodyMat);
-      leftArm.position.set(-0.25, 1.42, -0.32);
-      leftArm.rotation.x = Math.PI / 2.1;
-      leftArm.rotation.z = -0.45;
-      figure.add(leftArm);
+        // Hip ball joint
+        const hipBall = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 10), bodyMat);
+        hipJoint.add(hipBall);
 
-      // Basic Rifle (stock + barrel)
-      const rifleGroup = new THREE.Group();
-      const stockGeo = new THREE.BoxGeometry(0.1, 0.16, 0.65);
-      const stock = new THREE.Mesh(stockGeo, gunMat);
-      stock.position.set(0, 0, 0);
-      rifleGroup.add(stock);
+        // Upper leg (thigh)
+        const thigh = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.145, 0.12, 0.44, 10),
+          bodyMat
+        );
+        thigh.position.y = -0.22;
+        hipJoint.add(thigh);
 
-      const barrelGeo = new THREE.CylinderGeometry(0.035, 0.035, 0.75, 8);
-      const barrel = new THREE.Mesh(barrelGeo, gunMat);
+        // Knee joint pivot
+        const kneeJoint = new THREE.Group();
+        kneeJoint.position.y = -0.44;
+        hipJoint.add(kneeJoint);
+
+        const kneeCap = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 10), bodyMat);
+        kneeJoint.add(kneeCap);
+
+        // Lower leg (calf/shin)
+        const shin = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.115, 0.095, 0.42, 10),
+          bodyMat
+        );
+        shin.position.y = -0.21;
+        kneeJoint.add(shin);
+
+        // Combat Boot
+        const boot = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.36), darkMat);
+        boot.position.set(0, -0.42, -0.05);
+        kneeJoint.add(boot);
+
+        return { hipJoint, kneeJoint };
+      }
+
+      const leftLeg = createLeg(-1);
+      const rightLeg = createLeg(1);
+
+      // Upper Body / Spine Pivot
+      const spine = new THREE.Group();
+      spine.position.y = 0.08;
+      pelvis.add(spine);
+
+      // Belt with ammo pouches
+      const belt = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.3, 0.29, 0.12, 12),
+        darkMat
+      );
+      belt.scale.set(1.15, 1, 0.85);
+      belt.position.y = 0.04;
+      spine.add(belt);
+
+      // Sculpted human torso (wider at chest/shoulders, tapered at waist)
+      const torso = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.36, 0.27, 0.68, 12),
+        bodyMat
+      );
+      torso.scale.set(1.18, 1, 0.78);
+      torso.position.y = 0.42;
+      spine.add(torso);
+
+      // Tactical Field Pack on back
+      const pack = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.48, 0.22), darkMat);
+      pack.position.set(0, 0.46, 0.28);
+      spine.add(pack);
+
+      // Neck & Head Pivot
+      const headPivot = new THREE.Group();
+      headPivot.position.y = 0.82;
+      spine.add(headPivot);
+
+      const neck = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.11, 0.13, 0.16, 10),
+        bodyMat
+      );
+      neck.position.y = 0.04;
+      headPivot.add(neck);
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12), bodyMat);
+      head.scale.set(0.95, 1.08, 0.98);
+      head.position.y = 0.22;
+      headPivot.add(head);
+
+      // M1 Army Helmet (angled dome + flared brim)
+      const helmet = new THREE.Mesh(
+        new THREE.SphereGeometry(0.265, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.58),
+        darkMat
+      );
+      helmet.scale.set(1.02, 0.95, 1.12);
+      helmet.position.set(0, 0.25, 0.01);
+      helmet.rotation.x = -0.1;
+      headPivot.add(helmet);
+
+      // Right Arm (Shoulder -> Upper Arm -> Elbow -> Forearm -> Hand + Rifle)
+      const rightShoulder = new THREE.Group();
+      rightShoulder.position.set(0.42, 0.68, 0);
+      spine.add(rightShoulder);
+
+      const rShoulderBall = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 10), bodyMat);
+      rightShoulder.add(rShoulderBall);
+
+      const rUpperArm = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.11, 0.095, 0.36, 10),
+        bodyMat
+      );
+      rUpperArm.position.y = -0.18;
+      rightShoulder.add(rUpperArm);
+
+      const rightElbow = new THREE.Group();
+      rightElbow.position.y = -0.36;
+      rightShoulder.add(rightElbow);
+
+      const rForearm = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.095, 0.08, 0.34, 10),
+        bodyMat
+      );
+      rForearm.position.y = -0.17;
+      rightElbow.add(rForearm);
+
+      const rHand = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), bodyMat);
+      rHand.position.y = -0.35;
+      rightElbow.add(rHand);
+
+      // Left Arm (Supporting the rifle barrel)
+      const leftShoulder = new THREE.Group();
+      leftShoulder.position.set(-0.42, 0.68, 0);
+      spine.add(leftShoulder);
+
+      const lShoulderBall = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 10), bodyMat);
+      leftShoulder.add(lShoulderBall);
+
+      const lUpperArm = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.11, 0.095, 0.36, 10),
+        bodyMat
+      );
+      lUpperArm.position.y = -0.18;
+      leftShoulder.add(lUpperArm);
+
+      const leftElbow = new THREE.Group();
+      leftElbow.position.y = -0.36;
+      leftShoulder.add(leftElbow);
+
+      const lForearm = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.095, 0.08, 0.36, 10),
+        bodyMat
+      );
+      lForearm.position.y = -0.18;
+      leftElbow.add(lForearm);
+
+      const lHand = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), bodyMat);
+      lHand.position.y = -0.36;
+      leftElbow.add(lHand);
+
+      // Rifle mounted on the upper torso/hands so it aims cleanly forward
+      const weaponMount = new THREE.Group();
+      weaponMount.position.set(0.22, 0.56, -0.25);
+      spine.add(weaponMount);
+
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.15, 0.45), darkMat);
+      stock.position.set(0, -0.02, 0.14);
+      weaponMount.add(stock);
+
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.42), darkMat);
+      receiver.position.set(0, 0.02, -0.18);
+      weaponMount.add(receiver);
+
+      const magazine = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.24, 0.12), darkMat);
+      magazine.position.set(0, -0.12, -0.2);
+      magazine.rotation.x = 0.25;
+      weaponMount.add(magazine);
+
+      const barrel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.032, 0.035, 0.65, 8),
+        darkMat
+      );
       barrel.rotation.x = Math.PI / 2;
-      barrel.position.set(0, 0.03, -0.55);
-      rifleGroup.add(barrel);
+      barrel.position.set(0, 0.05, -0.62);
+      weaponMount.add(barrel);
 
-      // Muzzle flash mesh at the tip of the barrel
-      const flashGeo = new THREE.SphereGeometry(0.14, 6, 6);
+      // Muzzle flash at barrel tip
+      const flashGeo = new THREE.SphereGeometry(0.15, 6, 6);
       const flashMat = new THREE.MeshBasicMaterial({ color: 0xffee55 });
       const muzzleFlash = new THREE.Mesh(flashGeo, flashMat);
-      muzzleFlash.position.set(0, 0.03, -0.98);
+      muzzleFlash.position.set(0, 0.05, -0.98);
       muzzleFlash.visible = false;
-      rifleGroup.add(muzzleFlash);
+      weaponMount.add(muzzleFlash);
 
-      rifleGroup.position.set(0.32, 1.45, -0.45);
-      figure.add(rifleGroup);
+      // Overhead floating squad/enemy indicator bar (visible for AI teammates & enemies)
+      let overheadBarFill = null;
+      let overheadGroup = null;
+      if (labelText) {
+        overheadGroup = new THREE.Group();
+        overheadGroup.position.set(0, 2.38, 0);
+        root.add(overheadGroup);
 
-      // Enable shadows on all parts
-      figure.traverse((child) => {
+        const bgPlane = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.95, 0.13),
+          new THREE.MeshBasicMaterial({
+            color: 0x111111,
+            side: THREE.DoubleSide
+          })
+        );
+        overheadGroup.add(bgPlane);
+
+        const fillGeo = new THREE.PlaneGeometry(0.9, 0.09);
+        fillGeo.translate(0.45, 0, 0); // Anchor at left edge
+        overheadBarFill = new THREE.Mesh(
+          fillGeo,
+          new THREE.MeshBasicMaterial({
+            color: isGreen ? 0x52ff47 : 0xffb347,
+            side: THREE.DoubleSide
+          })
+        );
+        overheadBarFill.position.set(-0.45, 0, 0.01);
+        overheadGroup.add(overheadBarFill);
+      }
+
+      // Enable shadows on soldier parts
+      pelvis.traverse((child) => {
         if (child.isMesh) {
           child.castShadow = true;
           child.receiveShadow = true;
@@ -473,34 +1059,238 @@
 
       return {
         root,
-        figure,
+        pelvis,
+        spine,
+        headPivot,
         leftLeg,
         rightLeg,
+        leftShoulder,
+        leftElbow,
+        rightShoulder,
+        rightElbow,
+        weaponMount,
         muzzleFlash,
-        flashTimer: 0
+        overheadGroup,
+        overheadBarFill,
+        flashTimer: 0,
+        recoilTimer: 0,
+        flinchTimer: 0
       };
     }
 
-    // =========================================================================
-    // 6. PLAYER STATE & CONTROLS
-    // =========================================================================
-    const playerModel = createPlasticSoldier(true);
-    scene.add(playerModel.root);
+    // Updates articulated human gait, breathing, aiming, recoil, and collapse
+    function animateSoldier(soldier, dt, isMoving, strideDir) {
+      const m = soldier.model;
 
-    const player = {
-      model: playerModel,
-      position: playerModel.root.position,
-      yaw: 0,           // Horizontal aim angle
-      pitch: 0.08,      // Vertical camera look angle
-      speed: 9.5,
-      radius: 0.75,
-      health: 100,
-      maxHealth: 100,
-      fireCooldown: 0,
-      fireRate: 0.22,   // Seconds between shots
-      walkCycle: 0
-    };
+      // Muzzle flash timer
+      if (m.flashTimer > 0) {
+        m.flashTimer -= dt;
+        if (m.flashTimer <= 0) m.muzzleFlash.visible = false;
+      }
 
+      // Recoil timer
+      if (m.recoilTimer > 0) {
+        m.recoilTimer = Math.max(0, m.recoilTimer - dt * 7);
+      }
+
+      // Hit flinch timer
+      if (m.flinchTimer > 0) {
+        m.flinchTimer = Math.max(0, m.flinchTimer - dt * 6);
+      }
+
+      // Keep overhead bar facing camera
+      if (m.overheadGroup) {
+        m.overheadGroup.lookAt(camera.position);
+      }
+
+      // ----- DEATH / COLLAPSE ANIMATION -----
+      if (!soldier.alive) {
+        soldier.fallProgress = Math.min(1, soldier.fallProgress + dt * 2.8);
+        const p = soldier.fallProgress;
+        // Smooth ease-out collapse
+        const ease = 1 - Math.pow(1 - p, 3);
+
+        // Knees buckle & body drops onto the sand
+        m.pelvis.position.y = 0.96 * (1 - ease * 0.72);
+        m.pelvis.rotation.x = ease * 1.35 * soldier.fallDir;
+        m.pelvis.rotation.z = ease * 0.45 * soldier.fallTwist;
+
+        m.leftLeg.hipJoint.rotation.x = -ease * 0.65;
+        m.leftLeg.kneeJoint.rotation.x = ease * 1.25;
+        m.rightLeg.hipJoint.rotation.x = -ease * 0.35;
+        m.rightLeg.kneeJoint.rotation.x = ease * 0.85;
+
+        m.spine.rotation.x = ease * 0.3;
+        m.leftShoulder.rotation.x = 0.4 + ease * 0.8;
+        m.rightShoulder.rotation.x = 0.4 + ease * 0.7;
+        return;
+      }
+
+      // ----- ALIVE: WALKING OR IDLE HUMAN POSTURE -----
+      soldier.idleClock += dt;
+
+      if (isMoving) {
+        soldier.walkCycle += dt * (soldier.speed * 1.35);
+      }
+
+      const phase = soldier.walkCycle;
+      const blend = soldier.moveBlend; // 0 = idle, 1 = full run
+
+      // 1. Legs: human stride with knee flexion on swing phase
+      const leftSwing = Math.sin(phase) * 0.72 * blend;
+      const rightSwing = Math.sin(phase + Math.PI) * 0.72 * blend;
+
+      // Knees bend when leg lifts forward/back, slight athletic bend when idle
+      const leftKneeBend =
+        0.1 + Math.max(0, Math.sin(phase - 1.35)) * 1.15 * blend;
+      const rightKneeBend =
+        0.1 + Math.max(0, Math.sin(phase + Math.PI - 1.35)) * 1.15 * blend;
+
+      m.leftLeg.hipJoint.rotation.x = leftSwing - 0.06 * (1 - blend);
+      m.leftLeg.kneeJoint.rotation.x = leftKneeBend;
+
+      m.rightLeg.hipJoint.rotation.x = rightSwing + 0.08 * (1 - blend);
+      m.rightLeg.kneeJoint.rotation.x = rightKneeBend;
+
+      // 2. Pelvis bobbing (twice per stride) & lateral weight shift
+      const bob = Math.abs(Math.cos(phase)) * 0.085 * blend;
+      const sway = Math.sin(phase) * 0.055 * blend;
+      m.pelvis.position.y = 0.94 - 0.04 * blend + bob;
+      m.pelvis.rotation.z = sway - strideDir * 0.08 * blend;
+      m.pelvis.rotation.y = -Math.sin(phase) * 0.08 * blend;
+      m.pelvis.rotation.x = 0;
+
+      // 3. Spine / Torso: breathing + forward run lean + vertical aim + recoil + flinch
+      const breath = Math.sin(soldier.idleClock * 2.6) * 0.025;
+      const aimPitch = -soldier.pitch * 0.65;
+      const recoilKick = m.recoilTimer * 0.22;
+      const flinchKick = m.flinchTimer * 0.28;
+
+      m.spine.rotation.x =
+        0.12 * blend + aimPitch - recoilKick - flinchKick + breath;
+      m.spine.rotation.y = Math.sin(phase) * 0.1 * blend - 0.15;
+      m.spine.rotation.z = flinchKick * 0.5;
+
+      // 4. Head: looks cleanly along the aim pitch and counter-rotates spine twist
+      m.headPivot.rotation.x = -soldier.pitch * 0.35 - 0.08 * blend;
+      m.headPivot.rotation.y = 0.15 - Math.sin(phase) * 0.06 * blend;
+
+      // 5. Arms & Rifle: posed holding the rifle into the shoulder with natural sway
+      const armBob = Math.sin(phase * 2) * 0.04 * blend;
+
+      m.rightShoulder.rotation.x = 0.85 + aimPitch * 0.5 + armBob - recoilKick;
+      m.rightShoulder.rotation.z = -0.15;
+      m.rightElbow.rotation.x = 1.05 + recoilKick * 0.5;
+
+      m.leftShoulder.rotation.x = 1.08 + aimPitch * 0.5 - armBob - recoilKick;
+      m.leftShoulder.rotation.y = 0.52;
+      m.leftShoulder.rotation.z = 0.18;
+      m.leftElbow.rotation.x = 0.82;
+
+      m.weaponMount.position.z = -0.25 + m.recoilTimer * 0.09;
+      m.weaponMount.rotation.x = aimPitch * 0.35 - recoilKick * 0.6;
+    }
+
+    // =========================================================================
+    // 7. SQUAD CREATION (4 GREEN SOLDIERS VS 4 TAN SOLDIERS)
+    // =========================================================================
+    const soldiers = []; // All 8 soldiers (1 player + 3 green AI + 4 tan AI)
+    let player = null;
+
+    const GREEN_SPAWNS = [
+      { x: 0, z: 30, name: "You (Squad Leader)", isPlayer: true },
+      { x: -12, z: 28, name: "Green Alpha", isPlayer: false },
+      { x: 12, z: 28, name: "Green Bravo", isPlayer: false },
+      { x: -4, z: 35, name: "Green Charlie", isPlayer: false }
+    ];
+
+    const TAN_SPAWNS = [
+      { x: -16, z: -28, name: "Tan 1" },
+      { x: -5, z: -32, name: "Tan 2" },
+      { x: 8, z: -31, name: "Tan 3" },
+      { x: 20, z: -27, name: "Tan 4" }
+    ];
+
+    function spawnAllSoldiers() {
+      soldiers.forEach((s) => scene.remove(s.model.root));
+      soldiers.length = 0;
+
+      // Spawn Green Squad (4 soldiers)
+      GREEN_SPAWNS.forEach((sp) => {
+        const model = createPlasticSoldier("green", sp.isPlayer ? null : sp.name);
+        const y = getSandHeight(sp.x, sp.z);
+        model.root.position.set(sp.x, y, sp.z);
+        scene.add(model.root);
+
+        const unit = {
+          name: sp.name,
+          team: "green",
+          isPlayer: sp.isPlayer,
+          model,
+          position: model.root.position,
+          yaw: 0,
+          pitch: 0.04,
+          speed: sp.isPlayer ? 9.5 : 5.4 + Math.random() * 0.6,
+          radius: 0.72,
+          health: 100,
+          maxHealth: 100,
+          alive: true,
+          fireCooldown: 0,
+          fireRate: sp.isPlayer ? 0.21 : 0.75 + Math.random() * 0.35,
+          walkCycle: Math.random() * 6,
+          idleClock: Math.random() * 6,
+          moveBlend: 0,
+          fallProgress: 0,
+          fallDir: Math.random() > 0.5 ? 1 : -1,
+          fallTwist: (Math.random() - 0.5) * 1.2,
+          strafeDir: Math.random() > 0.5 ? 1 : -1,
+          strafeTimer: 1.5 + Math.random() * 2.0
+        };
+
+        soldiers.push(unit);
+        if (sp.isPlayer) player = unit;
+      });
+
+      // Spawn Tan Squad (4 soldiers)
+      TAN_SPAWNS.forEach((sp) => {
+        const model = createPlasticSoldier("tan", sp.name);
+        const y = getSandHeight(sp.x, sp.z);
+        model.root.position.set(sp.x, y, sp.z);
+        model.root.rotation.y = Math.PI;
+        scene.add(model.root);
+
+        soldiers.push({
+          name: sp.name,
+          team: "tan",
+          isPlayer: false,
+          model,
+          position: model.root.position,
+          yaw: Math.PI,
+          pitch: 0,
+          speed: 5.0 + Math.random() * 0.7,
+          radius: 0.72,
+          health: 100,
+          maxHealth: 100,
+          alive: true,
+          fireCooldown: 0.8 + Math.random() * 1.2,
+          fireRate: 0.85 + Math.random() * 0.4,
+          walkCycle: Math.random() * 6,
+          idleClock: Math.random() * 6,
+          moveBlend: 0,
+          fallProgress: 0,
+          fallDir: Math.random() > 0.5 ? 1 : -1,
+          fallTwist: (Math.random() - 0.5) * 1.2,
+          strafeDir: Math.random() > 0.5 ? 1 : -1,
+          strafeTimer: 1.5 + Math.random() * 2.0
+        });
+      });
+
+      updateHUD();
+    }
+
+    // =========================================================================
+    // 8. INPUT CONTROLS
+    // =========================================================================
     const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, Space: false };
     let isMouseDown = false;
     let gameEnded = false;
@@ -514,76 +1304,32 @@
       if (e.code in keys) keys[e.code] = false;
     });
 
-    // Lock pointer on canvas click for smooth third-person mouse aiming
     renderer.domElement.addEventListener("click", () => {
-      if ( !gameEnded && document.pointerLockElement !== renderer.domElement) {
+      if (!gameEnded && document.pointerLockElement !== renderer.domElement) {
         renderer.domElement.requestPointerLock();
       }
     });
 
     window.addEventListener("mousedown", (e) => {
-      if (e.button === 0 && !gameEnded) {
-        isMouseDown = true;
-      }
+      if (e.button === 0 && !gameEnded) isMouseDown = true;
     });
 
     window.addEventListener("mouseup", (e) => {
-      if (e.button === 0) {
-        isMouseDown = false;
-      }
+      if (e.button === 0) isMouseDown = false;
     });
 
     window.addEventListener("mousemove", (e) => {
-      if (gameEnded) return;
+      if (gameEnded || !player) return;
       const sensitivity = 0.0026;
       player.yaw -= e.movementX * sensitivity;
       player.pitch = Math.max(
-        -0.35,
+        -0.42,
         Math.min(0.65, player.pitch + e.movementY * sensitivity)
       );
     });
 
     // =========================================================================
-    // 7. ENEMY TEAM (TAN SOLDIERS)
-    // =========================================================================
-    const enemies = [];
-    const ENEMY_SPAWNS = [
-      { x: -18, z: -22 },
-      { x: 0, z: -30 },
-      { x: 20, z: -24 },
-      { x: -28, z: 4 },
-      { x: 28, z: -2 },
-      { x: -20, z: 26 },
-      { x: 6, z: 30 },
-      { x: 26, z: 20 }
-    ];
-
-    function spawnEnemies() {
-      // Remove any existing enemy meshes
-      enemies.forEach((e) => scene.remove(e.model.root));
-      enemies.length = 0;
-
-      ENEMY_SPAWNS.forEach((pt) => {
-        const model = createPlasticSoldier(false);
-        model.root.position.set(pt.x, 0, pt.z);
-        scene.add(model.root);
-
-        enemies.push({
-          model,
-          position: model.root.position,
-          alive: true,
-          fallProgress: 0,
-          speed: 2.8 + Math.random() * 0.8,
-          shootTimer: 1.0 + Math.random() * 2.0,
-          walkCycle: Math.random() * 10
-        });
-      });
-
-      updateHUD();
-    }
-
-    // =========================================================================
-    // 8. WEAPON & TRACER / HITSCAN SYSTEM
+    // 9. WEAPON, TRACERS & HIT DETECTION (TERRAIN + TOYS + SOLDIERS)
     // =========================================================================
     const tracers = [];
     const raycaster = new THREE.Raycaster();
@@ -594,123 +1340,139 @@
       const material = new THREE.LineBasicMaterial({ color: colorHex });
       const line = new THREE.Line(geometry, material);
       scene.add(line);
-      tracers.push({ line, life: 0.07 });
+      tracers.push({ line, life: 0.075 });
     }
 
-    function getMuzzleWorldPosition(soldierModel) {
+    function getMuzzleWorldPosition(soldier) {
       const pos = new THREE.Vector3();
-      soldierModel.muzzleFlash.getWorldPosition(pos);
+      soldier.model.muzzleFlash.getWorldPosition(pos);
       return pos;
     }
 
-    // Fires a rifle shot from the player along the crosshair aim direction
-    function firePlayerWeapon() {
-      player.fireCooldown = player.fireRate;
-      player.model.muzzleFlash.visible = true;
-      player.model.flashTimer = 0.05;
+    function fireWeapon(shooter, aimDir, damageAmount) {
+      shooter.fireCooldown = shooter.fireRate;
+      shooter.model.muzzleFlash.visible = true;
+      shooter.model.flashTimer = 0.05;
+      shooter.model.recoilTimer = 1.0;
 
-      // Raycast from camera through screen center to determine world aim target
-      raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+      const muzzlePos = getMuzzleWorldPosition(shooter);
       const maxRange = 95;
-      let aimPoint = raycaster.ray.origin
-        .clone()
-        .add(raycaster.ray.direction.clone().multiplyScalar(maxRange));
-
-      // Now cast from the soldier's rifle muzzle toward that aim point
-      const muzzlePos = getMuzzleWorldPosition(player.model);
-      const shotDir = aimPoint.sub(muzzlePos).normalize();
-      raycaster.set(muzzlePos, shotDir);
+      raycaster.set(muzzlePos, aimDir);
       raycaster.far = maxRange;
 
-      // Collect collidable meshes (cover obstacles + living enemy hitboxes)
-      const obstacleMeshes = obstacles.map((o) => o.mesh);
-      const obstacleHits = raycaster.intersectObjects(obstacleMeshes, false);
-      let closestDist = obstacleHits.length > 0 ? obstacleHits[0].distance : maxRange;
-      let hitPoint = muzzlePos.clone().add(shotDir.clone().multiplyScalar(closestDist));
+      // 1. Check hit against sand dunes and sandbox toys
+      const envHits = raycaster.intersectObjects(shootableMeshes, false);
+      let closestDist = envHits.length > 0 ? envHits[0].distance : maxRange;
+      let hitPoint = muzzlePos.clone().addScaledVector(aimDir, closestDist);
 
-      // Check if any living tan soldier is hit before the obstacle
-      let hitEnemy = null;
-      enemies.forEach((enemy) => {
-        if (!enemy.alive) return;
-        // Approximate soldier body cylinder with a bounding box check
-        const enemyBox = new THREE.Box3(
-          new THREE.Vector3(enemy.position.x - 0.55, 0, enemy.position.z - 0.55),
-          new THREE.Vector3(enemy.position.x + 0.55, 2.3, enemy.position.z + 0.55)
+      // 2. Check hit against opposing team soldiers
+      let hitTarget = null;
+      soldiers.forEach((other) => {
+        if (!other.alive || other.team === shooter.team) return;
+
+        const targetBox = new THREE.Box3(
+          new THREE.Vector3(
+            other.position.x - 0.48,
+            other.position.y,
+            other.position.z - 0.48
+          ),
+          new THREE.Vector3(
+            other.position.x + 0.48,
+            other.position.y + 2.05,
+            other.position.z + 0.48
+          )
         );
-        const intersection = raycaster.ray.intersectBox(enemyBox, new THREE.Vector3());
+
+        const intersection = raycaster.ray.intersectBox(
+          targetBox,
+          new THREE.Vector3()
+        );
         if (intersection) {
           const dist = muzzlePos.distanceTo(intersection);
           if (dist < closestDist) {
             closestDist = dist;
             hitPoint = intersection;
-            hitEnemy = enemy;
+            hitTarget = other;
           }
         }
       });
 
-      if (hitEnemy) {
-        hitEnemy.alive = false;
-        updateHUD();
-        checkWinCondition();
+      if (hitTarget) {
+        applyDamage(hitTarget, damageAmount);
       }
 
-      spawnTracer(muzzlePos, hitPoint, 0xfff066);
+      const tracerColor = shooter.team === "green" ? 0xfff275 : 0xff9e44;
+      spawnTracer(muzzlePos, hitPoint, tracerColor);
     }
 
-    // Fires a shot from an AI tan soldier toward the player
-    function fireEnemyWeapon(enemy) {
-      enemy.model.muzzleFlash.visible = true;
-      enemy.model.flashTimer = 0.06;
+    function firePlayerWeapon() {
+      // Cast from camera through screen crosshair to find world target
+      raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+      const maxRange = 95;
+      const envHits = raycaster.intersectObjects(shootableMeshes, false);
+      let aimDist = envHits.length > 0 ? envHits[0].distance : maxRange;
 
-      const muzzlePos = getMuzzleWorldPosition(enemy.model);
-      const targetPos = new THREE.Vector3(
-        player.position.x + (Math.random() - 0.5) * 1.8,
-        1.25 + (Math.random() - 0.5) * 0.8,
-        player.position.z + (Math.random() - 0.5) * 1.8
-      );
-
-      const shotDir = targetPos.sub(muzzlePos).normalize();
-      const maxRange = 60;
-      raycaster.set(muzzlePos, shotDir);
-      raycaster.far = maxRange;
-
-      // Check cover obstacles first
-      const obstacleMeshes = obstacles.map((o) => o.mesh);
-      const obstacleHits = raycaster.intersectObjects(obstacleMeshes, false);
-      let closestDist = obstacleHits.length > 0 ? obstacleHits[0].distance : maxRange;
-      let endPoint = muzzlePos.clone().add(shotDir.clone().multiplyScalar(closestDist));
-
-      // Check intersection with player bounding box
-      const playerBox = new THREE.Box3(
-        new THREE.Vector3(player.position.x - 0.5, 0, player.position.z - 0.5),
-        new THREE.Vector3(player.position.x + 0.5, 2.2, player.position.z + 0.5)
-      );
-      const hitPlayer = raycaster.ray.intersectBox(playerBox, new THREE.Vector3());
-      if (hitPlayer) {
-        const distToPlayer = muzzlePos.distanceTo(hitPlayer);
-        if (distToPlayer < closestDist) {
-          endPoint = hitPlayer;
-          damagePlayer(10);
+      // Also check if crosshair is directly over an enemy
+      soldiers.forEach((s) => {
+        if (!s.alive || s.team === "green") return;
+        const box = new THREE.Box3(
+          new THREE.Vector3(s.position.x - 0.5, s.position.y, s.position.z - 0.5),
+          new THREE.Vector3(s.position.x + 0.5, s.position.y + 2.05, s.position.z + 0.5)
+        );
+        const hit = raycaster.ray.intersectBox(box, new THREE.Vector3());
+        if (hit) {
+          const d = camera.position.distanceTo(hit);
+          if (d < aimDist) aimDist = d;
         }
-      }
+      });
 
-      spawnTracer(muzzlePos, endPoint, 0xffaa44);
+      const aimPoint = raycaster.ray.origin
+        .clone()
+        .addScaledVector(raycaster.ray.direction, Math.max(4, aimDist));
+      const muzzlePos = getMuzzleWorldPosition(player);
+      const shotDir = aimPoint.sub(muzzlePos).normalize();
+
+      fireWeapon(player, shotDir, 34);
+    }
+
+    function hasLineOfSight(fromSoldier, toSoldier) {
+      const start = new THREE.Vector3(
+        fromSoldier.position.x,
+        fromSoldier.position.y + 1.5,
+        fromSoldier.position.z
+      );
+      const end = new THREE.Vector3(
+        toSoldier.position.x,
+        toSoldier.position.y + 1.35,
+        toSoldier.position.z
+      );
+      const dir = new THREE.Vector3().subVectors(end, start);
+      const dist = dir.length();
+      dir.normalize();
+
+      raycaster.set(start, dir);
+      raycaster.far = dist;
+      const hits = raycaster.intersectObjects(shootableMeshes, false);
+      return hits.length === 0;
     }
 
     // =========================================================================
-    // 9. COLLISION & MOVEMENT HELPERS
+    // 10. COLLISION & UNEVEN SAND PLACEMENT
     // =========================================================================
-    function resolveCollisions(pos, radius) {
-      // Keep inside sandbox boundaries
-      pos.x = Math.max(-WORLD_LIMIT + 1, Math.min(WORLD_LIMIT - 1, pos.x));
-      pos.z = Math.max(-WORLD_LIMIT + 1, Math.min(WORLD_LIMIT - 1, pos.z));
+    function resolveCollisionsAndSand(soldier) {
+      const pos = soldier.position;
+      const r = soldier.radius;
 
-      // Push soldier out of any overlapping cover boxes
+      // Stay inside wooden sandbox walls
+      pos.x = Math.max(-WORLD_LIMIT + 1.2, Math.min(WORLD_LIMIT - 1.2, pos.x));
+      pos.z = Math.max(-WORLD_LIMIT + 1.2, Math.min(WORLD_LIMIT - 1.2, pos.z));
+
+      // Push out of sandbox toys
       for (const obs of obstacles) {
-        const minX = obs.box.min.x - radius;
-        const maxX = obs.box.max.x + radius;
-        const minZ = obs.box.min.z - radius;
-        const maxZ = obs.box.max.z + radius;
+        const minX = obs.box.min.x - r;
+        const maxX = obs.box.max.x + r;
+        const minZ = obs.box.min.z - r;
+        const maxZ = obs.box.max.z + r;
 
         if (pos.x > minX && pos.x < maxX && pos.z > minZ && pos.z < maxZ) {
           const overlapLeft = pos.x - minX;
@@ -730,25 +1492,34 @@
           else pos.z = maxZ;
         }
       }
-    }
 
-    function animateWalkLegs(soldierModel, walkCycle, isMoving) {
-      if (isMoving) {
-        const swing = Math.sin(walkCycle) * 0.45;
-        soldierModel.leftLeg.rotation.x = swing;
-        soldierModel.rightLeg.rotation.x = -swing;
-      } else {
-        soldierModel.leftLeg.rotation.x = 0;
-        soldierModel.rightLeg.rotation.x = 0;
+      // Separate living soldiers so they don't overlap each other
+      for (const other of soldiers) {
+        if (other === soldier || !other.alive) continue;
+        const dx = pos.x - other.position.x;
+        const dz = pos.z - other.position.z;
+        const distSq = dx * dx + dz * dz;
+        const minDist = r + other.radius;
+        if (distSq > 0.0001 && distSq < minDist * minDist) {
+          const dist = Math.sqrt(distSq);
+          const push = (minDist - dist) * 0.5;
+          pos.x += (dx / dist) * push;
+          pos.z += (dz / dist) * push;
+        }
       }
+
+      // Snap soldier's feet to the uneven sand height at their position
+      pos.y = getSandHeight(pos.x, pos.z);
     }
 
     // =========================================================================
-    // 10. HEALTH, HUD, AND WIN / GAME OVER LOGIC
+    // 11. HEALTH, SCOREBOARD HUD, AND WIN / GAME OVER LOGIC
     // =========================================================================
     const healthValueEl = document.getElementById("health-value");
     const healthBarFillEl = document.getElementById("health-bar-fill");
-    const enemyCountEl = document.getElementById("enemy-count");
+    const greenCountEl = document.getElementById("green-count");
+    const tanCountEl = document.getElementById("tan-count");
+    const squadListEl = document.getElementById("squad-list");
     const endMessageEl = document.getElementById("end-message");
     const endTitleEl = document.getElementById("end-title");
     const endSubtitleEl = document.getElementById("end-subtitle");
@@ -756,7 +1527,33 @@
 
     restartBtn.addEventListener("click", resetGame);
 
+    function applyDamage(target, amount) {
+      if (!target.alive || gameEnded) return;
+
+      target.health = Math.max(0, target.health - amount);
+      target.model.flinchTimer = 1.0;
+
+      if (target.model.overheadBarFill) {
+        target.model.overheadBarFill.scale.x = Math.max(
+          0.001,
+          target.health / target.maxHealth
+        );
+      }
+
+      if (target.health <= 0) {
+        target.alive = false;
+        if (target.model.overheadGroup) {
+          target.model.overheadGroup.visible = false;
+        }
+      }
+
+      updateHUD();
+      checkMatchOutcome();
+    }
+
     function updateHUD() {
+      if (!player) return;
+
       const hp = Math.max(0, Math.round(player.health));
       healthValueEl.textContent = hp;
       healthBarFillEl.style.width = hp + "%";
@@ -765,24 +1562,41 @@
       else if (hp > 25) healthBarFillEl.style.backgroundColor = "#f0ad4e";
       else healthBarFillEl.style.backgroundColor = "#d9534f";
 
-      const aliveCount = enemies.filter((e) => e.alive).length;
-      enemyCountEl.textContent = aliveCount;
+      const greenAlive = soldiers.filter((s) => s.team === "green" && s.alive).length;
+      const tanAlive = soldiers.filter((s) => s.team === "tan" && s.alive).length;
+      greenCountEl.textContent = greenAlive;
+      tanCountEl.textContent = tanAlive;
+
+      // Render Green Squad teammate mini bars
+      const teammates = soldiers.filter((s) => s.team === "green" && !s.isPlayer);
+      squadListEl.innerHTML = teammates
+        .map((tm) => {
+          const pct = Math.max(0, Math.round(tm.health));
+          const color = tm.alive ? "#67e85f" : "#666666";
+          const label = tm.alive ? tm.name : tm.name + " (DOWN)";
+          return `
+            <div class="squad-row">
+              <span>${label}</span>
+              <div class="mini-bar-bg">
+                <div class="mini-bar-fill" style="width:${pct}%;background:${color};"></div>
+              </div>
+            </div>
+          `;
+        })
+        .join("");
     }
 
-    function damagePlayer(amount) {
+    function checkMatchOutcome() {
       if (gameEnded) return;
-      player.health = Math.max(0, player.health - amount);
-      updateHUD();
 
-      if (player.health <= 0) {
-        endGame(false);
-      }
-    }
-
-    function checkWinCondition() {
-      const aliveCount = enemies.filter((e) => e.alive).length;
-      if (aliveCount === 0 && !gameEnded) {
+      const tanAlive = soldiers.filter((s) => s.team === "tan" && s.alive).length;
+      if (tanAlive === 0) {
         endGame(true);
+        return;
+      }
+
+      if (!player.alive) {
+        endGame(false);
       }
     }
 
@@ -796,11 +1610,13 @@
       if (victory) {
         endTitleEl.textContent = "VICTORY!";
         endTitleEl.style.color = "#8df57e";
-        endSubtitleEl.textContent = "All tan plastic soldiers have been eliminated!";
+        endSubtitleEl.textContent =
+          "Your Green Squad eliminated all 4 Tan Soldiers in the sandbox!";
       } else {
         endTitleEl.textContent = "GAME OVER";
         endTitleEl.style.color = "#ff6b6b";
-        endSubtitleEl.textContent = "Your green soldier was melted in action.";
+        endSubtitleEl.textContent =
+          "Your soldier was knocked down in the sandbox battle.";
       }
       endMessageEl.style.display = "block";
     }
@@ -808,30 +1624,113 @@
     function resetGame() {
       gameEnded = false;
       endMessageEl.style.display = "none";
-
-      player.position.set(0, 0, 6);
-      player.yaw = 0;
-      player.pitch = 0.08;
-      player.health = player.maxHealth;
-      player.model.figure.rotation.set(0, 0, 0);
-
-      spawnEnemies();
-      updateHUD();
+      spawnAllSoldiers();
     }
 
     // =========================================================================
-    // 11. MAIN GAME LOOP
+    // 12. AI LOGIC (GREEN TEAMMATES & TAN ENEMIES)
+    // =========================================================================
+    function updateAISoldier(ai, dt) {
+      if (!ai.alive) {
+        animateSoldier(ai, dt, false, 0);
+        return;
+      }
+
+      // Find nearest living opponent
+      let nearestTarget = null;
+      let nearestDist = Infinity;
+
+      for (const other of soldiers) {
+        if (!other.alive || other.team === ai.team) continue;
+        const d = ai.position.distanceTo(other.position);
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearestTarget = other;
+        }
+      }
+
+      if (!nearestTarget) {
+        ai.moveBlend = Math.max(0, ai.moveBlend - dt * 4);
+        animateSoldier(ai, dt, false, 0);
+        return;
+      }
+
+      // Compute horizontal angle & vertical pitch toward target
+      const dx = nearestTarget.position.x - ai.position.x;
+      const dz = nearestTarget.position.z - ai.position.z;
+      const dy = nearestTarget.position.y - ai.position.y;
+      const horizDist = Math.max(0.01, Math.hypot(dx, dz));
+
+      const targetYaw = Math.atan2(-dx, -dz);
+      // Smoothly turn toward target
+      let angleDiff = targetYaw - ai.yaw;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      ai.yaw += angleDiff * Math.min(1, dt * 8);
+      ai.model.root.rotation.y = ai.yaw;
+
+      // Vertical pitch so soldiers aim up/down sand dunes
+      ai.pitch = Math.max(-0.35, Math.min(0.35, -Math.atan2(dy, horizDist)));
+
+      const canSee = hasLineOfSight(ai, nearestTarget);
+
+      // Update tactical strafe timer
+      ai.strafeTimer -= dt;
+      if (ai.strafeTimer <= 0) {
+        ai.strafeTimer = 1.4 + Math.random() * 1.8;
+        ai.strafeDir = Math.random() > 0.5 ? 1 : -1;
+      }
+
+      // Decide movement: advance if far or blocked by cover, strafe when in range
+      const forward = new THREE.Vector3(-Math.sin(ai.yaw), 0, -Math.cos(ai.yaw));
+      const right = new THREE.Vector3(Math.cos(ai.yaw), 0, -Math.sin(ai.yaw));
+      const moveVec = new THREE.Vector3();
+
+      if (horizDist > 20 || !canSee) {
+        moveVec.add(forward);
+        moveVec.addScaledVector(right, ai.strafeDir * 0.45);
+      } else if (horizDist < 8) {
+        moveVec.addScaledVector(forward, -0.6);
+        moveVec.addScaledVector(right, ai.strafeDir * 0.8);
+      } else {
+        moveVec.addScaledVector(right, ai.strafeDir * 0.75);
+      }
+
+      const isMoving = moveVec.lengthSq() > 0.01;
+      if (isMoving) {
+        moveVec.normalize().multiplyScalar(ai.speed * dt);
+        ai.position.add(moveVec);
+        resolveCollisionsAndSand(ai);
+        ai.moveBlend = Math.min(1, ai.moveBlend + dt * 5);
+      } else {
+        ai.moveBlend = Math.max(0, ai.moveBlend - dt * 5);
+      }
+
+      animateSoldier(ai, dt, isMoving, ai.strafeDir * 0.5);
+
+      // Fire weapon when target is within range and visible
+      if (ai.fireCooldown > 0) ai.fireCooldown -= dt;
+      if (ai.fireCooldown <= 0 && horizDist < 58 && canSee) {
+        const muzzlePos = getMuzzleWorldPosition(ai);
+        const spread = ai.team === "green" ? 1.25 : 1.55;
+        const aimPos = new THREE.Vector3(
+          nearestTarget.position.x + (Math.random() - 0.5) * spread,
+          nearestTarget.position.y + 1.25 + (Math.random() - 0.5) * 0.65,
+          nearestTarget.position.z + (Math.random() - 0.5) * spread
+        );
+        const shotDir = aimPos.sub(muzzlePos).normalize();
+        const dmg = ai.team === "green" ? 20 : 12;
+        fireWeapon(ai, shotDir, dmg);
+      }
+    }
+
+    // =========================================================================
+    // 13. MAIN GAME LOOP
     // =========================================================================
     resetGame();
     let lastTime = performance.now();
 
     function update(dt) {
-      // Update muzzle flashes
-      if (player.model.flashTimer > 0) {
-        player.model.flashTimer -= dt;
-        if (player.model.flashTimer <= 0) player.model.muzzleFlash.visible = false;
-      }
-
       // Update active bullet tracers
       for (let i = tracers.length - 1; i >= 0; i--) {
         tracers[i].life -= dt;
@@ -843,142 +1742,106 @@
         }
       }
 
-      if (gameEnded) {
-        // Tip player soldier over if defeated
-        if (player.health <= 0 && player.model.figure.rotation.z < Math.PI / 2) {
-          player.model.figure.rotation.z = Math.min(
-            Math.PI / 2,
-            player.model.figure.rotation.z + dt * 4
+      // ----- PLAYER UPDATE -----
+      if (player) {
+        if (player.alive && !gameEnded) {
+          player.model.root.rotation.y = player.yaw;
+
+          const forward = new THREE.Vector3(
+            -Math.sin(player.yaw),
+            0,
+            -Math.cos(player.yaw)
           );
-        }
-        return;
-      }
+          const right = new THREE.Vector3(
+            Math.cos(player.yaw),
+            0,
+            -Math.sin(player.yaw)
+          );
 
-      // ----- PLAYER MOVEMENT & AIM -----
-      player.model.root.rotation.y = player.yaw;
-
-      const forward = new THREE.Vector3(
-        -Math.sin(player.yaw),
-        0,
-        -Math.cos(player.yaw)
-      );
-      const right = new THREE.Vector3(
-        Math.cos(player.yaw),
-        0,
-        -Math.sin(player.yaw)
-      );
-
-      const moveVec = new THREE.Vector3();
-      if (keys.KeyW) moveVec.add(forward);
-      if (keys.KeyS) moveVec.sub(forward);
-      if (keys.KeyD) moveVec.add(right);
-      if (keys.KeyA) moveVec.sub(right);
-
-      const isMoving = moveVec.lengthSq() > 0;
-      if (isMoving) {
-        moveVec.normalize().multiplyScalar(player.speed * dt);
-        player.position.add(moveVec);
-        resolveCollisions(player.position, player.radius);
-        player.walkCycle += dt * 11;
-      }
-      animateWalkLegs(player.model, player.walkCycle, isMoving);
-
-      // ----- PLAYER SHOOTING -----
-      if (player.fireCooldown > 0) player.fireCooldown -= dt;
-      if ((isMouseDown || keys.Space) && player.fireCooldown <= 0) {
-        firePlayerWeapon();
-      }
-
-      // ----- ENEMY AI UPDATE -----
-      enemies.forEach((enemy) => {
-        if (enemy.model.flashTimer > 0) {
-          enemy.model.flashTimer -= dt;
-          if (enemy.model.flashTimer <= 0) enemy.model.muzzleFlash.visible = false;
-        }
-
-        // Knocked-over plastic soldier animation when eliminated
-        if (!enemy.alive) {
-          if (enemy.fallProgress < Math.PI / 2) {
-            enemy.fallProgress = Math.min(Math.PI / 2, enemy.fallProgress + dt * 5);
-            enemy.model.figure.rotation.x = enemy.fallProgress;
+          const moveVec = new THREE.Vector3();
+          let strideDir = 0;
+          if (keys.KeyW) moveVec.add(forward);
+          if (keys.KeyS) moveVec.sub(forward);
+          if (keys.KeyD) {
+            moveVec.add(right);
+            strideDir += 1;
           }
-          return;
-        }
+          if (keys.KeyA) {
+            moveVec.sub(right);
+            strideDir -= 1;
+          }
 
-        // Face the player
-        const toPlayer = new THREE.Vector3().subVectors(
-          player.position,
-          enemy.position
-        );
-        toPlayer.y = 0;
-        const dist = toPlayer.length();
-        const angleToPlayer = Math.atan2(-toPlayer.x, -toPlayer.z);
-        enemy.model.root.rotation.y = angleToPlayer;
+          const isMoving = moveVec.lengthSq() > 0;
+          if (isMoving) {
+            moveVec.normalize().multiplyScalar(player.speed * dt);
+            player.position.add(moveVec);
+            resolveCollisionsAndSand(player);
+            player.moveBlend = Math.min(1, player.moveBlend + dt * 6);
+          } else {
+            player.moveBlend = Math.max(0, player.moveBlend - dt * 6);
+          }
 
-        // Walk slowly toward the player until within comfortable firing distance
-        if (dist > 7.5) {
-          const step = toPlayer.normalize().multiplyScalar(enemy.speed * dt);
-          enemy.position.add(step);
-          resolveCollisions(enemy.position, 0.75);
-          enemy.walkCycle += dt * 7;
-          animateWalkLegs(enemy.model, enemy.walkCycle, true);
+          animateSoldier(player, dt, isMoving, strideDir);
+
+          // Player shooting
+          if (player.fireCooldown > 0) player.fireCooldown -= dt;
+          if ((isMouseDown || keys.Space) && player.fireCooldown <= 0) {
+            firePlayerWeapon();
+          }
         } else {
-          animateWalkLegs(enemy.model, enemy.walkCycle, false);
+          animateSoldier(player, dt, false, 0);
         }
+      }
 
-        // Avoid stacking on top of other living enemies
-        enemies.forEach((other) => {
-          if (other === enemy || !other.alive) return;
-          const diff = new THREE.Vector3().subVectors(enemy.position, other.position);
-          diff.y = 0;
-          const d = diff.length();
-          if (d > 0 && d < 1.5) {
-            enemy.position.add(diff.normalize().multiplyScalar((1.5 - d) * 0.5));
-          }
-        });
-
-        // Shoot occasionally at the player
-        enemy.shootTimer -= dt;
-        if (enemy.shootTimer <= 0) {
-          enemy.shootTimer = 1.6 + Math.random() * 1.8;
-          if (dist < 48) {
-            fireEnemyWeapon(enemy);
-          }
+      // ----- AI SQUADS UPDATE (3 GREEN TEAMMATES + 4 TAN ENEMIES) -----
+      for (const s of soldiers) {
+        if (s.isPlayer) continue;
+        if (gameEnded && s.alive) {
+          s.moveBlend = Math.max(0, s.moveBlend - dt * 4);
+          animateSoldier(s, dt, false, 0);
+        } else {
+          updateAISoldier(s, dt);
         }
-      });
+      }
 
       // ----- THIRD-PERSON FOLLOW CAMERA -----
-      // Positioned behind, slightly to the right shoulder, and above the green soldier
-      const camDistance = 5.5;
-      const camHeight = 2.8;
-      const shoulderOffset = 0.65;
+      if (player) {
+        const camDistance = 5.4;
+        const camHeight = 2.65;
+        const shoulderOffset = 0.72;
 
-      const backDir = new THREE.Vector3(
-        Math.sin(player.yaw),
-        0,
-        Math.cos(player.yaw)
-      );
-      const rightDir = new THREE.Vector3(
-        Math.cos(player.yaw),
-        0,
-        -Math.sin(player.yaw)
-      );
+        const backDir = new THREE.Vector3(
+          Math.sin(player.yaw),
+          0,
+          Math.cos(player.yaw)
+        );
+        const rightDir = new THREE.Vector3(
+          Math.cos(player.yaw),
+          0,
+          -Math.sin(player.yaw)
+        );
 
-      const desiredCamPos = player.position
-        .clone()
-        .addScaledVector(backDir, camDistance)
-        .addScaledVector(rightDir, shoulderOffset);
-      desiredCamPos.y = camHeight + Math.sin(player.pitch) * 2.2;
+        const desiredCamPos = player.position
+          .clone()
+          .addScaledVector(backDir, camDistance)
+          .addScaledVector(rightDir, shoulderOffset);
 
-      camera.position.copy(desiredCamPos);
+        // Keep camera above uneven sand dunes behind the player
+        const sandUnderCam = getSandHeight(desiredCamPos.x, desiredCamPos.z);
+        desiredCamPos.y = Math.max(
+          sandUnderCam + 0.85,
+          player.position.y + camHeight + Math.sin(player.pitch) * 2.2
+        );
 
-      // Look ahead of the soldier based on yaw and pitch
-      const lookTarget = player.position
-        .clone()
-        .addScaledVector(backDir, -12)
-        .addScaledVector(rightDir, shoulderOffset * 0.5);
-      lookTarget.y = 1.6 - Math.sin(player.pitch) * 6.0;
-      camera.lookAt(lookTarget);
+        camera.position.copy(desiredCamPos);
+
+        const lookTarget = player.position
+          .clone()
+          .addScaledVector(backDir, -14)
+          .addScaledVector(rightDir, shoulderOffset * 0.45);
+        lookTarget.y = player.position.y + 1.55 - Math.sin(player.pitch) * 6.5;
+        camera.lookAt(lookTarget);
+      }
     }
 
     function animate(now) {
