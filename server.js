@@ -7,6 +7,11 @@ const PORT = process.env.PORT || 3000;
 const INDEX_PATH = path.join(__dirname, "index.html");
 const FAVICON_DIR = path.join(__dirname, "favicon");
 const MODELS_DIR = path.join(__dirname, "models");
+const MATERIALS_DIR = path.join(__dirname, "materials");
+const GEOMETRY_DIR = path.join(__dirname, "geometry");
+const PARTICLES_DIR = path.join(__dirname, "particles");
+const GUI_DIR = path.join(__dirname, "gui");
+const FLOWGRAPHS_DIR = path.join(__dirname, "flowgraphs");
 
 const FAVICON_MIME_TYPES = {
   ".png": "image/png",
@@ -30,6 +35,47 @@ const MODEL_FILES = new Set([
   "Meshy_AI_rigged_green_All_Animations.glb",
   "Meshy_AI_vintage_toy_m16_rifle.glb"
 ]);
+
+// Node Material Editor graphs (NME JSON) served at /materials/<file>
+const MATERIAL_FILES = new Set([
+  "sandboxSand.json"
+]);
+
+// Node Geometry Editor graphs (NGE JSON) served at /geometry/<file>
+const GEOMETRY_FILES = new Set([
+  "sandboxFrame.json",
+  "sandcastle.json",
+  "toyBrick.json",
+  "beachBucket.json",
+  "armyTruck.json",
+  "armyJeep.json",
+  "shoeboxShell.json",
+  "tissueSheet.json"
+]);
+
+// Node Particle Editor graphs (NPE JSON) served at /particles/<file>
+const PARTICLE_FILES = new Set([
+  "sandPuff.json",
+  "plasticSparks.json"
+]);
+
+// GUI Editor layouts (AdvancedDynamicTexture JSON) served at /gui/<file>
+const GUI_FILES = new Set([
+  "overheadPlates.json"
+]);
+
+// Flow Graph coordinators (presentation/control flow only) served at /flowgraphs/<file>
+const FLOWGRAPH_FILES = new Set([
+  "matchUiFlow.json"
+]);
+
+const GRAPH_ROUTES = [
+  { prefix: "materials/", dir: MATERIALS_DIR, files: MATERIAL_FILES },
+  { prefix: "geometry/", dir: GEOMETRY_DIR, files: GEOMETRY_FILES },
+  { prefix: "particles/", dir: PARTICLES_DIR, files: PARTICLE_FILES },
+  { prefix: "gui/", dir: GUI_DIR, files: GUI_FILES },
+  { prefix: "flowgraphs/", dir: FLOWGRAPHS_DIR, files: FLOWGRAPH_FILES }
+];
 
 // ============================================================================
 // 1. DDoS PROTECTION, RATE LIMITING & PERFORMANCE PROFILER STATE
@@ -959,6 +1005,26 @@ const server = http.createServer((req, res) => {
       res.end(content);
     });
     return;
+  }
+
+  const graphRoute = GRAPH_ROUTES.find((route) => strippedPath.startsWith(route.prefix));
+  if (graphRoute) {
+    const graphName = strippedPath.slice(graphRoute.prefix.length);
+    if (graphRoute.files.has(graphName)) {
+      fs.readFile(path.join(graphRoute.dir, graphName), (err, content) => {
+        if (err) {
+          res.writeHead(404, { "Content-Type": "text/plain" });
+          res.end("Not Found");
+          return;
+        }
+        res.writeHead(200, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-cache"
+        });
+        res.end(content);
+      });
+      return;
+    }
   }
 
   res.writeHead(404, { "Content-Type": "text/plain" });

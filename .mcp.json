@@ -1,0 +1,88 @@
+{
+	"mcpServers": {
+		"babylonjs-flow-graph": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"-y",
+				"@babylonjs/mcp-servers",
+				"flow-graph"
+			],
+			"tools": [
+				"*"
+			]
+		},
+		"babylonjs-gui": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"-y",
+				"@babylonjs/mcp-servers",
+				"gui"
+			],
+			"tools": [
+				"*"
+			]
+		},
+		"babylonjs-nge": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"-y",
+				"@babylonjs/mcp-servers",
+				"nge"
+			],
+			"tools": [
+				"*"
+			]
+		},
+		"babylonjs-nme": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"-y",
+				"@babylonjs/mcp-servers",
+				"nme"
+			],
+			"tools": [
+				"*"
+			]
+		},
+		"babylonjs-npe": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"-y",
+				"@babylonjs/mcp-servers",
+				"npe"
+			],
+			"tools": [
+				"*"
+			]
+		},
+		"babylonjs-nrge": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"-y",
+				"@babylonjs/mcp-servers",
+				"nrge"
+			],
+			"tools": [
+				"*"
+			]
+		},
+		"babylonjs-smart-filters": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"-y",
+				"@babylonjs/mcp-servers",
+				"smart-filters"
+			],
+			"tools": [
+				"*"
+			]
+		}
+	}
+}

@@ -1,0 +1,743 @@
+{
+  "customType": "BABYLON.NodeGeometry",
+  "outputNodeId": 21,
+  "blocks": [
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 1,
+      "name": "width",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 31.68,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 2,
+      "name": "depth",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 40.8,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 3,
+      "name": "subdivisions",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 1,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 48,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 4,
+      "name": "crinkle",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 0.28,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 5,
+      "name": "crinkleScale",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 0.35,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 6,
+      "name": "octaves",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 3,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 7,
+      "name": "roughness",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 0.55,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 8,
+      "name": "seed",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        0,
+        0
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 9,
+      "name": "positions",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 1,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 10,
+      "name": "zero",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 0,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 11,
+      "name": "one",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 1,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GridBlock",
+      "id": 12,
+      "name": "sheetGrid",
+      "inputs": [
+        {
+          "name": "width",
+          "displayName": "width",
+          "inputName": "width",
+          "targetBlockId": 1,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "height",
+          "displayName": "height",
+          "inputName": "height",
+          "targetBlockId": 2,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "subdivisions",
+          "displayName": "subdivisions",
+          "inputName": "subdivisions",
+          "targetBlockId": 3,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "subdivisionsX",
+          "displayName": "subdivisionsX"
+        },
+        {
+          "name": "subdivisionsY",
+          "displayName": "subdivisionsY"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.MathBlock",
+      "id": 13,
+      "name": "samplePosition",
+      "inputs": [
+        {
+          "name": "left",
+          "displayName": "left",
+          "inputName": "left",
+          "targetBlockId": 9,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "right",
+          "displayName": "right",
+          "inputName": "right",
+          "targetBlockId": 8,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "operation": 0
+    },
+    {
+      "customType": "BABYLON.NoiseBlock",
+      "id": 14,
+      "name": "crinkleNoise",
+      "inputs": [
+        {
+          "name": "offset",
+          "displayName": "offset",
+          "inputName": "offset",
+          "targetBlockId": 13,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "scale",
+          "displayName": "scale",
+          "inputName": "scale",
+          "targetBlockId": 5,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "octaves",
+          "displayName": "octaves",
+          "inputName": "octaves",
+          "targetBlockId": 6,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "roughness",
+          "displayName": "roughness",
+          "inputName": "roughness",
+          "targetBlockId": 7,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ]
+    },
+    {
+      "customType": "BABYLON.GeometryClampBlock",
+      "id": 15,
+      "name": "foldsOnly",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 23,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "min",
+          "displayName": "min",
+          "inputName": "min",
+          "targetBlockId": 10,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "max",
+          "displayName": "max",
+          "inputName": "max",
+          "targetBlockId": 11,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ]
+    },
+    {
+      "customType": "BABYLON.MathBlock",
+      "id": 16,
+      "name": "lift",
+      "inputs": [
+        {
+          "name": "left",
+          "displayName": "left",
+          "inputName": "left",
+          "targetBlockId": 4,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "right",
+          "displayName": "right",
+          "inputName": "right",
+          "targetBlockId": 15,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "operation": 2
+    },
+    {
+      "customType": "BABYLON.VectorConverterBlock",
+      "id": 17,
+      "name": "liftVector",
+      "inputs": [
+        {
+          "name": "xyzw ",
+          "displayName": "xyzw "
+        },
+        {
+          "name": "xyz ",
+          "displayName": "xyz "
+        },
+        {
+          "name": "xy ",
+          "displayName": "xy "
+        },
+        {
+          "name": "zw ",
+          "displayName": "zw "
+        },
+        {
+          "name": "x ",
+          "displayName": "x ",
+          "inputName": "x ",
+          "targetBlockId": 10,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "y ",
+          "displayName": "y ",
+          "inputName": "y ",
+          "targetBlockId": 16,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "z ",
+          "displayName": "z ",
+          "inputName": "z ",
+          "targetBlockId": 10,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "w ",
+          "displayName": "w "
+        }
+      ],
+      "outputs": [
+        {
+          "name": "xyzw",
+          "displayName": "xyzw"
+        },
+        {
+          "name": "xyz",
+          "displayName": "xyz"
+        },
+        {
+          "name": "xy",
+          "displayName": "xy"
+        },
+        {
+          "name": "zw",
+          "displayName": "zw"
+        },
+        {
+          "name": "x",
+          "displayName": "x"
+        },
+        {
+          "name": "y",
+          "displayName": "y"
+        },
+        {
+          "name": "z",
+          "displayName": "z"
+        },
+        {
+          "name": "w",
+          "displayName": "w"
+        }
+      ]
+    },
+    {
+      "customType": "BABYLON.MathBlock",
+      "id": 18,
+      "name": "crinkledPosition",
+      "inputs": [
+        {
+          "name": "left",
+          "displayName": "left",
+          "inputName": "left",
+          "targetBlockId": 9,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "right",
+          "displayName": "right",
+          "inputName": "right",
+          "targetBlockId": 17,
+          "targetConnectionName": "xyz"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "operation": 0
+    },
+    {
+      "customType": "BABYLON.SetPositionsBlock",
+      "id": 19,
+      "name": "displaceSheet",
+      "inputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry",
+          "inputName": "geometry",
+          "targetBlockId": 12,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "positions",
+          "displayName": "positions",
+          "inputName": "positions",
+          "targetBlockId": 18,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.ComputeNormalsBlock",
+      "id": 20,
+      "name": "normals",
+      "inputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry",
+          "inputName": "geometry",
+          "targetBlockId": 19,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ]
+    },
+    {
+      "customType": "BABYLON.GeometryOutputBlock",
+      "id": 21,
+      "name": "output",
+      "inputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry",
+          "inputName": "geometry",
+          "targetBlockId": 20,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 22,
+      "name": "foldThreshold",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": -0.5,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.MathBlock",
+      "id": 23,
+      "name": "foldMask",
+      "inputs": [
+        {
+          "name": "left",
+          "displayName": "left",
+          "inputName": "left",
+          "targetBlockId": 14,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "right",
+          "displayName": "right",
+          "inputName": "right",
+          "targetBlockId": 22,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "operation": 0
+    }
+  ],
+  "comment": "Crinkled tissue paper sheet for the shoebox floor. Grid displaced upward by clamped multi-octave noise sampled in local XZ (+seed), normals recomputed. Params: width, depth, subdivisions, crinkle (height), crinkleScale, seed. Visual only (non-pickable dressing).",
+  "editorData": {
+    "locations": [
+      {
+        "blockId": 1,
+        "x": 2040,
+        "y": 0
+      },
+      {
+        "blockId": 2,
+        "x": 2040,
+        "y": 180
+      },
+      {
+        "blockId": 3,
+        "x": 2040,
+        "y": 360
+      },
+      {
+        "blockId": 4,
+        "x": 1360,
+        "y": 0
+      },
+      {
+        "blockId": 5,
+        "x": 340,
+        "y": 0
+      },
+      {
+        "blockId": 6,
+        "x": 340,
+        "y": 180
+      },
+      {
+        "blockId": 7,
+        "x": 340,
+        "y": 360
+      },
+      {
+        "blockId": 8,
+        "x": 0,
+        "y": 180
+      },
+      {
+        "blockId": 9,
+        "x": 0,
+        "y": 0
+      },
+      {
+        "blockId": 10,
+        "x": 1020,
+        "y": 360
+      },
+      {
+        "blockId": 11,
+        "x": 1020,
+        "y": 0
+      },
+      {
+        "blockId": 12,
+        "x": 2380,
+        "y": 0
+      },
+      {
+        "blockId": 13,
+        "x": 340,
+        "y": 540
+      },
+      {
+        "blockId": 14,
+        "x": 680,
+        "y": 0
+      },
+      {
+        "blockId": 15,
+        "x": 1360,
+        "y": 180
+      },
+      {
+        "blockId": 16,
+        "x": 1700,
+        "y": 0
+      },
+      {
+        "blockId": 17,
+        "x": 2040,
+        "y": 540
+      },
+      {
+        "blockId": 18,
+        "x": 2380,
+        "y": 180
+      },
+      {
+        "blockId": 19,
+        "x": 2720,
+        "y": 0
+      },
+      {
+        "blockId": 20,
+        "x": 3060,
+        "y": 0
+      },
+      {
+        "blockId": 21,
+        "x": 3400,
+        "y": 0
+      },
+      {
+        "blockId": 22,
+        "x": 680,
+        "y": 180
+      },
+      {
+        "blockId": 23,
+        "x": 1020,
+        "y": 180
+      }
+    ]
+  }
+}

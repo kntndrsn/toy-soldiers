@@ -1,0 +1,1854 @@
+{
+  "_flowGraphs": [
+    {
+      "allBlocks": [
+        {
+          "className": "FlowGraphReceiveCustomEventBlock",
+          "config": {
+            "eventId": "ui.setupRequested"
+          },
+          "uniqueId": "fg-00000002",
+          "dataInputs": [],
+          "dataOutputs": [
+            {
+              "uniqueId": "fg-00000006",
+              "name": "event",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "string",
+                "defaultValue": ""
+              }
+            }
+          ],
+          "signalInputs": [],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-00000003",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-00000004",
+              "name": "done",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-0000005e"
+              ]
+            },
+            {
+              "uniqueId": "fg-00000005",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "onSetupRequested"
+          }
+        },
+        {
+          "className": "FlowGraphReceiveCustomEventBlock",
+          "config": {
+            "eventId": "ui.setupResumed"
+          },
+          "uniqueId": "fg-00000007",
+          "dataInputs": [],
+          "dataOutputs": [
+            {
+              "uniqueId": "fg-0000000b",
+              "name": "event",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "string",
+                "defaultValue": ""
+              }
+            }
+          ],
+          "signalInputs": [],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-00000008",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-00000009",
+              "name": "done",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-00000063"
+              ]
+            },
+            {
+              "uniqueId": "fg-0000000a",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "onSetupResumed"
+          }
+        },
+        {
+          "className": "FlowGraphReceiveCustomEventBlock",
+          "config": {
+            "eventId": "ui.matchStarted"
+          },
+          "uniqueId": "fg-0000000c",
+          "dataInputs": [],
+          "dataOutputs": [
+            {
+              "uniqueId": "fg-00000010",
+              "name": "event",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "string",
+                "defaultValue": ""
+              }
+            }
+          ],
+          "signalInputs": [],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-0000000d",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-0000000e",
+              "name": "done",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-000000bb"
+              ]
+            },
+            {
+              "uniqueId": "fg-0000000f",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "onMatchStarted"
+          }
+        },
+        {
+          "className": "FlowGraphReceiveCustomEventBlock",
+          "config": {
+            "eventId": "ui.playerKnockedDown"
+          },
+          "uniqueId": "fg-00000011",
+          "dataInputs": [],
+          "dataOutputs": [
+            {
+              "uniqueId": "fg-00000015",
+              "name": "event",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "string",
+                "defaultValue": ""
+              }
+            }
+          ],
+          "signalInputs": [],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-00000012",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-00000013",
+              "name": "done",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-0000008a"
+              ]
+            },
+            {
+              "uniqueId": "fg-00000014",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "onPlayerKnockedDown"
+          }
+        },
+        {
+          "className": "FlowGraphReceiveCustomEventBlock",
+          "config": {
+            "eventId": "ui.playerRespawned"
+          },
+          "uniqueId": "fg-00000016",
+          "dataInputs": [],
+          "dataOutputs": [
+            {
+              "uniqueId": "fg-0000001a",
+              "name": "event",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "string",
+                "defaultValue": ""
+              }
+            }
+          ],
+          "signalInputs": [],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-00000017",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-00000018",
+              "name": "done",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-00000096"
+              ]
+            },
+            {
+              "uniqueId": "fg-00000019",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "onPlayerRespawned"
+          }
+        },
+        {
+          "className": "FlowGraphReceiveCustomEventBlock",
+          "config": {
+            "eventId": "ui.retryRequested"
+          },
+          "uniqueId": "fg-00000020",
+          "dataInputs": [],
+          "dataOutputs": [
+            {
+              "uniqueId": "fg-00000024",
+              "name": "event",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "string",
+                "defaultValue": ""
+              }
+            }
+          ],
+          "signalInputs": [],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-00000021",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-00000022",
+              "name": "done",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-000000a8"
+              ]
+            },
+            {
+              "uniqueId": "fg-00000023",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "onRetryRequested"
+          }
+        },
+        {
+          "className": "FlowGraphSendCustomEventBlock",
+          "config": {
+            "eventId": "ui.enterSetup"
+          },
+          "uniqueId": "fg-00000025",
+          "dataInputs": [],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-00000026",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-00000027",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-00000028",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "enterSetup"
+          }
+        },
+        {
+          "className": "FlowGraphSendCustomEventBlock",
+          "config": {
+            "eventId": "ui.enterActive"
+          },
+          "uniqueId": "fg-00000029",
+          "dataInputs": [],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-0000002a",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-0000002b",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-0000002c",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "enterActive"
+          }
+        },
+        {
+          "className": "FlowGraphSendCustomEventBlock",
+          "config": {
+            "eventId": "ui.enterKnockedDown"
+          },
+          "uniqueId": "fg-0000002d",
+          "dataInputs": [],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-0000002e",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-0000002f",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-00000030",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "enterKnockedDown"
+          }
+        },
+        {
+          "className": "FlowGraphSendCustomEventBlock",
+          "config": {
+            "eventId": "ui.requestRespawn"
+          },
+          "uniqueId": "fg-00000039",
+          "dataInputs": [],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-0000003a",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-0000003b",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-0000003c",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "requestRespawn"
+          }
+        },
+        {
+          "className": "FlowGraphSendCustomEventBlock",
+          "config": {
+            "eventId": "ui.requestNewRound"
+          },
+          "uniqueId": "fg-0000003d",
+          "dataInputs": [],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-0000003e",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-0000003f",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-00000040",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "requestNewRound"
+          }
+        },
+        {
+          "className": "FlowGraphConstantBlock",
+          "config": {
+            "value": true
+          },
+          "uniqueId": "fg-00000041",
+          "dataInputs": [],
+          "dataOutputs": [
+            {
+              "uniqueId": "fg-00000042",
+              "name": "output",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              }
+            }
+          ],
+          "signalInputs": [],
+          "signalOutputs": [],
+          "metadata": {
+            "displayName": "kTrue"
+          }
+        },
+        {
+          "className": "FlowGraphConstantBlock",
+          "config": {
+            "value": false
+          },
+          "uniqueId": "fg-00000043",
+          "dataInputs": [],
+          "dataOutputs": [
+            {
+              "uniqueId": "fg-00000044",
+              "name": "output",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              }
+            }
+          ],
+          "signalInputs": [],
+          "signalOutputs": [],
+          "metadata": {
+            "displayName": "kFalse"
+          }
+        },
+        {
+          "className": "FlowGraphConstantBlock",
+          "config": {
+            "value": 1
+          },
+          "uniqueId": "fg-00000045",
+          "dataInputs": [],
+          "dataOutputs": [
+            {
+              "uniqueId": "fg-00000046",
+              "name": "output",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              }
+            }
+          ],
+          "signalInputs": [],
+          "signalOutputs": [],
+          "metadata": {
+            "displayName": "kPhaseActive"
+          }
+        },
+        {
+          "className": "FlowGraphConstantBlock",
+          "config": {
+            "value": 2
+          },
+          "uniqueId": "fg-00000047",
+          "dataInputs": [],
+          "dataOutputs": [
+            {
+              "uniqueId": "fg-00000048",
+              "name": "output",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              }
+            }
+          ],
+          "signalInputs": [],
+          "signalOutputs": [],
+          "metadata": {
+            "displayName": "kPhaseKnockedDown"
+          }
+        },
+        {
+          "className": "FlowGraphConstantBlock",
+          "config": {
+            "value": 3
+          },
+          "uniqueId": "fg-00000049",
+          "dataInputs": [],
+          "dataOutputs": [
+            {
+              "uniqueId": "fg-0000004a",
+              "name": "output",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              }
+            }
+          ],
+          "signalInputs": [],
+          "signalOutputs": [],
+          "metadata": {
+            "displayName": "kPhaseGameOver"
+          }
+        },
+        {
+          "className": "FlowGraphGetVariableBlock",
+          "config": {
+            "variable": "phase",
+            "initialValue": 0
+          },
+          "uniqueId": "fg-0000004b",
+          "dataInputs": [],
+          "dataOutputs": [
+            {
+              "uniqueId": "fg-0000004c",
+              "name": "value",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              }
+            }
+          ],
+          "signalInputs": [],
+          "signalOutputs": [],
+          "metadata": {
+            "displayName": "getPhase"
+          }
+        },
+        {
+          "className": "FlowGraphGetVariableBlock",
+          "config": {
+            "variable": "setupOpen",
+            "initialValue": true
+          },
+          "uniqueId": "fg-0000004d",
+          "dataInputs": [],
+          "dataOutputs": [
+            {
+              "uniqueId": "fg-0000004e",
+              "name": "value",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              }
+            }
+          ],
+          "signalInputs": [],
+          "signalOutputs": [],
+          "metadata": {
+            "displayName": "getSetupOpen"
+          }
+        },
+        {
+          "className": "FlowGraphEqualityBlock",
+          "config": {},
+          "uniqueId": "fg-00000053",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-00000054",
+              "name": "a",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-0000004c"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              },
+              "optional": false
+            },
+            {
+              "uniqueId": "fg-00000055",
+              "name": "b",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-00000046"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [
+            {
+              "uniqueId": "fg-00000056",
+              "name": "value",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "boolean",
+                "defaultValue": false
+              }
+            },
+            {
+              "uniqueId": "fg-00000057",
+              "name": "isValid",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "boolean",
+                "defaultValue": false
+              }
+            }
+          ],
+          "signalInputs": [],
+          "signalOutputs": [],
+          "metadata": {
+            "displayName": "phaseIsActive"
+          }
+        },
+        {
+          "className": "FlowGraphEqualityBlock",
+          "config": {},
+          "uniqueId": "fg-00000058",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-00000059",
+              "name": "a",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-0000004c"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              },
+              "optional": false
+            },
+            {
+              "uniqueId": "fg-0000005a",
+              "name": "b",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-00000048"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [
+            {
+              "uniqueId": "fg-0000005b",
+              "name": "value",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "boolean",
+                "defaultValue": false
+              }
+            },
+            {
+              "uniqueId": "fg-0000005c",
+              "name": "isValid",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "boolean",
+                "defaultValue": false
+              }
+            }
+          ],
+          "signalInputs": [],
+          "signalOutputs": [],
+          "metadata": {
+            "displayName": "phaseIsKnockedDown"
+          }
+        },
+        {
+          "className": "FlowGraphSetVariableBlock",
+          "config": {
+            "variable": "setupOpen"
+          },
+          "uniqueId": "fg-0000005d",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-00000061",
+              "name": "value",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-00000042"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-0000005e",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-0000005f",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-00000026"
+              ]
+            },
+            {
+              "uniqueId": "fg-00000060",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "openSetup"
+          }
+        },
+        {
+          "className": "FlowGraphSetVariableBlock",
+          "config": {
+            "variable": "setupOpen"
+          },
+          "uniqueId": "fg-00000062",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-00000066",
+              "name": "value",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-00000044"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-00000063",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-00000064",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-000000cf"
+              ]
+            },
+            {
+              "uniqueId": "fg-00000065",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "closeSetup"
+          }
+        },
+        {
+          "className": "FlowGraphSetVariableBlock",
+          "config": {
+            "variable": "phase"
+          },
+          "uniqueId": "fg-0000006c",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-00000070",
+              "name": "value",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-00000048"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-0000006d",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-0000006e",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-00000090"
+              ]
+            },
+            {
+              "uniqueId": "fg-0000006f",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "knockDownPhase"
+          }
+        },
+        {
+          "className": "FlowGraphSetVariableBlock",
+          "config": {
+            "variable": "phase"
+          },
+          "uniqueId": "fg-00000071",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-00000075",
+              "name": "value",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-00000046"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-00000072",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-00000073",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-0000009c"
+              ]
+            },
+            {
+              "uniqueId": "fg-00000074",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "respawnPhase"
+          }
+        },
+        {
+          "className": "FlowGraphBranchBlock",
+          "config": {},
+          "uniqueId": "fg-00000089",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-0000008e",
+              "name": "condition",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-00000056"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "boolean",
+                "defaultValue": false
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-0000008a",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-0000008b",
+              "name": "onTrue",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-0000006d"
+              ]
+            },
+            {
+              "uniqueId": "fg-0000008c",
+              "name": "onFalse",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-0000008d",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "knockedDownWhileActive"
+          }
+        },
+        {
+          "className": "FlowGraphBranchBlock",
+          "config": {},
+          "uniqueId": "fg-0000008f",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-00000094",
+              "name": "condition",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-0000004e"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "boolean",
+                "defaultValue": false
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-00000090",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-00000091",
+              "name": "onTrue",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-00000092",
+              "name": "onFalse",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-0000002e"
+              ]
+            },
+            {
+              "uniqueId": "fg-00000093",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "knockedDownSetupOpen"
+          }
+        },
+        {
+          "className": "FlowGraphBranchBlock",
+          "config": {},
+          "uniqueId": "fg-00000095",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-0000009a",
+              "name": "condition",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-0000005b"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "boolean",
+                "defaultValue": false
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-00000096",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-00000097",
+              "name": "onTrue",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-00000072"
+              ]
+            },
+            {
+              "uniqueId": "fg-00000098",
+              "name": "onFalse",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-00000099",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "respawnedWhileKnockedDown"
+          }
+        },
+        {
+          "className": "FlowGraphBranchBlock",
+          "config": {},
+          "uniqueId": "fg-0000009b",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-000000a0",
+              "name": "condition",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-0000004e"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "boolean",
+                "defaultValue": false
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-0000009c",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-0000009d",
+              "name": "onTrue",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-0000009e",
+              "name": "onFalse",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-0000002a"
+              ]
+            },
+            {
+              "uniqueId": "fg-0000009f",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "respawnedSetupOpen"
+          }
+        },
+        {
+          "className": "FlowGraphBranchBlock",
+          "config": {},
+          "uniqueId": "fg-000000a1",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-000000a6",
+              "name": "condition",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-0000004e"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "boolean",
+                "defaultValue": false
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-000000a2",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-000000a3",
+              "name": "onTrue",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-000000b7"
+              ]
+            },
+            {
+              "uniqueId": "fg-000000a4",
+              "name": "onFalse",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-000000b3"
+              ]
+            },
+            {
+              "uniqueId": "fg-000000a5",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "endedSetupOpen"
+          }
+        },
+        {
+          "className": "FlowGraphBranchBlock",
+          "config": {},
+          "uniqueId": "fg-000000a7",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-000000ac",
+              "name": "condition",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-0000004e"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "boolean",
+                "defaultValue": false
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-000000a8",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-000000a9",
+              "name": "onTrue",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-000000aa",
+              "name": "onFalse",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-000000db"
+              ]
+            },
+            {
+              "uniqueId": "fg-000000ab",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "retrySetupOpen"
+          }
+        },
+        {
+          "className": "FlowGraphReceiveCustomEventBlock",
+          "config": {
+            "eventId": "ui.matchEnded"
+          },
+          "uniqueId": "fg-000000ad",
+          "dataInputs": [],
+          "dataOutputs": [
+            {
+              "uniqueId": "fg-000000b1",
+              "name": "event",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "string",
+                "defaultValue": ""
+              }
+            }
+          ],
+          "signalInputs": [],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-000000ae",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-000000af",
+              "name": "done",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-000000c5"
+              ]
+            },
+            {
+              "uniqueId": "fg-000000b0",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "onMatchEnded"
+          }
+        },
+        {
+          "className": "FlowGraphSendCustomEventBlock",
+          "config": {
+            "eventId": "ui.enterGameOver"
+          },
+          "uniqueId": "fg-000000b2",
+          "dataInputs": [],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-000000b3",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-000000b4",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-000000b5",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "enterGameOver"
+          }
+        },
+        {
+          "className": "FlowGraphSendCustomEventBlock",
+          "config": {
+            "eventId": "ui.matchEndedInSetup"
+          },
+          "uniqueId": "fg-000000b6",
+          "dataInputs": [],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-000000b7",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-000000b8",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-000000b9",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "matchEndedInSetup"
+          }
+        },
+        {
+          "className": "FlowGraphSetVariableBlock",
+          "config": {
+            "variable": "phase"
+          },
+          "uniqueId": "fg-000000ba",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-000000be",
+              "name": "value",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-00000046"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-000000bb",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-000000bc",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-000000c0"
+              ]
+            },
+            {
+              "uniqueId": "fg-000000bd",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "startPhase"
+          }
+        },
+        {
+          "className": "FlowGraphSetVariableBlock",
+          "config": {
+            "variable": "setupOpen"
+          },
+          "uniqueId": "fg-000000bf",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-000000c3",
+              "name": "value",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-00000044"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-000000c0",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-000000c1",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-0000002a"
+              ]
+            },
+            {
+              "uniqueId": "fg-000000c2",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "startCloseSetup"
+          }
+        },
+        {
+          "className": "FlowGraphSetVariableBlock",
+          "config": {
+            "variable": "phase"
+          },
+          "uniqueId": "fg-000000c4",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-000000c8",
+              "name": "value",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-0000004a"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-000000c5",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-000000c6",
+              "name": "out",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-000000a2"
+              ]
+            },
+            {
+              "uniqueId": "fg-000000c7",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "gameOverPhase"
+          }
+        },
+        {
+          "className": "FlowGraphEqualityBlock",
+          "config": {},
+          "uniqueId": "fg-000000c9",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-000000ca",
+              "name": "a",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-0000004c"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              },
+              "optional": false
+            },
+            {
+              "uniqueId": "fg-000000cb",
+              "name": "b",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-0000004a"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "any"
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [
+            {
+              "uniqueId": "fg-000000cc",
+              "name": "value",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "boolean",
+                "defaultValue": false
+              }
+            },
+            {
+              "uniqueId": "fg-000000cd",
+              "name": "isValid",
+              "_connectionType": 1,
+              "connectedPointIds": [],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "boolean",
+                "defaultValue": false
+              }
+            }
+          ],
+          "signalInputs": [],
+          "signalOutputs": [],
+          "metadata": {
+            "displayName": "phaseIsGameOver"
+          }
+        },
+        {
+          "className": "FlowGraphBranchBlock",
+          "config": {},
+          "uniqueId": "fg-000000ce",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-000000d3",
+              "name": "condition",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-0000005b"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "boolean",
+                "defaultValue": false
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-000000cf",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-000000d0",
+              "name": "onTrue",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-0000002e"
+              ]
+            },
+            {
+              "uniqueId": "fg-000000d1",
+              "name": "onFalse",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-000000d5"
+              ]
+            },
+            {
+              "uniqueId": "fg-000000d2",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "resumeKnockedDown"
+          }
+        },
+        {
+          "className": "FlowGraphBranchBlock",
+          "config": {},
+          "uniqueId": "fg-000000d4",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-000000d9",
+              "name": "condition",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-000000cc"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "boolean",
+                "defaultValue": false
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-000000d5",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-000000d6",
+              "name": "onTrue",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-000000b3"
+              ]
+            },
+            {
+              "uniqueId": "fg-000000d7",
+              "name": "onFalse",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-0000002a"
+              ]
+            },
+            {
+              "uniqueId": "fg-000000d8",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "resumeGameOver"
+          }
+        },
+        {
+          "className": "FlowGraphBranchBlock",
+          "config": {},
+          "uniqueId": "fg-000000da",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-000000df",
+              "name": "condition",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-0000005b"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "boolean",
+                "defaultValue": false
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-000000db",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-000000dc",
+              "name": "onTrue",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-0000003a"
+              ]
+            },
+            {
+              "uniqueId": "fg-000000dd",
+              "name": "onFalse",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-000000e1"
+              ]
+            },
+            {
+              "uniqueId": "fg-000000de",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "retryKnockedDown"
+          }
+        },
+        {
+          "className": "FlowGraphBranchBlock",
+          "config": {},
+          "uniqueId": "fg-000000e0",
+          "dataInputs": [
+            {
+              "uniqueId": "fg-000000e5",
+              "name": "condition",
+              "_connectionType": 0,
+              "connectedPointIds": [
+                "fg-000000cc"
+              ],
+              "className": "FlowGraphDataConnection",
+              "richType": {
+                "typeName": "boolean",
+                "defaultValue": false
+              },
+              "optional": false
+            }
+          ],
+          "dataOutputs": [],
+          "signalInputs": [
+            {
+              "uniqueId": "fg-000000e1",
+              "name": "in",
+              "_connectionType": 0,
+              "connectedPointIds": []
+            }
+          ],
+          "signalOutputs": [
+            {
+              "uniqueId": "fg-000000e2",
+              "name": "onTrue",
+              "_connectionType": 1,
+              "connectedPointIds": [
+                "fg-0000003e"
+              ]
+            },
+            {
+              "uniqueId": "fg-000000e3",
+              "name": "onFalse",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            },
+            {
+              "uniqueId": "fg-000000e4",
+              "name": "error",
+              "_connectionType": 1,
+              "connectedPointIds": []
+            }
+          ],
+          "metadata": {
+            "displayName": "retryGameOver"
+          }
+        }
+      ],
+      "executionContexts": [
+        {
+          "uniqueId": "fg-00000001",
+          "_userVariables": {},
+          "_connectionValues": {}
+        }
+      ]
+    }
+  ],
+  "dispatchEventsSynchronously": false
+}

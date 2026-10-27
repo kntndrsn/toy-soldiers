@@ -1,0 +1,3838 @@
+{
+  "customType": "BABYLON.NodeGeometry",
+  "outputNodeId": 103,
+  "blocks": [
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 1,
+      "name": "one",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 1,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 2,
+      "name": "tess14",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 1,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 14,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 3,
+      "name": "tess10",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 1,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 10,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 4,
+      "name": "tess12",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 1,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 12,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 5,
+      "name": "tess5",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 1,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 5,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 6,
+      "name": "tess16",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 1,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 16,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 7,
+      "name": "rotX90",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        1.5707963267948966,
+        0,
+        0
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 8,
+      "name": "rotZ90",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        0,
+        1.5707963267948966
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 9,
+      "name": "matTire",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 1,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 0,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 10,
+      "name": "matBody",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 1,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 1,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 11,
+      "name": "matTrim",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 1,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 2,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 12,
+      "name": "matYellow",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 1,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 3,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 13,
+      "name": "matWhite",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 1,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 4,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 14,
+      "name": "matCanopy",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 1,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 5,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.BoxBlock",
+      "id": 15,
+      "name": "unitBox",
+      "inputs": [
+        {
+          "name": "size",
+          "displayName": "size",
+          "inputName": "size",
+          "targetBlockId": 1,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "width",
+          "displayName": "width"
+        },
+        {
+          "name": "height",
+          "displayName": "height"
+        },
+        {
+          "name": "depth",
+          "displayName": "depth"
+        },
+        {
+          "name": "subdivisions",
+          "displayName": "subdivisions"
+        },
+        {
+          "name": "subdivisionsX",
+          "displayName": "subdivisionsX"
+        },
+        {
+          "name": "subdivisionsY",
+          "displayName": "subdivisionsY"
+        },
+        {
+          "name": "subdivisionsZ",
+          "displayName": "subdivisionsZ"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 16,
+      "name": "chassisSize",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        3.1,
+        0.52,
+        7.5
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 17,
+      "name": "chassisPos",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        0.82,
+        0.1
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 18,
+      "name": "chassis",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 15,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 17,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling",
+          "inputName": "scaling",
+          "targetBlockId": 16,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 19,
+      "name": "hoodSize",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        2.6,
+        1.22,
+        2.05
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 20,
+      "name": "hoodPos",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        1.62,
+        -2.6
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 21,
+      "name": "hood",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 15,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 20,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling",
+          "inputName": "scaling",
+          "targetBlockId": 19,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 22,
+      "name": "cabSize",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        3.1,
+        1.38,
+        1.85
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 23,
+      "name": "cabPos",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        1.72,
+        -0.75
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 24,
+      "name": "cab",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 15,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 23,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling",
+          "inputName": "scaling",
+          "targetBlockId": 22,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 25,
+      "name": "cabBackSize",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        3.05,
+        1,
+        0.25
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 26,
+      "name": "cabBackPos",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        2.75,
+        0.05
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 27,
+      "name": "cabBack",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 15,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 26,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling",
+          "inputName": "scaling",
+          "targetBlockId": 25,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 28,
+      "name": "cargoBedSize",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        3.4,
+        1.35,
+        4.35
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 29,
+      "name": "cargoBedPos",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        1.72,
+        2.25
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 30,
+      "name": "cargoBed",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 15,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 29,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling",
+          "inputName": "scaling",
+          "targetBlockId": 28,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 31,
+      "name": "bumperSize",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        3.55,
+        0.36,
+        0.38
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 32,
+      "name": "bumperPos",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        0.84,
+        -3.75
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 33,
+      "name": "bumper",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 15,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 32,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling",
+          "inputName": "scaling",
+          "targetBlockId": 31,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 34,
+      "name": "grilleSize",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        2.2,
+        0.92,
+        0.14
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 35,
+      "name": "grillePos",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        1.6,
+        -3.62
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 36,
+      "name": "grille",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 15,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 35,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling",
+          "inputName": "scaling",
+          "targetBlockId": 34,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 37,
+      "name": "cabRoofSize",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        3.12,
+        0.24,
+        1.85
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 38,
+      "name": "cabRoofPos",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        3.22,
+        -0.75
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 39,
+      "name": "cabRoof",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 15,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 38,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling",
+          "inputName": "scaling",
+          "targetBlockId": 37,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 40,
+      "name": "pillarSize",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0.18,
+        0.82,
+        0.18
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 41,
+      "name": "pillarLPos",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        -1.38,
+        2.78,
+        -1.55
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 42,
+      "name": "pillarRPos",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        1.38,
+        2.78,
+        -1.55
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 43,
+      "name": "pillarL",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 15,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 41,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling",
+          "inputName": "scaling",
+          "targetBlockId": 40,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 44,
+      "name": "pillarR",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 15,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 42,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling",
+          "inputName": "scaling",
+          "targetBlockId": 40,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 45,
+      "name": "canopyWallsSize",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        3.32,
+        1.15,
+        4.28
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 46,
+      "name": "canopyWallsPos",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        2.82,
+        2.25
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 47,
+      "name": "canopyWalls",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 15,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 46,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling",
+          "inputName": "scaling",
+          "targetBlockId": 45,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 48,
+      "name": "wheelDiameter",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 1.56,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 49,
+      "name": "wheelWidth",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 0.58,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.CylinderBlock",
+      "id": 50,
+      "name": "wheelShape",
+      "inputs": [
+        {
+          "name": "height",
+          "displayName": "height",
+          "inputName": "height",
+          "targetBlockId": 49,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "diameter",
+          "displayName": "diameter",
+          "inputName": "diameter",
+          "targetBlockId": 48,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "diameterTop",
+          "displayName": "diameterTop"
+        },
+        {
+          "name": "diameterBottom",
+          "displayName": "diameterBottom"
+        },
+        {
+          "name": "subdivisions",
+          "displayName": "subdivisions"
+        },
+        {
+          "name": "tessellation",
+          "displayName": "tessellation",
+          "inputName": "tessellation",
+          "targetBlockId": 2,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "arc",
+          "displayName": "arc"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 51,
+      "name": "wheelLPos",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        -1.68,
+        0.78,
+        0
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 52,
+      "name": "wheelRPos",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        1.68,
+        0.78,
+        0
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 53,
+      "name": "wheelL",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 50,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 51,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation",
+          "inputName": "rotation",
+          "targetBlockId": 8,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 54,
+      "name": "wheelR",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 50,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 52,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation",
+          "inputName": "rotation",
+          "targetBlockId": 8,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.MergeGeometryBlock",
+      "id": 55,
+      "name": "wheelPair",
+      "inputs": [
+        {
+          "name": "geometry0",
+          "displayName": "geometry0",
+          "inputName": "geometry0",
+          "targetBlockId": 53,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry1",
+          "displayName": "geometry1",
+          "inputName": "geometry1",
+          "targetBlockId": 54,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry2",
+          "displayName": "geometry2"
+        },
+        {
+          "name": "geometry3",
+          "displayName": "geometry3"
+        },
+        {
+          "name": "geometry4",
+          "displayName": "geometry4"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 56,
+      "name": "axleFront",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        0,
+        -2.65
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 57,
+      "name": "axleMid",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        0,
+        1.05
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 58,
+      "name": "axleRear",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        0,
+        3.05
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 59,
+      "name": "wheelsFront",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 55,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 56,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 60,
+      "name": "wheelsMid",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 55,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 57,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 61,
+      "name": "wheelsRear",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 55,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 58,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 62,
+      "name": "hubDiameter",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 0.76,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 63,
+      "name": "hubWidth",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 0.62,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.CylinderBlock",
+      "id": 64,
+      "name": "hubShape",
+      "inputs": [
+        {
+          "name": "height",
+          "displayName": "height",
+          "inputName": "height",
+          "targetBlockId": 63,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "diameter",
+          "displayName": "diameter",
+          "inputName": "diameter",
+          "targetBlockId": 62,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "diameterTop",
+          "displayName": "diameterTop"
+        },
+        {
+          "name": "diameterBottom",
+          "displayName": "diameterBottom"
+        },
+        {
+          "name": "subdivisions",
+          "displayName": "subdivisions"
+        },
+        {
+          "name": "tessellation",
+          "displayName": "tessellation",
+          "inputName": "tessellation",
+          "targetBlockId": 3,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "arc",
+          "displayName": "arc"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 65,
+      "name": "hubL",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 64,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 51,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation",
+          "inputName": "rotation",
+          "targetBlockId": 8,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 66,
+      "name": "hubR",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 64,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 52,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation",
+          "inputName": "rotation",
+          "targetBlockId": 8,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.MergeGeometryBlock",
+      "id": 67,
+      "name": "hubPair",
+      "inputs": [
+        {
+          "name": "geometry0",
+          "displayName": "geometry0",
+          "inputName": "geometry0",
+          "targetBlockId": 65,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry1",
+          "displayName": "geometry1",
+          "inputName": "geometry1",
+          "targetBlockId": 66,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry2",
+          "displayName": "geometry2"
+        },
+        {
+          "name": "geometry3",
+          "displayName": "geometry3"
+        },
+        {
+          "name": "geometry4",
+          "displayName": "geometry4"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 68,
+      "name": "hubsFront",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 67,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 56,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 69,
+      "name": "hubsMid",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 67,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 57,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 70,
+      "name": "hubsRear",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 67,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 58,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 71,
+      "name": "lightDiameter",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 0.36,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 72,
+      "name": "lightDepth",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 0.14,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.CylinderBlock",
+      "id": 73,
+      "name": "lightShape",
+      "inputs": [
+        {
+          "name": "height",
+          "displayName": "height",
+          "inputName": "height",
+          "targetBlockId": 72,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "diameter",
+          "displayName": "diameter",
+          "inputName": "diameter",
+          "targetBlockId": 71,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "diameterTop",
+          "displayName": "diameterTop"
+        },
+        {
+          "name": "diameterBottom",
+          "displayName": "diameterBottom"
+        },
+        {
+          "name": "subdivisions",
+          "displayName": "subdivisions"
+        },
+        {
+          "name": "tessellation",
+          "displayName": "tessellation",
+          "inputName": "tessellation",
+          "targetBlockId": 4,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "arc",
+          "displayName": "arc"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 74,
+      "name": "lightLPos",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        -0.82,
+        1.64,
+        -3.66
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 75,
+      "name": "lightRPos",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0.82,
+        1.64,
+        -3.66
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 76,
+      "name": "lightL",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 73,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 74,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation",
+          "inputName": "rotation",
+          "targetBlockId": 7,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 77,
+      "name": "lightR",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 73,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 75,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation",
+          "inputName": "rotation",
+          "targetBlockId": 7,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 78,
+      "name": "starDiameter",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 0.92,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 79,
+      "name": "starHeight",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 0.05,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.CylinderBlock",
+      "id": 80,
+      "name": "starShape",
+      "inputs": [
+        {
+          "name": "height",
+          "displayName": "height",
+          "inputName": "height",
+          "targetBlockId": 79,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "diameter",
+          "displayName": "diameter",
+          "inputName": "diameter",
+          "targetBlockId": 78,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "diameterTop",
+          "displayName": "diameterTop"
+        },
+        {
+          "name": "diameterBottom",
+          "displayName": "diameterBottom"
+        },
+        {
+          "name": "subdivisions",
+          "displayName": "subdivisions"
+        },
+        {
+          "name": "tessellation",
+          "displayName": "tessellation",
+          "inputName": "tessellation",
+          "targetBlockId": 5,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "arc",
+          "displayName": "arc"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 81,
+      "name": "starPos",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        2.25,
+        -2.6
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 82,
+      "name": "star",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 80,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 81,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 83,
+      "name": "archDiameter",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 3.32,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 84,
+      "name": "archLength",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 4.28,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.CylinderBlock",
+      "id": 85,
+      "name": "archShape",
+      "inputs": [
+        {
+          "name": "height",
+          "displayName": "height",
+          "inputName": "height",
+          "targetBlockId": 84,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "diameter",
+          "displayName": "diameter",
+          "inputName": "diameter",
+          "targetBlockId": 83,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "diameterTop",
+          "displayName": "diameterTop"
+        },
+        {
+          "name": "diameterBottom",
+          "displayName": "diameterBottom"
+        },
+        {
+          "name": "subdivisions",
+          "displayName": "subdivisions"
+        },
+        {
+          "name": "tessellation",
+          "displayName": "tessellation",
+          "inputName": "tessellation",
+          "targetBlockId": 6,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "arc",
+          "displayName": "arc"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 86,
+      "name": "archScale",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        1,
+        0.42,
+        1
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 87,
+      "name": "archPos",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        3.38,
+        2.25
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 88,
+      "name": "canopyArch",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 85,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 87,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation",
+          "inputName": "rotation",
+          "targetBlockId": 7,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling",
+          "inputName": "scaling",
+          "targetBlockId": 86,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.MergeGeometryBlock",
+      "id": 89,
+      "name": "tireMerge",
+      "inputs": [
+        {
+          "name": "geometry0",
+          "displayName": "geometry0",
+          "inputName": "geometry0",
+          "targetBlockId": 18,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry1",
+          "displayName": "geometry1",
+          "inputName": "geometry1",
+          "targetBlockId": 59,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry2",
+          "displayName": "geometry2",
+          "inputName": "geometry2",
+          "targetBlockId": 60,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry3",
+          "displayName": "geometry3",
+          "inputName": "geometry3",
+          "targetBlockId": 61,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry4",
+          "displayName": "geometry4"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.SetMaterialIDBlock",
+      "id": 90,
+      "name": "tireMaterial",
+      "inputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry",
+          "inputName": "geometry",
+          "targetBlockId": 89,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "id",
+          "displayName": "id",
+          "inputName": "id",
+          "targetBlockId": 9,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.MergeGeometryBlock",
+      "id": 91,
+      "name": "bodyMerge",
+      "inputs": [
+        {
+          "name": "geometry0",
+          "displayName": "geometry0",
+          "inputName": "geometry0",
+          "targetBlockId": 21,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry1",
+          "displayName": "geometry1",
+          "inputName": "geometry1",
+          "targetBlockId": 24,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry2",
+          "displayName": "geometry2",
+          "inputName": "geometry2",
+          "targetBlockId": 27,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry3",
+          "displayName": "geometry3",
+          "inputName": "geometry3",
+          "targetBlockId": 30,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry4",
+          "displayName": "geometry4"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.SetMaterialIDBlock",
+      "id": 92,
+      "name": "bodyMaterial",
+      "inputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry",
+          "inputName": "geometry",
+          "targetBlockId": 91,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "id",
+          "displayName": "id",
+          "inputName": "id",
+          "targetBlockId": 10,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.MergeGeometryBlock",
+      "id": 93,
+      "name": "trimMergeA",
+      "inputs": [
+        {
+          "name": "geometry0",
+          "displayName": "geometry0",
+          "inputName": "geometry0",
+          "targetBlockId": 33,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry1",
+          "displayName": "geometry1",
+          "inputName": "geometry1",
+          "targetBlockId": 36,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry2",
+          "displayName": "geometry2",
+          "inputName": "geometry2",
+          "targetBlockId": 39,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry3",
+          "displayName": "geometry3",
+          "inputName": "geometry3",
+          "targetBlockId": 43,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry4",
+          "displayName": "geometry4",
+          "inputName": "geometry4",
+          "targetBlockId": 44,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.MergeGeometryBlock",
+      "id": 94,
+      "name": "trimMerge",
+      "inputs": [
+        {
+          "name": "geometry0",
+          "displayName": "geometry0",
+          "inputName": "geometry0",
+          "targetBlockId": 93,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry1",
+          "displayName": "geometry1",
+          "inputName": "geometry1",
+          "targetBlockId": 68,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry2",
+          "displayName": "geometry2",
+          "inputName": "geometry2",
+          "targetBlockId": 69,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry3",
+          "displayName": "geometry3",
+          "inputName": "geometry3",
+          "targetBlockId": 70,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry4",
+          "displayName": "geometry4"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.SetMaterialIDBlock",
+      "id": 95,
+      "name": "trimMaterial",
+      "inputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry",
+          "inputName": "geometry",
+          "targetBlockId": 94,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "id",
+          "displayName": "id",
+          "inputName": "id",
+          "targetBlockId": 11,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.MergeGeometryBlock",
+      "id": 96,
+      "name": "lightMerge",
+      "inputs": [
+        {
+          "name": "geometry0",
+          "displayName": "geometry0",
+          "inputName": "geometry0",
+          "targetBlockId": 76,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry1",
+          "displayName": "geometry1",
+          "inputName": "geometry1",
+          "targetBlockId": 77,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry2",
+          "displayName": "geometry2"
+        },
+        {
+          "name": "geometry3",
+          "displayName": "geometry3"
+        },
+        {
+          "name": "geometry4",
+          "displayName": "geometry4"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.SetMaterialIDBlock",
+      "id": 97,
+      "name": "yellowMaterial",
+      "inputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry",
+          "inputName": "geometry",
+          "targetBlockId": 96,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "id",
+          "displayName": "id",
+          "inputName": "id",
+          "targetBlockId": 12,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.SetMaterialIDBlock",
+      "id": 98,
+      "name": "whiteMaterial",
+      "inputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry",
+          "inputName": "geometry",
+          "targetBlockId": 82,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "id",
+          "displayName": "id",
+          "inputName": "id",
+          "targetBlockId": 13,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.MergeGeometryBlock",
+      "id": 99,
+      "name": "canopyMerge",
+      "inputs": [
+        {
+          "name": "geometry0",
+          "displayName": "geometry0",
+          "inputName": "geometry0",
+          "targetBlockId": 47,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry1",
+          "displayName": "geometry1",
+          "inputName": "geometry1",
+          "targetBlockId": 88,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry2",
+          "displayName": "geometry2"
+        },
+        {
+          "name": "geometry3",
+          "displayName": "geometry3"
+        },
+        {
+          "name": "geometry4",
+          "displayName": "geometry4"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.SetMaterialIDBlock",
+      "id": 100,
+      "name": "canopyMaterial",
+      "inputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry",
+          "inputName": "geometry",
+          "targetBlockId": 99,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "id",
+          "displayName": "id",
+          "inputName": "id",
+          "targetBlockId": 14,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.MergeGeometryBlock",
+      "id": 101,
+      "name": "truckA",
+      "inputs": [
+        {
+          "name": "geometry0",
+          "displayName": "geometry0",
+          "inputName": "geometry0",
+          "targetBlockId": 90,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry1",
+          "displayName": "geometry1",
+          "inputName": "geometry1",
+          "targetBlockId": 92,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry2",
+          "displayName": "geometry2",
+          "inputName": "geometry2",
+          "targetBlockId": 95,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry3",
+          "displayName": "geometry3",
+          "inputName": "geometry3",
+          "targetBlockId": 97,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry4",
+          "displayName": "geometry4",
+          "inputName": "geometry4",
+          "targetBlockId": 98,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.MergeGeometryBlock",
+      "id": 102,
+      "name": "truck",
+      "inputs": [
+        {
+          "name": "geometry0",
+          "displayName": "geometry0",
+          "inputName": "geometry0",
+          "targetBlockId": 101,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry1",
+          "displayName": "geometry1",
+          "inputName": "geometry1",
+          "targetBlockId": 100,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry2",
+          "displayName": "geometry2"
+        },
+        {
+          "name": "geometry3",
+          "displayName": "geometry3"
+        },
+        {
+          "name": "geometry4",
+          "displayName": "geometry4"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.GeometryOutputBlock",
+      "id": 103,
+      "name": "output",
+      "inputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry",
+          "inputName": "geometry",
+          "targetBlockId": 102,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": []
+    }
+  ],
+  "comment": "6x6 army truck cover prop. Material slots: 0 tire/chassis, 1 body, 2 trim, 3 yellow lights, 4 white star, 5 canopy. Team variants differ only by MultiMaterial in code. Origin at ground under truck center; obstacle AABB stays in code.",
+  "editorData": {
+    "locations": [
+      {
+        "blockId": 1,
+        "x": 340,
+        "y": 360
+      },
+      {
+        "blockId": 2,
+        "x": 0,
+        "y": 0
+      },
+      {
+        "blockId": 3,
+        "x": 0,
+        "y": 540
+      },
+      {
+        "blockId": 4,
+        "x": 680,
+        "y": 2520
+      },
+      {
+        "blockId": 5,
+        "x": 1020,
+        "y": 4860
+      },
+      {
+        "blockId": 6,
+        "x": 1020,
+        "y": 0
+      },
+      {
+        "blockId": 7,
+        "x": 1020,
+        "y": 2700
+      },
+      {
+        "blockId": 8,
+        "x": 340,
+        "y": 540
+      },
+      {
+        "blockId": 9,
+        "x": 1700,
+        "y": 360
+      },
+      {
+        "blockId": 10,
+        "x": 1700,
+        "y": 720
+      },
+      {
+        "blockId": 11,
+        "x": 1700,
+        "y": 1080
+      },
+      {
+        "blockId": 12,
+        "x": 1700,
+        "y": 1440
+      },
+      {
+        "blockId": 13,
+        "x": 1700,
+        "y": 1800
+      },
+      {
+        "blockId": 14,
+        "x": 2040,
+        "y": 0
+      },
+      {
+        "blockId": 15,
+        "x": 680,
+        "y": 360
+      },
+      {
+        "blockId": 16,
+        "x": 1020,
+        "y": 540
+      },
+      {
+        "blockId": 17,
+        "x": 1020,
+        "y": 720
+      },
+      {
+        "blockId": 18,
+        "x": 1360,
+        "y": 900
+      },
+      {
+        "blockId": 19,
+        "x": 1020,
+        "y": 1080
+      },
+      {
+        "blockId": 20,
+        "x": 1020,
+        "y": 1260
+      },
+      {
+        "blockId": 21,
+        "x": 1360,
+        "y": 1620
+      },
+      {
+        "blockId": 22,
+        "x": 1020,
+        "y": 1620
+      },
+      {
+        "blockId": 23,
+        "x": 1020,
+        "y": 1800
+      },
+      {
+        "blockId": 24,
+        "x": 1360,
+        "y": 1800
+      },
+      {
+        "blockId": 25,
+        "x": 1020,
+        "y": 2160
+      },
+      {
+        "blockId": 26,
+        "x": 1020,
+        "y": 2340
+      },
+      {
+        "blockId": 27,
+        "x": 1360,
+        "y": 1980
+      },
+      {
+        "blockId": 28,
+        "x": 1020,
+        "y": 2880
+      },
+      {
+        "blockId": 29,
+        "x": 1020,
+        "y": 3060
+      },
+      {
+        "blockId": 30,
+        "x": 1360,
+        "y": 2160
+      },
+      {
+        "blockId": 31,
+        "x": 680,
+        "y": 900
+      },
+      {
+        "blockId": 32,
+        "x": 680,
+        "y": 1080
+      },
+      {
+        "blockId": 33,
+        "x": 1020,
+        "y": 3420
+      },
+      {
+        "blockId": 34,
+        "x": 680,
+        "y": 1260
+      },
+      {
+        "blockId": 35,
+        "x": 680,
+        "y": 1440
+      },
+      {
+        "blockId": 36,
+        "x": 1020,
+        "y": 3600
+      },
+      {
+        "blockId": 37,
+        "x": 680,
+        "y": 1620
+      },
+      {
+        "blockId": 38,
+        "x": 680,
+        "y": 1800
+      },
+      {
+        "blockId": 39,
+        "x": 1020,
+        "y": 3780
+      },
+      {
+        "blockId": 40,
+        "x": 680,
+        "y": 2160
+      },
+      {
+        "blockId": 41,
+        "x": 680,
+        "y": 1980
+      },
+      {
+        "blockId": 42,
+        "x": 680,
+        "y": 2340
+      },
+      {
+        "blockId": 43,
+        "x": 1020,
+        "y": 3960
+      },
+      {
+        "blockId": 44,
+        "x": 1020,
+        "y": 4140
+      },
+      {
+        "blockId": 45,
+        "x": 1360,
+        "y": 0
+      },
+      {
+        "blockId": 46,
+        "x": 1360,
+        "y": 180
+      },
+      {
+        "blockId": 47,
+        "x": 1700,
+        "y": 0
+      },
+      {
+        "blockId": 48,
+        "x": 0,
+        "y": 180
+      },
+      {
+        "blockId": 49,
+        "x": 0,
+        "y": 360
+      },
+      {
+        "blockId": 50,
+        "x": 340,
+        "y": 0
+      },
+      {
+        "blockId": 51,
+        "x": 340,
+        "y": 180
+      },
+      {
+        "blockId": 52,
+        "x": 340,
+        "y": 720
+      },
+      {
+        "blockId": 53,
+        "x": 680,
+        "y": 0
+      },
+      {
+        "blockId": 54,
+        "x": 680,
+        "y": 180
+      },
+      {
+        "blockId": 55,
+        "x": 1020,
+        "y": 900
+      },
+      {
+        "blockId": 56,
+        "x": 1020,
+        "y": 1440
+      },
+      {
+        "blockId": 57,
+        "x": 1020,
+        "y": 1980
+      },
+      {
+        "blockId": 58,
+        "x": 1020,
+        "y": 2520
+      },
+      {
+        "blockId": 59,
+        "x": 1360,
+        "y": 1080
+      },
+      {
+        "blockId": 60,
+        "x": 1360,
+        "y": 1260
+      },
+      {
+        "blockId": 61,
+        "x": 1360,
+        "y": 1440
+      },
+      {
+        "blockId": 62,
+        "x": 0,
+        "y": 720
+      },
+      {
+        "blockId": 63,
+        "x": 0,
+        "y": 900
+      },
+      {
+        "blockId": 64,
+        "x": 340,
+        "y": 900
+      },
+      {
+        "blockId": 65,
+        "x": 680,
+        "y": 540
+      },
+      {
+        "blockId": 66,
+        "x": 680,
+        "y": 720
+      },
+      {
+        "blockId": 67,
+        "x": 1020,
+        "y": 3240
+      },
+      {
+        "blockId": 68,
+        "x": 1360,
+        "y": 2340
+      },
+      {
+        "blockId": 69,
+        "x": 1360,
+        "y": 2520
+      },
+      {
+        "blockId": 70,
+        "x": 1360,
+        "y": 2700
+      },
+      {
+        "blockId": 71,
+        "x": 680,
+        "y": 2700
+      },
+      {
+        "blockId": 72,
+        "x": 680,
+        "y": 2880
+      },
+      {
+        "blockId": 73,
+        "x": 1020,
+        "y": 4500
+      },
+      {
+        "blockId": 74,
+        "x": 1020,
+        "y": 4320
+      },
+      {
+        "blockId": 75,
+        "x": 1020,
+        "y": 4680
+      },
+      {
+        "blockId": 76,
+        "x": 1360,
+        "y": 3060
+      },
+      {
+        "blockId": 77,
+        "x": 1360,
+        "y": 3240
+      },
+      {
+        "blockId": 78,
+        "x": 1020,
+        "y": 5040
+      },
+      {
+        "blockId": 79,
+        "x": 1020,
+        "y": 5220
+      },
+      {
+        "blockId": 80,
+        "x": 1360,
+        "y": 3420
+      },
+      {
+        "blockId": 81,
+        "x": 1360,
+        "y": 3600
+      },
+      {
+        "blockId": 82,
+        "x": 1700,
+        "y": 1980
+      },
+      {
+        "blockId": 83,
+        "x": 1020,
+        "y": 180
+      },
+      {
+        "blockId": 84,
+        "x": 1020,
+        "y": 360
+      },
+      {
+        "blockId": 85,
+        "x": 1360,
+        "y": 360
+      },
+      {
+        "blockId": 86,
+        "x": 1360,
+        "y": 540
+      },
+      {
+        "blockId": 87,
+        "x": 1360,
+        "y": 720
+      },
+      {
+        "blockId": 88,
+        "x": 1700,
+        "y": 180
+      },
+      {
+        "blockId": 89,
+        "x": 1700,
+        "y": 540
+      },
+      {
+        "blockId": 90,
+        "x": 2040,
+        "y": 360
+      },
+      {
+        "blockId": 91,
+        "x": 1700,
+        "y": 900
+      },
+      {
+        "blockId": 92,
+        "x": 2040,
+        "y": 540
+      },
+      {
+        "blockId": 93,
+        "x": 1360,
+        "y": 2880
+      },
+      {
+        "blockId": 94,
+        "x": 1700,
+        "y": 1260
+      },
+      {
+        "blockId": 95,
+        "x": 2040,
+        "y": 720
+      },
+      {
+        "blockId": 96,
+        "x": 1700,
+        "y": 1620
+      },
+      {
+        "blockId": 97,
+        "x": 2040,
+        "y": 900
+      },
+      {
+        "blockId": 98,
+        "x": 2040,
+        "y": 1080
+      },
+      {
+        "blockId": 99,
+        "x": 2040,
+        "y": 180
+      },
+      {
+        "blockId": 100,
+        "x": 2380,
+        "y": 0
+      },
+      {
+        "blockId": 101,
+        "x": 2380,
+        "y": 180
+      },
+      {
+        "blockId": 102,
+        "x": 2720,
+        "y": 0
+      },
+      {
+        "blockId": 103,
+        "x": 3060,
+        "y": 0
+      }
+    ]
+  }
+}

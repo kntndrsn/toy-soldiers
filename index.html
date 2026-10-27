@@ -1071,6 +1071,7 @@
   <!-- Babylon.js from CDN -->
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+  <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
 
   <script>
     // =========================================================================
@@ -1239,38 +1240,6 @@
       return new BABYLON.Vector3(hL - hR, 2 * eps, hD - hU).normalize();
     }
 
-    // Procedural sand grain texture using Babylon DynamicTexture
-    function createSandMaterial() {
-      const dynTex = new BABYLON.DynamicTexture("sandTex", 256, scene, true);
-      const ctx = dynTex.getContext();
-
-      ctx.fillStyle = "#e3c27a";
-      ctx.fillRect(0, 0, 256, 256);
-
-      const palette = ["#d4b066", "#edd08a", "#c8a258", "#f2d899", "#bfa05a"];
-      for (let i = 0; i < 5000; i++) {
-        ctx.fillStyle = palette[i % palette.length];
-        const sz = (i % 3) + 1;
-        ctx.fillRect(
-          Math.floor(Math.random() * 256),
-          Math.floor(Math.random() * 256),
-          sz,
-          sz
-        );
-      }
-      dynTex.update();
-      dynTex.wrapU = BABYLON.Texture.WRAP_ADDRESSMODE;
-      dynTex.wrapV = BABYLON.Texture.WRAP_ADDRESSMODE;
-      dynTex.uScale = 24;
-      dynTex.vScale = 24;
-
-      const mat = new BABYLON.StandardMaterial("sandMat", scene);
-      mat.diffuseTexture = dynTex;
-      mat.specularColor = new BABYLON.Color3(0.22, 0.18, 0.11);
-      mat.specularPower = 24;
-      return mat;
-    }
-
     // Dedicated wet/molded sand material for the Sandcastle & Dump Truck load
     function createMoldedSandMaterial() {
       const dynTex = new BABYLON.DynamicTexture("moldedSandTex", 256, scene, true);
@@ -1325,12 +1294,136 @@
       return woodMat;
     }
 
-    const sandMat = createSandMaterial();
     const sandCastleMat = createMoldedSandMaterial();
     const woodMat = createWoodMaterial();
     const lawnMat = new BABYLON.StandardMaterial("lawnMat", scene);
     lawnMat.diffuseColor = new BABYLON.Color3(0.28, 0.48, 0.2);
     lawnMat.specularColor = BABYLON.Color3.Black();
+
+    // World-space Node Material for the sandbox ground (authored via NME: materials/sandboxSand.json).
+    // Shading only; no vertex displacement, so getSandHeight() remains the authoritative surface.
+    // The ground stays hidden until the node material has compiled (or is shown bare if it failed).
+    let sandNodeMat = null;
+    let sandNodeMatFailed = false;
+    let activeSandMesh = null;
+
+    function applySandNodeMaterial() {
+      if (!sandNodeMat || !activeSandMesh || activeSandMesh.isDisposed()) return;
+      const limitInput = sandNodeMat.getBlockByName("worldLimit");
+      if (limitInput) limitInput.value = WORLD_LIMIT;
+      activeSandMesh.material = sandNodeMat;
+      activeSandMesh.isVisible = true;
+    }
+
+    async function loadSandNodeMaterial() {
+      const res = await fetch("materials/sandboxSand.json");
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const mat = BABYLON.NodeMaterial.Parse(await res.json(), scene);
+      mat.name = "sandNodeMat";
+      if (activeSandMesh && !activeSandMesh.isDisposed()) {
+        await mat.forceCompilationAsync(activeSandMesh);
+      }
+      sandNodeMat = mat;
+      applySandNodeMaterial();
+    }
+
+    // Static prop geometry authored as Node Geometry graphs (geometry/*.json, built with NGE).
+    // Each graph replaces a prop's MeshBuilder parts with one merged mesh (material slots -> MultiMaterial).
+    // Visual only: transform roots, obstacle AABBs, WORLD_LIMIT clamping and getSandHeight() stay in code.
+    // Props created before the graphs finish loading are mounted in place once they arrive.
+    const PROP_GRAPH_FILES = {
+      sandboxFrame: "sandboxFrame.json",
+      sandcastle: "sandcastle.json",
+      toyBrick: "toyBrick.json",
+      beachBucket: "beachBucket.json",
+      armyTruck: "armyTruck.json",
+      armyJeep: "armyJeep.json",
+      shoeboxShell: "shoeboxShell.json",
+      tissueSheet: "tissueSheet.json"
+    };
+    const propGraphs = new Map();
+    const propVertexDataCache = new Map();
+    const propMultiMaterials = new Map();
+    let proceduralProps = [];
+
+    function getPropVertexData(graphKey, params) {
+      const cacheKey = graphKey + JSON.stringify(params);
+      let vertexData = propVertexDataCache.get(cacheKey);
+      if (!vertexData) {
+        const graph = propGraphs.get(graphKey);
+        Object.entries(params).forEach(([name, value]) => {
+          const block = graph.getBlockByName(name);
+          if (!block) throw new Error(graphKey + ": unknown graph input " + name);
+          block.value = Array.isArray(value) ? BABYLON.Vector3.FromArray(value) : value;
+        });
+        graph.build();
+        vertexData = graph.vertexData.clone();
+        // GeometryTransformBlock scales normals without renormalizing them
+        const normals = vertexData.normals;
+        for (let i = 0; i < normals.length; i += 3) {
+          const len = Math.hypot(normals[i], normals[i + 1], normals[i + 2]) || 1;
+          normals[i] /= len;
+          normals[i + 1] /= len;
+          normals[i + 2] /= len;
+        }
+        propVertexDataCache.set(cacheKey, vertexData);
+      }
+      return vertexData;
+    }
+
+    function resolvePropMaterial(materials) {
+      if (!Array.isArray(materials)) return materials;
+      const key = materials.map((m) => m.name).join("|");
+      let multi = propMultiMaterials.get(key);
+      if (!multi) {
+        multi = new BABYLON.MultiMaterial("propMulti_" + propMultiMaterials.size, scene);
+        multi.subMaterials = materials.slice();
+        propMultiMaterials.set(key, multi);
+      }
+      return multi;
+    }
+
+    function tryMountPropGraph(slot, freeze) {
+      if (slot.mesh || !propGraphs.has(slot.graph) || slot.root.isDisposed()) return;
+      try {
+        const vertexData = getPropVertexData(slot.graph, slot.params || {});
+        const mesh = new BABYLON.Mesh(slot.graph + "Graph", scene);
+        vertexData.applyToMesh(mesh);
+        mesh.parent = slot.root;
+        mesh.material = resolvePropMaterial(slot.materials);
+        mesh.receiveShadows = true;
+        mesh.isPickable = slot.pickable !== false;
+        mesh.metadata = Object.assign({ proceduralGraph: slot.graph }, slot.metadata);
+        if (slot.castShadows) shadowGen.addShadowCaster(mesh);
+        if (freeze) {
+          mesh.computeWorldMatrix(true);
+          mesh.freezeWorldMatrix();
+        }
+        slot.mesh = mesh;
+      } catch (error) {
+        console.error("Prop graph '" + slot.graph + "' failed to build; prop will be missing.", error);
+        propGraphs.delete(slot.graph);
+      }
+    }
+
+    function mountProceduralProp(slot) {
+      proceduralProps.push(slot);
+      tryMountPropGraph(slot, false);
+    }
+
+    async function loadPropGraphs() {
+      const results = await Promise.allSettled(
+        Object.entries(PROP_GRAPH_FILES).map(async ([key, file]) => {
+          const res = await fetch("geometry/" + file);
+          if (!res.ok) throw new Error(file + ": HTTP " + res.status);
+          propGraphs.set(key, BABYLON.NodeGeometry.Parse(await res.json()));
+        })
+      );
+      results
+        .filter((r) => r.status === "rejected")
+        .forEach((r) => console.error("Prop graph unavailable; prop will be missing.", r.reason));
+      proceduralProps.forEach((slot) => tryMountPropGraph(slot, true));
+    }
 
     // Builds the sand ground, wooden border walls, and corner seats under envRootNode
     function buildSandboxFrameAndGround() {
@@ -1356,58 +1449,22 @@
       sandMesh.updateVerticesData(BABYLON.VertexBuffer.PositionKind, sandPositions);
       sandMesh.updateVerticesData(BABYLON.VertexBuffer.NormalKind, sandNormals);
       sandMesh.refreshBoundingInfo();
-      sandMesh.material = sandMat;
+      sandMesh.isVisible = sandNodeMatFailed;
       sandMesh.receiveShadows = true;
       sandMesh.metadata = { isEnvironment: true, isSand: true };
       sandMesh.parent = envRootNode;
+      activeSandMesh = sandMesh;
+      applySandNodeMaterial();
 
-      const wallThickness = 2.8;
-      const wallHeight = 3.8;
-      const fullSpan = WORLD_LIMIT * 2 + wallThickness * 2;
-
-      const sides = [
-        { x: 0, z: -WORLD_LIMIT - wallThickness / 2, w: fullSpan, d: wallThickness },
-        { x: 0, z: WORLD_LIMIT + wallThickness / 2, w: fullSpan, d: wallThickness },
-        { x: -WORLD_LIMIT - wallThickness / 2, z: 0, w: wallThickness, d: WORLD_LIMIT * 2 },
-        { x: WORLD_LIMIT + wallThickness / 2, z: 0, w: wallThickness, d: WORLD_LIMIT * 2 }
-      ];
-
-      sides.forEach((s, idx) => {
-        const wall = BABYLON.MeshBuilder.CreateBox(
-          "sandboxWall_" + idx,
-          { width: s.w, height: wallHeight, depth: s.d },
-          scene
-        );
-        wall.position.set(s.x, wallHeight / 2 - 0.5, s.z);
-        wall.material = woodMat;
-        wall.receiveShadows = true;
-        shadowGen.addShadowCaster(wall);
-        wall.metadata = { isEnvironment: true, isWall: true };
-        wall.parent = envRootNode;
-      });
-
-      const corners = [
-        [-WORLD_LIMIT, -WORLD_LIMIT],
-        [WORLD_LIMIT, -WORLD_LIMIT],
-        [-WORLD_LIMIT, WORLD_LIMIT],
-        [WORLD_LIMIT, WORLD_LIMIT]
-      ];
-      corners.forEach(([cx, cz], idx) => {
-        const seat = BABYLON.MeshBuilder.CreateBox(
-          "cornerSeat_" + idx,
-          { width: 6.5, height: 0.5, depth: 6.5 },
-          scene
-        );
-        seat.position.set(
-          cx + (cx < 0 ? 1.2 : -1.2),
-          wallHeight - 0.35,
-          cz + (cz < 0 ? 1.2 : -1.2)
-        );
-        seat.material = woodMat;
-        seat.receiveShadows = true;
-        shadowGen.addShadowCaster(seat);
-        seat.metadata = { isEnvironment: true, isWall: true };
-        seat.parent = envRootNode;
+      const frameRoot = new BABYLON.TransformNode("sandboxFrame", scene);
+      frameRoot.parent = envRootNode;
+      mountProceduralProp({
+        graph: "sandboxFrame",
+        params: { worldLimit: WORLD_LIMIT },
+        root: frameRoot,
+        materials: woodMat,
+        castShadows: true,
+        metadata: { isEnvironment: true, isWall: true }
       });
 
       const lawnOffset = WORLD_LIMIT + 72;
@@ -1461,74 +1518,13 @@
       const groundY = getSandHeight(x, z);
       root.position.set(x, groundY - 0.15, z);
 
-      const keep = BABYLON.MeshBuilder.CreateBox(
-        "keep",
-        { width: 4.4, height: 2.5, depth: 4.4 },
-        scene
-      );
-      keep.position.y = 1.25;
-      keep.material = sandCastleMat;
-      keep.parent = root;
-
-      const towerOffsets = [
-        [-2.1, -2.1],
-        [2.1, -2.1],
-        [-2.1, 2.1],
-        [2.1, 2.1]
-      ];
-      towerOffsets.forEach(([tx, tz], idx) => {
-        const tower = BABYLON.MeshBuilder.CreateCylinder(
-          "tower_" + idx,
-          { diameterTop: 1.9, diameterBottom: 2.3, height: 3.3, tessellation: 16 },
-          scene
-        );
-        tower.position.set(tx, 1.65, tz);
-        tower.material = sandCastleMat;
-        tower.parent = root;
-
-        for (let i = 0; i < 4; i++) {
-          const angle = (i * Math.PI) / 2;
-          const merlon = BABYLON.MeshBuilder.CreateBox(
-            "merlon_" + idx + "_" + i,
-            { width: 0.42, height: 0.36, depth: 0.42 },
-            scene
-          );
-          merlon.position.set(
-            tx + Math.cos(angle) * 0.65,
-            3.45,
-            tz + Math.sin(angle) * 0.65
-          );
-          merlon.material = sandCastleMat;
-          merlon.parent = root;
-        }
+      mountProceduralProp({
+        graph: "sandcastle",
+        root: root,
+        materials: [sandCastleMat, whiteToyMat, redToyMat],
+        castShadows: true,
+        metadata: { isEnvironment: true, isToy: true }
       });
-
-      const spire = BABYLON.MeshBuilder.CreateCylinder(
-        "spire",
-        { diameterTop: 1.5, diameterBottom: 2.2, height: 3.9, tessellation: 16 },
-        scene
-      );
-      spire.position.set(0, 1.95, 0);
-      spire.material = sandCastleMat;
-      spire.parent = root;
-
-      const pole = BABYLON.MeshBuilder.CreateCylinder(
-        "flagPole",
-        { diameter: 0.1, height: 1.6, tessellation: 8 },
-        scene
-      );
-      pole.position.set(0, 4.45, 0);
-      pole.material = whiteToyMat;
-      pole.parent = root;
-
-      const flag = BABYLON.MeshBuilder.CreateBox(
-        "flag",
-        { width: 0.85, height: 0.48, depth: 0.07 },
-        scene
-      );
-      flag.position.set(0.42, 4.95, 0);
-      flag.material = redToyMat;
-      flag.parent = root;
 
       registerToyObstacle(root, x, z, 6.2, 6.2, 4.2);
     }
@@ -1540,30 +1536,14 @@
       root.position.set(x, groundY, z);
       root.rotation.y = rotY || 0;
 
-      const body = BABYLON.MeshBuilder.CreateBox(
-        "brickBody",
-        { width, height, depth },
-        scene
-      );
-      body.position.y = height / 2;
-      body.material = mat;
-      body.parent = root;
-
-      const studDiam = Math.min(width / studsX, depth / studsZ) * 0.56;
-      for (let ix = 0; ix < studsX; ix++) {
-        for (let iz = 0; iz < studsZ; iz++) {
-          const stud = BABYLON.MeshBuilder.CreateCylinder(
-            "stud",
-            { diameter: studDiam, height: 0.3, tessellation: 14 },
-            scene
-          );
-          const sx = -width / 2 + (width / studsX) * (ix + 0.5);
-          const sz = -depth / 2 + (depth / studsZ) * (iz + 0.5);
-          stud.position.set(sx, height + 0.15, sz);
-          stud.material = mat;
-          stud.parent = root;
-        }
-      }
+      mountProceduralProp({
+        graph: "toyBrick",
+        params: { width, height, depth, studsX, studsZ },
+        root: root,
+        materials: mat,
+        castShadows: true,
+        metadata: { isEnvironment: true, isToy: true }
+      });
 
       const spanX = Math.abs(width * Math.cos(rotY)) + Math.abs(depth * Math.sin(rotY));
       const spanZ = Math.abs(width * Math.sin(rotY)) + Math.abs(depth * Math.cos(rotY));
@@ -1580,33 +1560,13 @@
       const pivot = new BABYLON.TransformNode("bucketPivot", scene);
       pivot.parent = root;
 
-      const body = BABYLON.MeshBuilder.CreateCylinder(
-        "bucketBody",
-        { diameterTop: 2.9, diameterBottom: 2.1, height: 2.7, tessellation: 20 },
-        scene
-      );
-      body.position.y = 1.35;
-      body.material = mat;
-      body.parent = pivot;
-
-      const rim = BABYLON.MeshBuilder.CreateTorus(
-        "bucketRim",
-        { diameter: 2.95, thickness: 0.24, tessellation: 20 },
-        scene
-      );
-      rim.position.y = 2.65;
-      rim.material = mat;
-      rim.parent = pivot;
-
-      const handle = BABYLON.MeshBuilder.CreateTorus(
-        "bucketHandle",
-        { diameter: 2.9, thickness: 0.14, tessellation: 18 },
-        scene
-      );
-      handle.position.y = 2.65;
-      handle.rotation.x = Math.PI / 2 + 0.35;
-      handle.material = whiteToyMat;
-      handle.parent = pivot;
+      mountProceduralProp({
+        graph: "beachBucket",
+        root: pivot,
+        materials: [mat, whiteToyMat],
+        castShadows: true,
+        metadata: { isEnvironment: true, isToy: true }
+      });
 
       if (tipped) {
         pivot.position.y = 1.25;
@@ -1940,164 +1900,12 @@
       const trimMat = isTanVariant ? tanDarkPlasticMat : armyDarkOliveMat;
       const canopyMat = isTanVariant ? armyTanCanvasMat : armyCanvasMat;
 
-      // Heavy 6x6 chassis frame & front bumper
-      const chassis = BABYLON.MeshBuilder.CreateBox(
-        "truckChassis",
-        { width: 3.1, height: 0.52, depth: 7.5 },
-        scene
-      );
-      chassis.position.set(0, 0.82, 0.1);
-      chassis.material = tireMat;
-      chassis.parent = root;
-
-      const bumper = BABYLON.MeshBuilder.CreateBox(
-        "truckBumper",
-        { width: 3.55, height: 0.36, depth: 0.38 },
-        scene
-      );
-      bumper.position.set(0, 0.84, -3.75);
-      bumper.material = trimMat;
-      bumper.parent = root;
-
-      // Engine hood & front radiator grille
-      const hood = BABYLON.MeshBuilder.CreateBox(
-        "truckHood",
-        { width: 2.6, height: 1.22, depth: 2.05 },
-        scene
-      );
-      hood.position.set(0, 1.62, -2.6);
-      hood.material = bodyMat;
-      hood.parent = root;
-
-      const grille = BABYLON.MeshBuilder.CreateBox(
-        "truckGrille",
-        { width: 2.2, height: 0.92, depth: 0.14 },
-        scene
-      );
-      grille.position.set(0, 1.6, -3.62);
-      grille.material = trimMat;
-      grille.parent = root;
-
-      [-0.82, 0.82].forEach((hx, idx) => {
-        const hl = BABYLON.MeshBuilder.CreateCylinder(
-          "truckLight_" + idx,
-          { diameter: 0.36, height: 0.14, tessellation: 12 },
-          scene
-        );
-        hl.rotation.x = Math.PI / 2;
-        hl.position.set(hx, 1.64, -3.66);
-        hl.material = yellowToyMat;
-        hl.parent = root;
-      });
-
-      // White Allied Star emblem on hood
-      const starBadge = BABYLON.MeshBuilder.CreateCylinder(
-        "truckStar",
-        { diameter: 0.92, height: 0.05, tessellation: 5 },
-        scene
-      );
-      starBadge.position.set(0, 2.25, -2.6);
-      starBadge.material = whiteToyMat;
-      starBadge.parent = root;
-
-      // Driver Cab & Roof
-      const cab = BABYLON.MeshBuilder.CreateBox(
-        "truckCab",
-        { width: 3.1, height: 1.38, depth: 1.85 },
-        scene
-      );
-      cab.position.set(0, 1.72, -0.75);
-      cab.material = bodyMat;
-      cab.parent = root;
-
-      const cabBack = BABYLON.MeshBuilder.CreateBox(
-        "truckCabBack",
-        { width: 3.05, height: 1.0, depth: 0.25 },
-        scene
-      );
-      cabBack.position.set(0, 2.75, 0.05);
-      cabBack.material = bodyMat;
-      cabBack.parent = root;
-
-      const cabRoof = BABYLON.MeshBuilder.CreateBox(
-        "truckCabRoof",
-        { width: 3.12, height: 0.24, depth: 1.85 },
-        scene
-      );
-      cabRoof.position.set(0, 3.22, -0.75);
-      cabRoof.material = trimMat;
-      cabRoof.parent = root;
-
-      [-1.38, 1.38].forEach((px, idx) => {
-        const pillar = BABYLON.MeshBuilder.CreateBox(
-          "truckPillar_" + idx,
-          { width: 0.18, height: 0.82, depth: 0.18 },
-          scene
-        );
-        pillar.position.set(px, 2.78, -1.55);
-        pillar.material = trimMat;
-        pillar.parent = root;
-      });
-
-      // Rear Cargo Bed + Arched Troop Canopy Cover
-      const cargoBed = BABYLON.MeshBuilder.CreateBox(
-        "truckCargoBed",
-        { width: 3.4, height: 1.35, depth: 4.35 },
-        scene
-      );
-      cargoBed.position.set(0, 1.72, 2.25);
-      cargoBed.material = bodyMat;
-      cargoBed.parent = root;
-
-      const canopyWalls = BABYLON.MeshBuilder.CreateBox(
-        "truckCanopyWalls",
-        { width: 3.32, height: 1.15, depth: 4.28 },
-        scene
-      );
-      canopyWalls.position.set(0, 2.82, 2.25);
-      canopyWalls.material = canopyMat;
-      canopyWalls.parent = root;
-
-      const canopyArch = BABYLON.MeshBuilder.CreateCylinder(
-        "truckCanopyArch",
-        { diameter: 3.32, height: 4.28, tessellation: 16 },
-        scene
-      );
-      canopyArch.rotation.x = Math.PI / 2;
-      canopyArch.scaling.y = 0.42;
-      canopyArch.position.set(0, 3.38, 2.25);
-      canopyArch.material = canopyMat;
-      canopyArch.parent = root;
-
-      // 6 Military Off-Road Tires
-      const wheelCoords = [
-        [-1.68, -2.65],
-        [1.68, -2.65],
-        [-1.68, 1.05],
-        [1.68, 1.05],
-        [-1.68, 3.05],
-        [1.68, 3.05]
-      ];
-      wheelCoords.forEach(([wx, wz], idx) => {
-        const wheel = BABYLON.MeshBuilder.CreateCylinder(
-          "truckWheel_" + idx,
-          { diameter: 1.56, height: 0.58, tessellation: 14 },
-          scene
-        );
-        wheel.rotation.z = Math.PI / 2;
-        wheel.position.set(wx, 0.78, wz);
-        wheel.material = tireMat;
-        wheel.parent = root;
-
-        const hub = BABYLON.MeshBuilder.CreateCylinder(
-          "truckHub_" + idx,
-          { diameter: 0.76, height: 0.62, tessellation: 10 },
-          scene
-        );
-        hub.rotation.z = Math.PI / 2;
-        hub.position.set(wx, 0.78, wz);
-        hub.material = trimMat;
-        hub.parent = root;
+      mountProceduralProp({
+        graph: "armyTruck",
+        root: root,
+        materials: [tireMat, bodyMat, trimMat, yellowToyMat, whiteToyMat, canopyMat],
+        castShadows: true,
+        metadata: { isEnvironment: true, isToy: true }
       });
 
       const w = 3.7;
@@ -2117,192 +1925,12 @@
       const bodyMat = isTanVariant ? tanPlasticMat : armyOliveMat;
       const trimMat = isTanVariant ? tanDarkPlasticMat : armyDarkOliveMat;
 
-      // Jeep Chassis & Front Bumper
-      const chassis = BABYLON.MeshBuilder.CreateBox(
-        "jeepChassis",
-        { width: 2.55, height: 0.44, depth: 4.65 },
-        scene
-      );
-      chassis.position.set(0, 0.68, 0);
-      chassis.material = tireMat;
-      chassis.parent = root;
-
-      const bumper = BABYLON.MeshBuilder.CreateBox(
-        "jeepBumper",
-        { width: 2.88, height: 0.28, depth: 0.3 },
-        scene
-      );
-      bumper.position.set(0, 0.72, -2.42);
-      bumper.material = trimMat;
-      bumper.parent = root;
-
-      // Flat-Fender Hood & Grille
-      const hood = BABYLON.MeshBuilder.CreateBox(
-        "jeepHood",
-        { width: 2.35, height: 0.92, depth: 1.75 },
-        scene
-      );
-      hood.position.set(0, 1.32, -1.4);
-      hood.material = bodyMat;
-      hood.parent = root;
-
-      const fenders = BABYLON.MeshBuilder.CreateBox(
-        "jeepFenders",
-        { width: 2.9, height: 0.28, depth: 1.65 },
-        scene
-      );
-      fenders.position.set(0, 1.22, -1.4);
-      fenders.material = bodyMat;
-      fenders.parent = root;
-
-      [-0.72, 0.72].forEach((hx, idx) => {
-        const hl = BABYLON.MeshBuilder.CreateCylinder(
-          "jeepLight_" + idx,
-          { diameter: 0.32, height: 0.12, tessellation: 12 },
-          scene
-        );
-        hl.rotation.x = Math.PI / 2;
-        hl.position.set(hx, 1.38, -2.3);
-        hl.material = yellowToyMat;
-        hl.parent = root;
-      });
-
-      const hoodStar = BABYLON.MeshBuilder.CreateCylinder(
-        "jeepStar",
-        { diameter: 0.78, height: 0.05, tessellation: 5 },
-        scene
-      );
-      hoodStar.position.set(0, 1.8, -1.4);
-      hoodStar.material = whiteToyMat;
-      hoodStar.parent = root;
-
-      // Open-Top Jeep Tub, Seats & Windshield Frame
-      const tubFloor = BABYLON.MeshBuilder.CreateBox(
-        "jeepTubFloor",
-        { width: 2.6, height: 0.35, depth: 2.75 },
-        scene
-      );
-      tubFloor.position.set(0, 1.02, 0.8);
-      tubFloor.material = bodyMat;
-      tubFloor.parent = root;
-
-      [-1.15, 1.15].forEach((sx, idx) => {
-        const sideWall = BABYLON.MeshBuilder.CreateBox(
-          "jeepSide_" + idx,
-          { width: 0.32, height: 0.82, depth: 2.75 },
-          scene
-        );
-        sideWall.position.set(sx, 1.48, 0.8);
-        sideWall.material = bodyMat;
-        sideWall.parent = root;
-      });
-
-      const tailgate = BABYLON.MeshBuilder.CreateBox(
-        "jeepTailgate",
-        { width: 2.6, height: 0.88, depth: 0.32 },
-        scene
-      );
-      tailgate.position.set(0, 1.5, 2.05);
-      tailgate.material = bodyMat;
-      tailgate.parent = root;
-
-      [-0.58, 0.58].forEach((sx, idx) => {
-        const seat = BABYLON.MeshBuilder.CreateBox(
-          "jeepSeat_" + idx,
-          { width: 0.78, height: 0.68, depth: 0.65 },
-          scene
-        );
-        seat.position.set(sx, 1.45, 0.25);
-        seat.material = trimMat;
-        seat.parent = root;
-      });
-
-      const windshield = BABYLON.MeshBuilder.CreateBox(
-        "jeepWindshield",
-        { width: 2.45, height: 0.82, depth: 0.14 },
-        scene
-      );
-      windshield.position.set(0, 2.12, -0.45);
-      windshield.rotation.x = -0.18;
-      windshield.material = trimMat;
-      windshield.parent = root;
-
-      // Pedestal-Mounted .50 Cal Machine Gun in Rear Bed
-      const gunPost = BABYLON.MeshBuilder.CreateCylinder(
-        "jeepGunPost",
-        { diameter: 0.22, height: 1.25, tessellation: 10 },
-        scene
-      );
-      gunPost.position.set(0, 1.75, 1.15);
-      gunPost.material = trimMat;
-      gunPost.parent = root;
-
-      const gunReceiver = BABYLON.MeshBuilder.CreateBox(
-        "jeepGunReceiver",
-        { width: 0.26, height: 0.28, depth: 0.72 },
-        scene
-      );
-      gunReceiver.position.set(0, 2.42, 0.95);
-      gunReceiver.material = tireMat;
-      gunReceiver.parent = root;
-
-      const gunBarrel = BABYLON.MeshBuilder.CreateCylinder(
-        "jeepGunBarrel",
-        { diameter: 0.1, height: 1.05, tessellation: 8 },
-        scene
-      );
-      gunBarrel.rotation.x = Math.PI / 2;
-      gunBarrel.position.set(0, 2.44, 0.12);
-      gunBarrel.material = tireMat;
-      gunBarrel.parent = root;
-
-      // Spare Tire & Jerrycan on Rear Tailgate
-      const spareTire = BABYLON.MeshBuilder.CreateCylinder(
-        "jeepSpareTire",
-        { diameter: 1.25, height: 0.42, tessellation: 14 },
-        scene
-      );
-      spareTire.rotation.x = Math.PI / 2;
-      spareTire.position.set(0.55, 1.52, 2.35);
-      spareTire.material = tireMat;
-      spareTire.parent = root;
-
-      const jerrycan = BABYLON.MeshBuilder.CreateBox(
-        "jeepJerrycan",
-        { width: 0.58, height: 0.78, depth: 0.34 },
-        scene
-      );
-      jerrycan.position.set(-0.62, 1.52, 2.32);
-      jerrycan.material = trimMat;
-      jerrycan.parent = root;
-
-      // 4 Off-Road Jeep Wheels
-      const wheelCoords = [
-        [-1.38, -1.45],
-        [1.38, -1.45],
-        [-1.38, 1.42],
-        [1.38, 1.42]
-      ];
-      wheelCoords.forEach(([wx, wz], idx) => {
-        const wheel = BABYLON.MeshBuilder.CreateCylinder(
-          "jeepWheel_" + idx,
-          { diameter: 1.36, height: 0.52, tessellation: 14 },
-          scene
-        );
-        wheel.rotation.z = Math.PI / 2;
-        wheel.position.set(wx, 0.68, wz);
-        wheel.material = tireMat;
-        wheel.parent = root;
-
-        const hub = BABYLON.MeshBuilder.CreateCylinder(
-          "jeepHub_" + idx,
-          { diameter: 0.66, height: 0.56, tessellation: 10 },
-          scene
-        );
-        hub.rotation.z = Math.PI / 2;
-        hub.position.set(wx, 0.68, wz);
-        hub.material = trimMat;
-        hub.parent = root;
+      mountProceduralProp({
+        graph: "armyJeep",
+        root: root,
+        materials: [tireMat, bodyMat, trimMat, yellowToyMat, whiteToyMat],
+        castShadows: true,
+        metadata: { isEnvironment: true, isToy: true }
       });
 
       const w = 3.0;
@@ -2328,80 +1956,37 @@
       boxFloor.metadata = { isEnvironment: true, isSand: true };
       boxFloor.parent = envRootNode;
 
-      // Crinkled white tissue paper sheets lining the bottom of the shoe box
-      const tissue1 = BABYLON.MeshBuilder.CreateGround(
-        "tissueSheet1",
-        { width: boxW * 0.72, height: boxD * 0.68 },
-        scene
-      );
-      tissue1.position.set(-1.5, 0.02, 1.2);
-      tissue1.rotation.y = 0.09;
-      tissue1.material = tissuePaperMat;
-      tissue1.receiveShadows = true;
-      tissue1.isPickable = false;
-      tissue1.parent = envRootNode;
-
-      const tissue2 = BABYLON.MeshBuilder.CreateGround(
-        "tissueSheet2",
-        { width: boxW * 0.58, height: boxD * 0.52 },
-        scene
-      );
-      tissue2.position.set(2.4, 0.035, -3.0);
-      tissue2.rotation.y = -0.14;
-      tissue2.material = tissuePaperMat;
-      tissue2.receiveShadows = true;
-      tissue2.isPickable = false;
-      tissue2.parent = envRootNode;
-
-      // 2. Cardboard Shoe Box Walls (Inner corrugated cardboard + outer athletic sneaker box wrapper)
-      const wallH = 5.0;
-      const wallT = 0.9;
-      const fullW = boxW + wallT * 2;
-      const fullD = boxD + wallT * 2;
-
-      const boxWalls = [
-        { x: 0, z: -WORLD_LIMIT_Z - wallT / 2, w: fullW, d: wallT },
-        { x: 0, z: WORLD_LIMIT_Z + wallT / 2, w: fullW, d: wallT },
-        { x: -WORLD_LIMIT_X - wallT / 2, z: 0, w: wallT, d: boxD },
-        { x: WORLD_LIMIT_X + wallT / 2, z: 0, w: wallT, d: boxD }
+      // Crinkled white tissue paper sheets lining the bottom of the shoe box (graph adds a noise crinkle)
+      const tissueSheets = [
+        { w: 0.72, d: 0.68, x: -1.5, y: 0.02, z: 1.2, rotY: 0.09, seed: [0, 0, 0] },
+        { w: 0.58, d: 0.52, x: 2.4, y: 0.035, z: -3.0, rotY: -0.14, seed: [17.3, 0, -9.1] }
       ];
-
-      boxWalls.forEach((bw, idx) => {
-        const wall = BABYLON.MeshBuilder.CreateBox(
-          "shoeboxWall_" + idx,
-          { width: bw.w, height: wallH, depth: bw.d },
-          scene
-        );
-        wall.position.set(bw.x, wallH / 2 - 0.1, bw.z);
-        wall.material = cardboardMat;
-        wall.receiveShadows = true;
-        shadowGen.addShadowCaster(wall);
-        wall.metadata = { isEnvironment: true, isWall: true };
-        wall.parent = envRootNode;
-
-        // Folded top cardboard rim
-        const rim = BABYLON.MeshBuilder.CreateBox(
-          "shoeboxRim_" + idx,
-          { width: bw.w + 0.16, height: 0.28, depth: bw.d + 0.16 },
-          scene
-        );
-        rim.position.set(bw.x, wallH - 0.1, bw.z);
-        rim.material = shoeboxOuterMat;
-        rim.isPickable = false;
-        rim.parent = envRootNode;
+      tissueSheets.forEach((t, idx) => {
+        const tissueRoot = new BABYLON.TransformNode("tissueSheet" + (idx + 1), scene);
+        tissueRoot.position.set(t.x, t.y, t.z);
+        tissueRoot.rotation.y = t.rotY;
+        tissueRoot.parent = envRootNode;
+        mountProceduralProp({
+          graph: "tissueSheet",
+          params: { width: boxW * t.w, depth: boxD * t.d, seed: t.seed },
+          root: tissueRoot,
+          materials: tissuePaperMat,
+          castShadows: false,
+          pickable: false,
+          metadata: { isEnvironment: true }
+        });
       });
 
-      // Outer decorative sneaker box panels on the long sides
-      [-1, 1].forEach((sideSign, idx) => {
-        const outerWrap = BABYLON.MeshBuilder.CreateBox(
-          "shoeboxOuterWrap_" + idx,
-          { width: 0.15, height: wallH - 0.3, depth: fullD + 0.1 },
-          scene
-        );
-        outerWrap.position.set(sideSign * (WORLD_LIMIT_X + wallT + 0.08), wallH / 2 - 0.1, 0);
-        outerWrap.material = shoeboxOuterMat;
-        outerWrap.isPickable = false;
-        outerWrap.parent = envRootNode;
+      // 2. Cardboard Shoe Box Walls (Inner corrugated cardboard + outer athletic sneaker box wrapper)
+      const shellRoot = new BABYLON.TransformNode("shoeboxShell", scene);
+      shellRoot.parent = envRootNode;
+      mountProceduralProp({
+        graph: "shoeboxShell",
+        params: { limitX: WORLD_LIMIT_X, limitZ: WORLD_LIMIT_Z },
+        root: shellRoot,
+        materials: [cardboardMat, shoeboxOuterMat],
+        castShadows: true,
+        metadata: { isEnvironment: true, isWall: true }
       });
 
       // 3. ARMY TRUCKS & JEEPS FOR CLOSE-QUARTERS COVER INSIDE THE SHOE BOX
@@ -2715,6 +2300,7 @@
       }
       physicsBall = null;
       obstacles.length = 0;
+      proceduralProps = [];
       builtMapType = targetMapType;
       builtWorldLimit = targetLimit;
 
@@ -2784,25 +2370,21 @@
 
     rebuildSandboxEnvironment(WORLD_LIMIT);
 
+    loadSandNodeMaterial().catch((error) => {
+      sandNodeMat = null;
+      sandNodeMatFailed = true;
+      // Keep the battlefield playable: show the ground untextured rather than leave a hole.
+      if (activeSandMesh && !activeSandMesh.isDisposed()) activeSandMesh.isVisible = true;
+      console.error("Sand node material (materials/sandboxSand.json) failed to load.", error);
+    });
+
+    loadPropGraphs().catch((error) => {
+      console.error("Prop graphs failed to load; props will be missing.", error);
+    });
+
     // =========================================================================
     // 6. RIGGED GLTF SOLDIERS & EMBEDDED ANIMATION GROUPS
     // =========================================================================
-    // Shared materials for overhead health bars (avoids creating 2 materials per bot)
-    const sharedHpBgMat = new BABYLON.StandardMaterial("sharedHpBgMat", scene);
-    sharedHpBgMat.emissiveColor = new BABYLON.Color3(0.08, 0.08, 0.08);
-    sharedHpBgMat.disableLighting = true;
-    sharedHpBgMat.freeze();
-
-    const sharedHpGreenMat = new BABYLON.StandardMaterial("sharedHpGreenMat", scene);
-    sharedHpGreenMat.emissiveColor = new BABYLON.Color3(0.32, 0.98, 0.28);
-    sharedHpGreenMat.disableLighting = true;
-    sharedHpGreenMat.freeze();
-
-    const sharedHpTanMat = new BABYLON.StandardMaterial("sharedHpTanMat", scene);
-    sharedHpTanMat.emissiveColor = new BABYLON.Color3(1.0, 0.72, 0.26);
-    sharedHpTanMat.disableLighting = true;
-    sharedHpTanMat.freeze();
-
     const SOLDIER_CLIPS = Object.freeze({
       run: "Run_and_Shoot",
       vault: "Vault_with_Rifle",
@@ -2816,18 +2398,66 @@
     const RIFLE_VERTICAL_EXTENT = (0.145264 - RIFLE_TRIGGER.y) * RIFLE_SCALE;
     const RIFLE_REAR_CLEARANCE = 0.08;
     const DEATH_RIFLE_RELEASE_PROGRESS = 0.25;
+    // Crossfade step per animation frame (~8 frames ≈ 0.14 s at 60 fps).
+    const SOLDIER_BLEND_SPEED = 0.12;
+    const DEATH_FADE_SECONDS = 0.6;
+    const DEATH_RIFLE_SINK_DEPTH = 0.35;
+    // Safety net in case the death clip's end event never arrives.
+    const DEATH_SEQUENCE_TIMEOUT = 5.0;
+    // Bots beyond this distance refresh their rifle pose every third frame.
+    const RIFLE_FULL_RATE_DISTANCE_SQ = 40 * 40;
     const pendingSoldierModels = new Set();
+    const riggedSoldierModels = new Set();
     let soldierAssets = null;
     let soldierAssetError = null;
 
+    // Both GLB materials are replaced by the shared team plastics, so skip decoding their textures.
+    function loadSoldierAssetContainer(file) {
+      return BABYLON.LoadAssetContainerAsync("models/" + file, scene, {
+        pluginExtension: ".glb",
+        pluginOptions: { gltf: { skipMaterials: true } }
+      });
+    }
+
+    // Bakes the glTF root (handedness flip), barrel yaw, trigger offset and RIFLE_SCALE into one
+    // weaponMount-space mesh, then returns hidden per-team sources for cheap per-soldier instances.
+    function createRifleSources(container) {
+      const rifleMesh = container.meshes.find((mesh) => mesh.getTotalVertices() > 0);
+      if (!rifleMesh) throw new Error("Rifle GLB contains no geometry");
+      const socket = new BABYLON.TransformNode("rifleBakeSocket", scene);
+      socket.position.set(
+        -RIFLE_TRIGGER.z * RIFLE_SCALE,
+        -RIFLE_TRIGGER.y * RIFLE_SCALE,
+        RIFLE_TRIGGER.x * RIFLE_SCALE
+      );
+      socket.scaling.setAll(RIFLE_SCALE);
+      socket.rotation.y = -Math.PI / 2;
+      container.rootNodes.forEach((node) => { node.parent = socket; });
+      const chain = [];
+      for (let node = rifleMesh; node; node = node.parent) chain.unshift(node);
+      chain.forEach((node) => node.computeWorldMatrix(true));
+      const vertexData = BABYLON.VertexData.ExtractFromMesh(rifleMesh, true, true);
+      vertexData.transform(rifleMesh.getWorldMatrix());
+      container.rootNodes.forEach((node) => { node.parent = null; });
+      socket.dispose();
+
+      const green = new BABYLON.Mesh("greenRifleSource", scene);
+      vertexData.applyToMesh(green);
+      const tan = green.clone("tanRifleSource");
+      const sources = { green, tan };
+      for (const [team, mesh] of Object.entries(sources)) {
+        mesh.material = team === "green" ? greenDarkPlasticMat : tanDarkPlasticMat;
+        mesh.isVisible = false;
+        mesh.isPickable = false;
+        mesh.receiveShadows = true;
+      }
+      return sources;
+    }
+
     async function loadRiggedSoldierAssets() {
       const containers = await Promise.allSettled([
-        BABYLON.SceneLoader.LoadAssetContainerAsync(
-          "models/", "Meshy_AI_rigged_green_All_Animations.glb?v=death-with-rifle", scene
-        ),
-        BABYLON.SceneLoader.LoadAssetContainerAsync(
-          "models/", "Meshy_AI_vintage_toy_m16_rifle.glb", scene
-        )
+        loadSoldierAssetContainer("Meshy_AI_rigged_green_All_Animations.glb?v=death-with-rifle"),
+        loadSoldierAssetContainer("Meshy_AI_vintage_toy_m16_rifle.glb")
       ]);
       const failed = containers.find((result) => result.status === "rejected");
       if (failed) {
@@ -2866,7 +2496,8 @@
             })));
           });
         });
-        soldierAssets = { body, rifle };
+        soldierAssets = { body, rifleSources: createRifleSources(rifle) };
+        rifle.dispose();
       } catch (error) {
         body.dispose();
         rifle.dispose();
@@ -2876,56 +2507,75 @@
       pendingSoldierModels.clear();
     }
 
-    function setSoldierClip(model, name, playing) {
+    // Clip changes crossfade through the soldier's AnimationPropertiesOverride. `snap` skips the
+    // crossfade for spawns/respawns so a teleported soldier never visibly "stands up".
+    function setSoldierClip(model, name, playing, snap = false) {
       const changed = model.animationName !== name || model.animationPlaying !== playing;
-      if (!model.animationGroups || !changed) {
+      if (!model.animationGroups || (!changed && !snap)) {
         model.animationName = name;
         model.animationPlaying = playing;
         return;
       }
+      const group = model.animationGroups[name];
+      // Idle holds the first run frame at speed 0, so moving again continues the same playback.
+      if (!snap && model.animationName === name && playing && group.isPlaying) {
+        model.animationPlaying = true;
+        group.speedRatio = 1;
+        return;
+      }
       model.animationName = null;
-      Object.values(model.animationGroups).forEach((group) => group.stop());
+      Object.values(model.animationGroups).forEach((clip) => clip.stop());
       model.animationName = name;
       model.animationPlaying = playing;
-      const group = model.animationGroups[name];
-      group.start(name !== SOLDIER_CLIPS.vault && name !== SOLDIER_CLIPS.death);
-      if (!playing) {
-        group.goToFrame(group.from);
-        group.pause();
-      }
+      // RuntimeAnimations capture enableBlending from the target override when they start.
+      model.blendOverride.enableBlending = !snap;
+      group.start(
+        name !== SOLDIER_CLIPS.vault && name !== SOLDIER_CLIPS.death,
+        playing ? 1 : 0,
+        group.from,
+        group.to
+      );
+      model.blendOverride.enableBlending = true;
     }
 
     function attachRiggedSoldier(model) {
       if (model.root.isDisposed()) return;
-      const { body, rifle } = soldierAssets;
+      const { body, rifleSources } = soldierAssets;
       const bodyInstance = body.instantiateModelsToScene(
         (name) => model.prefix + name, false, { doNotInstantiate: true }
       );
-      const rifleInstance = rifle.instantiateModelsToScene(
-        (name) => model.prefix + "rifle_" + name, false, { doNotInstantiate: true }
-      );
-      model.instances = [bodyInstance, rifleInstance];
+      model.instances = [bodyInstance];
+      model.bodyRoots = bodyInstance.rootNodes;
       bodyInstance.rootNodes.forEach((node) => { node.parent = model.visualRoot; });
-      rifleInstance.rootNodes.forEach((node) => { node.parent = model.rifleGeometry; });
       model.animationGroups = Object.fromEntries(
         body.animationGroups.map((group, index) => [group.name, bodyInstance.animationGroups[index]])
       );
+      // Animation objects are shared by every soldier, so blending is configured per target node.
+      model.blendOverride = new BABYLON.AnimationPropertiesOverride();
+      model.blendOverride.enableBlending = true;
+      model.blendOverride.blendingSpeed = SOLDIER_BLEND_SPEED;
+      for (const group of Object.values(model.animationGroups)) {
+        for (const { target } of group.targetedAnimations) {
+          target.animationPropertiesOverride = model.blendOverride;
+        }
+      }
       const nodes = model.visualRoot.getDescendants();
       model.rightHand = nodes.find((node) => node.name === model.prefix + "mixamorig:RightHand");
       model.leftHand = nodes.find((node) => node.name === model.prefix + "mixamorig:LeftHand");
-      bodyInstance.rootNodes.flatMap((node) => node.getChildMeshes()).forEach((mesh) => {
+      model.bodyMeshes = bodyInstance.rootNodes.flatMap((node) => node.getChildMeshes());
+      model.bodyMesh = model.bodyMeshes.find((mesh) => mesh.skeleton) || model.bodyMeshes[0];
+      model.bodyMeshes.forEach((mesh) => {
         mesh.material = model.team === "green" ? greenPlasticMat : tanPlasticMat;
         mesh.receiveShadows = true;
         mesh.isPickable = false;
         if (model.castShadows) shadowGen.addShadowCaster(mesh);
       });
-      model.weaponMount.getChildMeshes().forEach((mesh) => {
-        if (mesh === model.muzzleFlash) return;
-        mesh.material = model.team === "green" ? greenDarkPlasticMat : tanDarkPlasticMat;
-        mesh.receiveShadows = true;
-        mesh.isPickable = false;
-        if (model.castShadows) shadowGen.addShadowCaster(mesh);
-      });
+      model.rifleInstance = rifleSources[model.team === "green" ? "green" : "tan"].createInstance(
+        model.prefix + "rifle"
+      );
+      model.rifleInstance.parent = model.weaponMount;
+      model.rifleInstance.isPickable = false;
+      if (model.castShadows) shadowGen.addShadowCaster(model.rifleInstance);
       bodyInstance.skeletons.forEach((skeleton) => {
         skeleton.useTextureToStoreBoneMatrices = true;
       });
@@ -2935,15 +2585,42 @@
         model.animationPlaying = false;
       });
       model.animationGroups[SOLDIER_CLIPS.death].onAnimationGroupEndObservable.add(() => {
-        if (model.animationName === SOLDIER_CLIPS.death) model.animationPlaying = false;
+        if (model.animationName !== SOLDIER_CLIPS.death) return;
+        model.animationPlaying = false;
+        beginDeathFade(model);
       });
       const name = model.animationName;
       const playing = model.animationPlaying;
       model.animationName = null;
-      setSoldierClip(model, name, playing);
-      model.weaponObserver = scene.onAfterAnimationsObservable.add(() => updateSoldierRifle(model));
+      setSoldierClip(model, name, playing, true);
+      riggedSoldierModels.add(model);
       updateSoldierRifle(model);
     }
+
+    // One shared post-animation pass keeps each rifle in its soldier's hands. Off-screen bots are
+    // skipped (their rifle pose is local to the soldier, so it simply resumes when visible) and
+    // distant bots refresh every third frame. The local player and dying soldiers always update.
+    let rifleUpdateFrame = 0;
+    scene.onAfterAnimationsObservable.add(() => {
+      rifleUpdateFrame++;
+      const cam = scene.activeCamera;
+      const planes = scene.frustumPlanes;
+      const playerModel = player ? player.model : null;
+      for (const model of riggedSoldierModels) {
+        if (model.rifleDropped) continue;
+        if (model !== playerModel && !model.deathStarted && cam && planes) {
+          if (model.bodyMesh && !model.bodyMesh.isInFrustum(planes)) continue;
+          if (
+            BABYLON.Vector3.DistanceSquared(model.root.position, cam.globalPosition) >
+              RIFLE_FULL_RATE_DISTANCE_SQ &&
+            (rifleUpdateFrame + model.updateSlot) % 3 !== 0
+          ) {
+            continue;
+          }
+        }
+        updateSoldierRifle(model);
+      }
+    });
 
     function updateSoldierRifle(model) {
       if (model.rifleDropped) return;
@@ -3009,12 +2686,55 @@
       if (model.weaponMount.position.y <= ground) {
         model.weaponMount.position.y = ground;
         model.weaponMount.rotationQuaternion.copyFrom(model.rifleRestRotation);
+        model.rifleRestY = ground;
         model.rifleSettled = true;
       }
     }
 
+    // Death choreography: blended fall (death clip) → fade the body / sink the dropped rifle →
+    // hidden ("done"). The local player's knocked-down UI waits for the fall to finish, and the
+    // authority only respawns AI once the sequence is done (see the auto-respawn loop).
+    function beginDeathFade(model) {
+      if (model.deathPhase !== "falling") return;
+      model.deathPhase = "fading";
+      model.deathFadeTime = 0;
+      if (player && player.model === model && !player.alive && isPlayerKnockedDown && !gameEnded) {
+        uiNotify("ui.playerKnockedDown");
+      }
+    }
+
+    function updateDeathSequence(model, dt) {
+      model.deathTime += dt;
+      if (model.deathPhase === "falling" && model.deathTime > DEATH_SEQUENCE_TIMEOUT) {
+        model.animationPlaying = false;
+        beginDeathFade(model);
+      }
+      if (model.deathPhase !== "fading") return;
+      model.deathFadeTime = Math.min(DEATH_FADE_SECONDS, model.deathFadeTime + dt);
+      const t = model.deathFadeTime / DEATH_FADE_SECONDS;
+      model.bodyMeshes.forEach((mesh) => { mesh.visibility = 1 - t; });
+      if (model.rifleSettled) {
+        model.weaponMount.position.y = model.rifleRestY - DEATH_RIFLE_SINK_DEPTH * t;
+      }
+      if (t >= 1) {
+        model.deathPhase = "done";
+        model.bodyRoots.forEach((node) => node.setEnabled(false));
+        model.weaponMount.setEnabled(false);
+      }
+    }
+
+    function isDeathSequenceDone(model) {
+      return !model.animationGroups || model.deathPhase === "done";
+    }
+
     function resetSoldierDeath(model) {
       model.deathStarted = false;
+      model.deathPhase = null;
+      model.deathTime = 0;
+      model.deathFadeTime = 0;
+      model.bodyMeshes.forEach((mesh) => { mesh.visibility = 1; });
+      model.bodyRoots.forEach((node) => node.setEnabled(true));
+      model.weaponMount.setEnabled(true);
       model.rifleDropped = false;
       model.rifleSettled = false;
       model.rifleDropTime = 0;
@@ -3040,16 +2760,6 @@
       const weaponMount = new BABYLON.TransformNode(prefix + "weaponMount", scene);
       weaponMount.parent = visualRoot;
       weaponMount.rotationQuaternion = BABYLON.Quaternion.Identity();
-      const rifleGeometry = new BABYLON.TransformNode(prefix + "rifleGeometry", scene);
-      rifleGeometry.parent = weaponMount;
-      // The glTF handedness conversion and this yaw map source -X (barrel) onto local +Z.
-      rifleGeometry.position.set(
-        -RIFLE_TRIGGER.z * RIFLE_SCALE,
-        -RIFLE_TRIGGER.y * RIFLE_SCALE,
-        RIFLE_TRIGGER.x * RIFLE_SCALE
-      );
-      rifleGeometry.scaling.setAll(RIFLE_SCALE);
-      rifleGeometry.rotation.y = -Math.PI / 2;
       const muzzleFlash = BABYLON.MeshBuilder.CreateSphere(
         prefix + "muzzleFlash", { diameterX: 0.22, diameterY: 0.22, diameterZ: 0.35, segments: 6 }, scene
       );
@@ -3063,30 +2773,22 @@
       muzzleFlash.isVisible = false;
       muzzleFlash.isPickable = false;
 
+      // Screen-space plate controls are bound to this anchor by the shared overhead GUI.
       let overheadGroup = null;
-      let overheadBarFill = null;
       if (showOverheadBar) {
         overheadGroup = new BABYLON.TransformNode(prefix + "overhead", scene);
         overheadGroup.position.set(0, 2.45, 0);
-        overheadGroup.billboardMode = BABYLON.TransformNode.BILLBOARDMODE_ALL;
         overheadGroup.parent = root;
-        const bgPlane = BABYLON.MeshBuilder.CreatePlane(prefix + "hpBg", { width: 0.96, height: 0.13 }, scene);
-        bgPlane.material = sharedHpBgMat;
-        bgPlane.isPickable = false;
-        bgPlane.parent = overheadGroup;
-        overheadBarFill = BABYLON.MeshBuilder.CreatePlane(prefix + "hpFill", { width: 0.9, height: 0.085 }, scene);
-        overheadBarFill.setPivotPoint(new BABYLON.Vector3(-0.45, 0, 0));
-        overheadBarFill.position.set(0, 0, -0.01);
-        overheadBarFill.material = team === "green" ? sharedHpGreenMat : sharedHpTanMat;
-        overheadBarFill.isPickable = false;
-        overheadBarFill.parent = overheadGroup;
       }
       const model = {
-        prefix, team, root, visualRoot, weaponMount, rifleGeometry, muzzleFlash, overheadGroup, overheadBarFill,
+        prefix, team, root, visualRoot, weaponMount, muzzleFlash, overheadGroup,
         castShadows: soldierIndex < 16,
-        namePlane: null, nameTex: null, flashTimer: 0, recoilTimer: 0, flinchTimer: 0,
+        updateSlot: soldierIndex % 3,
+        plate: null, flashTimer: 0, recoilTimer: 0, flinchTimer: 0,
         animationGroups: null, animationName: SOLDIER_CLIPS.run, animationPlaying: false,
-        manualAnimation: false, wasGrounded: true, instances: [], weaponObserver: null,
+        manualAnimation: false, wasGrounded: true, instances: [], rifleInstance: null,
+        bodyRoots: [], bodyMeshes: [], bodyMesh: null, blendOverride: null,
+        deathPhase: null, deathTime: 0, deathFadeTime: 0, rifleRestY: 0,
         deathStarted: false, rifleDropped: false, rifleSettled: false, rifleDropTime: 0,
         rifleDropStart: new BABYLON.Vector3(),
         rifleDropRotation: BABYLON.Quaternion.Identity(),
@@ -3105,16 +2807,16 @@
         },
         stopAnimation() {
           model.manualAnimation = false;
-          setSoldierClip(model, SOLDIER_CLIPS.run, false);
+          setSoldierClip(model, SOLDIER_CLIPS.run, false, true);
         }
       };
       root.onDisposeObservable.add(() => {
         pendingSoldierModels.delete(model);
-        if (model.weaponObserver) scene.onAfterAnimationsObservable.remove(model.weaponObserver);
+        riggedSoldierModels.delete(model);
         model.instances.forEach((instance) => instance.dispose());
+        if (model.rifleInstance) model.rifleInstance.dispose();
         if (!model.weaponMount.isDisposed()) model.weaponMount.dispose();
-        if (model.namePlane) model.namePlane.material.dispose();
-        if (model.nameTex) model.nameTex.dispose();
+        releaseSoldierPlate(model);
       });
       if (soldierAssets) attachRiggedSoldier(model);
       else pendingSoldierModels.add(model);
@@ -3127,76 +2829,192 @@
       showMpToast("Soldier models failed to load. Reload to retry.", "#ff7b7b");
     });
 
-    // Lazily creates & draws the floating 3D name tag ONLY for human multiplayer players
-    function updateSoldierOverheadName(soldier) {
-      const m = soldier.model;
-      if (!m || !m.overheadGroup) return;
+    // =========================================================================
+    // OVERHEAD PLATES (GUI Editor layout: gui/overheadPlates.json)
+    // One shared fullscreen AdvancedDynamicTexture hosts every plate; each soldier
+    // gets a lightweight control tree parsed from the template and data-bound at runtime.
+    // =========================================================================
+    const OVERHEAD_GUI_URL = "gui/overheadPlates.json";
+    const PLATE_TEMPLATES = {
+      unit: { root: "unitPlate", fill: "unitHpFill" },
+      player: { root: "playerPlate", fill: "playerHpFill", badge: "playerNameBadge", name: "playerNameText" }
+    };
+    const TEAM_PLATE_STYLE = {
+      green: { fill: "#52fa47", accent: "#65ff58", text: "#98ff8c" },
+      tan: { fill: "#ffb842", accent: "#ffd584", text: "#ffe09e" }
+    };
+    // Player plates pivot on their health bar so the bar sits on the anchor at every scale.
+    const PLAYER_PLATE_BAR_OFFSET = 23;
+    const PLATE_REF_DISTANCE = 8;
+    const PLATE_MIN_SCALE = 0.45;
+    const PLATE_MAX_SCALE = 1.25;
+    const PLATE_FADE_START = 55;
+    const PLATE_MAX_DISTANCE = 85;
+    const PLATE_OCCLUSION_FRAMES = 6;
+    let overheadGui = null;
+    let plateTemplates = null;
+    let plateOcclusionCursor = 0;
+    const activePlates = [];
+    const plateWorldPos = new BABYLON.Vector3();
 
-      if (!soldier.isRemotePlayer) {
-        if (m.namePlane) m.namePlane.isVisible = false;
-        return;
+    function findPlateTemplate(node, name) {
+      if (node.name === name) return node;
+      for (const child of node.children || []) {
+        const found = findPlateTemplate(child, name);
+        if (found) return found;
       }
-
-      if (!m.namePlane || !m.nameTex) {
-        m.namePlane = BABYLON.MeshBuilder.CreatePlane(
-          m.prefix + "namePlane",
-          { width: 2.3, height: 0.48 },
-          scene
-        );
-        m.namePlane.position.set(0, 0.36, 0);
-        m.namePlane.isPickable = false;
-        m.namePlane.parent = m.overheadGroup;
-
-        m.nameTex = new BABYLON.DynamicTexture(
-          m.prefix + "nameTex",
-          { width: 320, height: 68 },
-          scene,
-          true
-        );
-        m.nameTex.hasAlpha = true;
-        const nameMat = new BABYLON.StandardMaterial(m.prefix + "nameMat", scene);
-        nameMat.diffuseTexture = m.nameTex;
-        nameMat.emissiveTexture = m.nameTex;
-        nameMat.useAlphaFromDiffuseTexture = true;
-        nameMat.disableLighting = true;
-        nameMat.backFaceCulling = false;
-        m.namePlane.material = nameMat;
-      }
-
-      m.namePlane.isVisible = true;
-      const ctx = m.nameTex.getContext();
-      ctx.clearRect(0, 0, 320, 68);
-
-      const isGreen = soldier.team === "green";
-      ctx.fillStyle = "rgba(12, 18, 12, 0.82)";
-      ctx.strokeStyle = isGreen ? "#65ff58" : "#ffd584";
-      ctx.lineWidth = 4;
-
-      const x = 14, y = 8, w = 292, h = 52, r = 24;
-      ctx.beginPath();
-      ctx.moveTo(x + r, y);
-      ctx.lineTo(x + w - r, y);
-      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-      ctx.lineTo(x + w, y + h - r);
-      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-      ctx.lineTo(x + r, y + h);
-      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-      ctx.lineTo(x, y + r);
-      ctx.quadraticCurveTo(x, y, x + r, y);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.font = "bold 26px Segoe UI, sans-serif";
-      ctx.fillStyle = isGreen ? "#98ff8c" : "#ffe09e";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      const label = (soldier.rawPlayerName || soldier.name || "Player").slice(0, 16);
-      ctx.fillText("★ " + label, 160, 35);
-      m.nameTex.update();
+      return null;
     }
 
-    function animateSoldier(soldier, dt, isMoving, strideDir, forceFullPose) {
+    function findPlateControl(rootControl, name) {
+      if (rootControl.name === name) return rootControl;
+      return rootControl.getDescendants(false, (c) => c.name === name)[0] || null;
+    }
+
+    async function loadOverheadPlates() {
+      const response = await fetch(OVERHEAD_GUI_URL);
+      if (!response.ok) throw new Error(`HTTP ${response.status} for ${OVERHEAD_GUI_URL}`);
+      const layout = await response.json();
+      const templates = {};
+      for (const [kind, names] of Object.entries(PLATE_TEMPLATES)) {
+        const serialized = findPlateTemplate(layout.root, names.root);
+        if (!serialized) throw new Error(`Missing GUI template control: ${names.root}`);
+        templates[kind] = serialized;
+      }
+      overheadGui = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("overheadPlatesUI", true, scene);
+      overheadGui.isForeground = true;
+      plateTemplates = templates;
+      soldiers.forEach(updateSoldierOverheadPlate);
+    }
+
+    function releaseSoldierPlate(model) {
+      const plate = model.plate;
+      if (!plate) return;
+      model.plate = null;
+      const idx = activePlates.indexOf(plate);
+      if (idx >= 0) activePlates.splice(idx, 1);
+      plate.root.linkWithMesh(null);
+      plate.root.dispose();
+    }
+
+    function createSoldierPlate(model, kind) {
+      const names = PLATE_TEMPLATES[kind];
+      const root = BABYLON.GUI.Control.Parse(plateTemplates[kind], overheadGui);
+      root.name = model.prefix + names.root;
+      root.left = 0;
+      root.top = 0;
+      if (kind === "player") {
+        root.transformCenterY = (30 + PLAYER_PLATE_BAR_OFFSET) / 60;
+        root.linkOffsetY = -PLAYER_PLATE_BAR_OFFSET;
+      }
+      overheadGui.addControl(root);
+      root.linkWithMesh(model.overheadGroup);
+      const plate = {
+        kind,
+        model,
+        soldier: null,
+        root,
+        fill: findPlateControl(root, names.fill),
+        badge: names.badge ? findPlateControl(root, names.badge) : null,
+        nameText: names.name ? findPlateControl(root, names.name) : null,
+        boundTeam: "",
+        boundName: "",
+        boundHealth: -1,
+        occluded: false
+      };
+      activePlates.push(plate);
+      return plate;
+    }
+
+    function setPlateHealth(model, ratio) {
+      const plate = model.plate;
+      if (!plate) return;
+      const clamped = Math.max(0, Math.min(1, ratio));
+      if (Math.abs(clamped - plate.boundHealth) < 0.001) return;
+      plate.boundHealth = clamped;
+      plate.fill.width = clamped * 100 + "%";
+      plate.fill.isVisible = clamped > 0;
+    }
+
+    // Binds team, name and health onto the soldier's plate, switching template when a bot becomes a human player.
+    function updateSoldierOverheadPlate(soldier) {
+      const m = soldier.model;
+      if (!m || !m.overheadGroup || !plateTemplates) return;
+      const kind = soldier.isRemotePlayer ? "player" : "unit";
+      if (m.plate && m.plate.kind !== kind) releaseSoldierPlate(m);
+      const plate = m.plate || (m.plate = createSoldierPlate(m, kind));
+      plate.soldier = soldier;
+
+      const style = TEAM_PLATE_STYLE[soldier.team] || TEAM_PLATE_STYLE.green;
+      if (plate.boundTeam !== soldier.team) {
+        plate.boundTeam = soldier.team;
+        plate.fill.background = style.fill;
+        if (plate.badge) plate.badge.color = style.accent;
+        if (plate.nameText) plate.nameText.color = style.text;
+      }
+      if (plate.nameText) {
+        const label = "★ " + (soldier.rawPlayerName || soldier.name || "Player").slice(0, 16);
+        if (plate.boundName !== label) {
+          plate.boundName = label;
+          plate.nameText.text = label;
+        }
+      }
+      setPlateHealth(m, soldier.health / soldier.maxHealth);
+    }
+
+    // Per-frame screen-space sizing, distance fade and staggered environment occlusion.
+    function updateOverheadPlates() {
+      const count = activePlates.length;
+      if (!count) return;
+      const cam = scene.activeCamera;
+      const resolutionScale = engine.getRenderHeight() / 1080;
+      const occlusionChecks = Math.ceil(count / PLATE_OCCLUSION_FRAMES);
+      for (let k = 0; k < occlusionChecks; k++) {
+        const plate = activePlates[(plateOcclusionCursor + k) % count];
+        plateWorldPos.copyFrom(plate.model.overheadGroup.getAbsolutePosition());
+        const dx = plateWorldPos.x - cam.globalPosition.x;
+        const dy = plateWorldPos.y - cam.globalPosition.y;
+        const dz = plateWorldPos.z - cam.globalPosition.z;
+        const dist = Math.hypot(dx, dy, dz);
+        if (dist < 0.5 || dist > PLATE_MAX_DISTANCE) {
+          plate.occluded = false;
+          continue;
+        }
+        const inv = 1 / dist;
+        const hit = castEnvironmentRay(
+          cam.globalPosition.x, cam.globalPosition.y, cam.globalPosition.z,
+          dx * inv, dy * inv, dz * inv,
+          dist,
+          true
+        );
+        plate.occluded = hit.hitKind !== "air";
+      }
+      plateOcclusionCursor = (plateOcclusionCursor + occlusionChecks) % count;
+
+      for (let i = 0; i < count; i++) {
+        const plate = activePlates[i];
+        const anchor = plate.model.overheadGroup;
+        const soldier = plate.soldier;
+        const dist = BABYLON.Vector3.Distance(anchor.getAbsolutePosition(), cam.globalPosition);
+        const visible =
+          !!soldier && soldier.alive && anchor.isEnabled() && !plate.occluded && dist < PLATE_MAX_DISTANCE;
+        if (plate.root.isVisible !== visible) plate.root.isVisible = visible;
+        if (!visible) continue;
+        const scale =
+          Math.max(PLATE_MIN_SCALE, Math.min(PLATE_MAX_SCALE, PLATE_REF_DISTANCE / Math.max(dist, 0.01))) *
+          resolutionScale;
+        plate.root.scaleX = scale;
+        plate.root.scaleY = scale;
+        plate.root.alpha =
+          dist <= PLATE_FADE_START ? 1 : 1 - (dist - PLATE_FADE_START) / (PLATE_MAX_DISTANCE - PLATE_FADE_START);
+      }
+    }
+
+    loadOverheadPlates().catch((error) => {
+      console.warn("Overhead GUI layout unavailable; soldier plates disabled.", error);
+    });
+
+    function animateSoldier(soldier, dt, isMoving, forceFullPose) {
       const model = soldier.model;
       if (model.flashTimer > 0) {
         model.flashTimer = Math.max(0, model.flashTimer - dt);
@@ -3211,9 +3029,12 @@
           model.visualRoot.position.y = 0;
           model.visualRoot.rotation.setAll(0);
           model.muzzleFlash.isVisible = false;
+          model.deathPhase = "falling";
+          model.deathTime = 0;
           setSoldierClip(model, SOLDIER_CLIPS.death, true);
         }
         updateDroppedRifle(model, dt);
+        if (model.animationGroups) updateDeathSequence(model, dt);
         return;
       }
       if (model.deathStarted) resetSoldierDeath(model);
@@ -3285,7 +3106,6 @@
       clientId: null,
       clientToken: "",
       myUnitId: "green_0",
-      myTeam: "green",
       roomCode: "SAND1",
       hostId: null,
       isHostOwner: false,
@@ -3532,7 +3352,7 @@
       return { x, z };
     }
 
-    function getFormationPoint(team, index, totalOnTeam) {
+    function getFormationPoint(team) {
       const isShoebox = builtMapType === "shoebox";
       const marginX = WORLD_LIMIT_X - (isShoebox ? 2.8 : 4.5);
       const marginZ = WORLD_LIMIT_Z - (isShoebox ? 3.2 : 5.0);
@@ -3700,7 +3520,7 @@
             (rosterPlayerInfo.x !== 0 || rosterPlayerInfo.z !== 0);
           const pt = hasSavedCoords
             ? findSafeSpawnPoint(rosterPlayerInfo.x, rosterPlayerInfo.z)
-            : getFormationPoint(team, i, count);
+            : getFormationPoint(team);
           const model = createPlasticSoldier(team, i, !isLocalPlayer);
           model.root.position.set(pt.x, getSandHeight(pt.x, pt.z), pt.z);
           const initialYaw =
@@ -3779,8 +3599,8 @@
             unstickTimer: 0
           };
 
-          updateSoldierOverheadName(unit);
-          animateSoldier(unit, 0.016, false, 0, true);
+          updateSoldierOverheadPlate(unit);
+          animateSoldier(unit, 0.016, false, true);
           soldiers.push(unit);
           soldiersById.set(unitId, unit);
 
@@ -3821,6 +3641,7 @@
     };
     let isMouseDown = false;
     let gameEnded = false;
+    let isPlayerKnockedDown = false;
 
     // Mobile Dual-Thumb State
     let moveStickX = 0; // -1 (left) to +1 (right)
@@ -3898,7 +3719,7 @@
 
     openTeamsBtnEl.addEventListener("click", () => {
       closeTopRightMenu();
-      openSetupModal();
+      uiNotify("ui.setupRequested");
     });
 
     // ----- LEFT THUMB: VIRTUAL ANALOG JOYSTICK (MOVEMENT) -----
@@ -4147,10 +3968,8 @@
       const tag = document.activeElement ? document.activeElement.tagName : "";
       if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
       if (e.code in keys) keys[e.code] = true;
-      if (e.code === "KeyR" && (gameEnded || isPlayerKnockedDown) && !isSetupOpen) {
-        handleRetryAction();
-      }
-      if (e.code === "KeyM") openSetupModal();
+      if (e.code === "KeyR") uiNotify("ui.retryRequested");
+      if (e.code === "KeyM") uiNotify("ui.setupRequested");
     });
 
     window.addEventListener("keyup", (e) => {
@@ -4369,20 +4188,6 @@
     }
 
     const tracers = [];
-    const impactParticles = [];
-    const burstMaterialCache = new Map();
-
-    function getBurstMaterial(colorHex) {
-      let mat = burstMaterialCache.get(colorHex);
-      if (!mat) {
-        mat = new BABYLON.StandardMaterial("burst_" + colorHex, scene);
-        mat.emissiveColor = BABYLON.Color3.FromHexString(colorHex);
-        mat.disableLighting = true;
-        mat.freeze();
-        burstMaterialCache.set(colorHex, mat);
-      }
-      return mat;
-    }
 
     function spawnTracer(startPoint, endPoint, color3) {
       const line = BABYLON.MeshBuilder.CreateLines(
@@ -4395,35 +4200,81 @@
       tracers.push({ mesh: line, life: 0.075 });
     }
 
-    // Spawns physical sand splashes or plastic sparks on bullet impact
-    function spawnImpactBurst(point, isSand, colorHex) {
-      if (impactParticles.length > 85) return; // Cap active particles during massive bot battles
-      const count = isSand ? 6 : 4;
-      const mat = getBurstMaterial(colorHex);
+    // Bullet impact effects authored as Node Particle graphs (particles/*.json, built with NPE).
+    // Graph inputs (color, size, lifeTime, emitPower) are read when each particle spawns, so one
+    // pooled system can show differently tinted bursts at the same time. A system emits at a single
+    // emitter position per frame, so each graph gets a small pool; extra bursts in one frame are dropped.
+    const IMPACT_FX_GRAPHS = {
+      sandPuff: "sandPuff.json",
+      plasticSparks: "plasticSparks.json"
+    };
+    const IMPACT_FX_POOL_SIZE = 6;
+    const IMPACT_FX = {
+      sandboxSand: { graph: "sandPuff", color: "#e6c373", alpha: 0.85, size: 0.34, lifeTime: 0.6, count: 10 },
+      shoeboxDust: { graph: "sandPuff", color: "#c29663", alpha: 0.8, size: 0.3, lifeTime: 0.5, count: 9 },
+      greenPlastic: { graph: "plasticSparks", color: "#4be03e", alpha: 1, size: 0.15, lifeTime: 0.4, count: 9 },
+      tanPlastic: { graph: "plasticSparks", color: "#ffd584", alpha: 1, size: 0.15, lifeTime: 0.4, count: 9 },
+      toyPlastic: { graph: "plasticSparks", color: "#fff0a0", alpha: 1, size: 0.13, lifeTime: 0.35, count: 7 },
+      beachBall: { graph: "plasticSparks", color: "#ffffff", alpha: 1, size: 0.12, lifeTime: 0.3, count: 6 }
+    };
+    Object.values(IMPACT_FX).forEach((fx) => {
+      const c = BABYLON.Color3.FromHexString(fx.color);
+      fx.color4 = new BABYLON.Color4(c.r, c.g, c.b, fx.alpha);
+    });
+    const impactFxPools = new Map();
 
-      for (let i = 0; i < count; i++) {
-        const p = BABYLON.MeshBuilder.CreateBox(
-          "part",
-          { size: isSand ? 0.13 : 0.1 },
-          scene
-        );
-        p.position.copyFrom(point);
-        p.material = mat;
-        p.isPickable = false;
-
-        const vel = new BABYLON.Vector3(
-          (Math.random() - 0.5) * 6,
-          2.2 + Math.random() * 4.5,
-          (Math.random() - 0.5) * 6
-        );
-        impactParticles.push({
-          mesh: p,
-          velocity: vel,
-          life: 0.35 + Math.random() * 0.2,
-          mat: null
-        });
-      }
+    function getTerrainImpactFx() {
+      return builtMapType === "shoebox" ? "shoeboxDust" : "sandboxSand";
     }
+
+    async function loadImpactEffects() {
+      await Promise.all(
+        Object.entries(IMPACT_FX_GRAPHS).map(async ([key, file]) => {
+          const res = await fetch("particles/" + file);
+          if (!res.ok) throw new Error(file + ": HTTP " + res.status);
+          const json = await res.json();
+          const pool = [];
+          for (let i = 0; i < IMPACT_FX_POOL_SIZE; i++) {
+            // Each pool entry needs its own graph instance because input blocks are shared per set
+            const set = BABYLON.NodeParticleSystemSet.Parse(json);
+            const system = (await set.buildAsync(scene)).systems[0];
+            system.name = key + "_" + i;
+            system.emitter = new BABYLON.Vector3(0, -100, 0);
+            system.start();
+            pool.push({
+              system,
+              inputs: {
+                color: set.getBlockByName("color"),
+                size: set.getBlockByName("size"),
+                lifeTime: set.getBlockByName("lifeTime")
+              },
+              lastFrame: -1
+            });
+          }
+          impactFxPools.set(key, pool);
+        })
+      );
+    }
+
+    function spawnImpactFx(point, kind) {
+      const fx = IMPACT_FX[kind];
+      const pool = fx && impactFxPools.get(fx.graph);
+      if (!pool) return;
+      const frame = scene.getFrameId();
+      const slot = pool.find((s) => s.lastFrame !== frame && s.system.isReady());
+      if (!slot) return;
+      slot.lastFrame = frame;
+      slot.inputs.color.value = fx.color4;
+      slot.inputs.size.value = fx.size;
+      slot.inputs.lifeTime.value = fx.lifeTime;
+      slot.system.emitter.copyFrom(point);
+      slot.system.manualEmitCount = fx.count;
+    }
+
+    loadImpactEffects().catch((error) => {
+      impactFxPools.clear();
+      console.warn("Impact particle graphs unavailable; bullet impacts will have no burst effect.", error);
+    });
 
     // Fast analytical muzzle position (avoids expensive scene-graph matrix recomputation for distant bots)
     function getMuzzleWorldPosition(soldier) {
@@ -4639,11 +4490,7 @@
 
       if (hitSoldier) {
         hitSoldier.velocity.addInPlace(aimDir.scale(4.5));
-        spawnImpactBurst(
-          hitPoint,
-          false,
-          hitSoldier.team === "green" ? "#4be03e" : "#ffd584"
-        );
+        spawnImpactFx(hitPoint, hitSoldier.team === "green" ? "greenPlastic" : "tanPlastic");
         playImpactHitSound(hitPoint, true);
 
         if (mpState.active) {
@@ -4656,13 +4503,13 @@
             shotDir: { x: aimDir.x, y: aimDir.y, z: aimDir.z }
           });
         } else {
-          applyDamage(hitSoldier, effectiveDamage, aimDir, shooter);
+          applyDamage(hitSoldier, effectiveDamage, shooter);
         }
       } else if (hitKind === "ball" && physicsBall) {
         const impulse = aimDir.scale(11);
         physicsBall.velocity.addInPlace(impulse);
         physicsBall.velocity.y += 4.5;
-        spawnImpactBurst(hitPoint, false, "#ffffff");
+        spawnImpactFx(hitPoint, "beachBall");
 
         if (mpState.active) {
           sendNetMessage({
@@ -4673,9 +4520,9 @@
           });
         }
       } else if (hitKind === "sand") {
-        spawnImpactBurst(hitPoint, true, builtMapType === "shoebox" ? "#c29663" : "#e6c373");
+        spawnImpactFx(hitPoint, getTerrainImpactFx());
       } else if (hitKind === "toy") {
-        spawnImpactBurst(hitPoint, false, "#fff0a0");
+        spawnImpactFx(hitPoint, "toyPlastic");
       }
 
       const tracerColor =
@@ -5305,10 +5152,6 @@
       } catch (err) {}
     }
 
-    function savePlayerProfileToStorage() {
-      saveSetupSettingsToStorage();
-    }
-
     function handleUserRenamedSelf() {
       userCustomizedPlayerName = true;
       if (mpNameInputEl && mpNameInputEl.value.length > 18) {
@@ -5319,7 +5162,7 @@
       if (player) {
         player.rawPlayerName = cleanName || "Soldier";
         player.name = `${player.rawPlayerName} (You)`;
-        updateSoldierOverheadName(player);
+        updateSoldierOverheadPlate(player);
       }
     }
 
@@ -5517,10 +5360,7 @@
                 const isLocked = btn.getAttribute("data-locked") === "1";
                 const isResume = btn.getAttribute("data-resume") === "1";
                 if (isResume && mpState.active && mpState.roomCode === selectedRoom) {
-                  setupModalEl.style.display = "none";
-                  isSetupOpen = false;
-                  document.body.classList.remove("modal-open");
-                  tryLockPointer();
+                  uiNotify("ui.setupResumed");
                   return;
                 }
                 if (selectedRoom) {
@@ -5917,12 +5757,9 @@
       if (unit.model.overheadGroup) {
         unit.model.overheadGroup.setEnabled(true);
       }
-      if (unit.model.overheadBarFill) {
-        unit.model.overheadBarFill.scaling.x = 1;
-      }
 
-      updateSoldierOverheadName(unit);
-      animateSoldier(unit, 0.016, false, 0, true);
+      updateSoldierOverheadPlate(unit);
+      animateSoldier(unit, 0.016, false, true);
       updateHUD(true);
     }
 
@@ -5935,8 +5772,6 @@
       respawnSingleSoldier(player, sp.x, y, sp.z, sp.yaw);
 
       isPlayerKnockedDown = false;
-      document.body.classList.remove("modal-open");
-      endMessageEl.style.display = "none";
 
       if (mpState.active) {
         sendNetMessage({
@@ -5951,7 +5786,7 @@
         });
       }
 
-      tryLockPointer();
+      uiNotify("ui.playerRespawned");
     }
 
     // Synchronizes local countdown clock with the server's authoritative remainingSec
@@ -5981,18 +5816,13 @@
     }
 
     // Applies authoritative damage/death state received from the server in Multiplayer mode
-    function applyNetworkDamageState(target, newHealth, newAlive, shotDir) {
+    function applyNetworkDamageState(target, newHealth, newAlive) {
       if (!target || gameEnded) return;
 
       target.health = Math.max(0, newHealth);
       target.model.flinchTimer = 1.0;
 
-      if (target.model.overheadBarFill) {
-        target.model.overheadBarFill.scaling.x = Math.max(
-          0.001,
-          target.health / target.maxHealth
-        );
-      }
+      setPlateHealth(target.model, target.health / target.maxHealth);
 
       if (!newAlive && target.alive) {
         target.alive = false;
@@ -6003,7 +5833,9 @@
           target.model.overheadGroup.setEnabled(false);
         }
         if (target.isPlayer && !gameEnded) {
-          showPlayerRespawnOverlay();
+          isPlayerKnockedDown = true;
+          // Rigged soldiers raise the prompt from beginDeathFade once the fall finishes.
+          if (!target.model.animationGroups) uiNotify("ui.playerKnockedDown");
         }
       }
 
@@ -6047,7 +5879,7 @@
             s.name = s.botName;
           }
         }
-        updateSoldierOverheadName(s);
+        updateSoldierOverheadPlate(s);
       });
       if (roster.unitStats) {
         applyServerUnitStats(roster.unitStats);
@@ -6132,7 +5964,6 @@
           mpState.intentionalDisconnect = false;
           mpState.clientId = msg.clientId;
           mpState.myUnitId = msg.unitId;
-          mpState.myTeam = msg.team;
           mpState.roster = msg.roster;
           mpState.roomCode = msg.roster.roomCode;
           mpState.lastActiveRoomCode = msg.roster.roomCode;
@@ -6150,10 +5981,8 @@
           }
           updatePerfHudDOM();
 
-          setupModalEl.style.display = "none";
-          isSetupOpen = false;
-          document.body.classList.remove("modal-open");
           updateMpStatusBadge();
+          uiNotify("ui.matchStarted");
           resetGame();
           updateHostControlsVisibility();
 
@@ -6284,7 +6113,7 @@
           if (!unit || unit.isPlayer) return;
           if (!unit.isRemotePlayer) {
             unit.isRemotePlayer = true;
-            updateSoldierOverheadName(unit);
+            updateSoldierOverheadPlate(unit);
           }
           unit.netTargetPos.set(msg.x, msg.y, msg.z);
           unit.yaw = msg.yaw;
@@ -6302,7 +6131,7 @@
             if (!unit || unit.isPlayer) continue;
             if (!unit.isRemotePlayer) {
               unit.isRemotePlayer = true;
-              updateSoldierOverheadName(unit);
+              updateSoldierOverheadPlate(unit);
             }
             unit.netTargetPos.set(p.x, p.y, p.z);
             unit.yaw = p.yaw;
@@ -6321,7 +6150,7 @@
               if (!unit || unit.isPlayer) continue;
               if (!unit.isRemotePlayer) {
                 unit.isRemotePlayer = true;
-                updateSoldierOverheadName(unit);
+                updateSoldierOverheadPlate(unit);
               }
               unit.netTargetPos.set(p.x, p.y, p.z);
               unit.yaw = p.yaw;
@@ -6415,15 +6244,15 @@
           spawnTracer(mPos, hPos, tracerColor);
 
           if (msg.hitKind === "sand") {
-            spawnImpactBurst(hPos, true, builtMapType === "shoebox" ? "#c29663" : "#e6c373");
+            spawnImpactFx(hPos, getTerrainImpactFx());
           } else if (msg.hitKind === "green") {
-            spawnImpactBurst(hPos, false, "#4be03e");
+            spawnImpactFx(hPos, "greenPlastic");
             playImpactHitSound(hPos, true);
           } else if (msg.hitKind === "tan") {
-            spawnImpactBurst(hPos, false, "#ffd584");
+            spawnImpactFx(hPos, "tanPlastic");
             playImpactHitSound(hPos, true);
           } else if (msg.hitKind === "toy" || msg.hitKind === "ball") {
-            spawnImpactBurst(hPos, false, "#fff0a0");
+            spawnImpactFx(hPos, msg.hitKind === "ball" ? "beachBall" : "toyPlastic");
             playImpactHitSound(hPos, false);
           }
           break;
@@ -6447,7 +6276,7 @@
               : Math.max(0, target.health - (msg.amount || 0));
           const newAlive =
             typeof msg.alive === "boolean" ? msg.alive : newHealth > 0;
-          applyNetworkDamageState(target, newHealth, newAlive, dir);
+          applyNetworkDamageState(target, newHealth, newAlive);
           break;
         }
 
@@ -6504,14 +6333,10 @@
             const me = msg.roster.players.find((p) => p.id === mpState.clientId);
             if (me) {
               mpState.myUnitId = me.unitId;
-              mpState.myTeam = me.team;
             }
           }
           updateMpStatusBadge();
-          isSetupOpen = false;
-          setupModalEl.style.display = "none";
-          endMessageEl.style.display = "none";
-          document.body.classList.remove("modal-open");
+          uiNotify("ui.matchStarted");
           resetGame();
           updateHostControlsVisibility();
           if (typeof msg.roster.remainingSec === "number") {
@@ -6586,38 +6411,218 @@
         typeof canvas.requestPointerLock === "function"
       ) {
         try {
-          canvas.requestPointerLock();
+          const lockPromise = canvas.requestPointerLock();
+          // Network-driven transitions have no user gesture; ignore the resulting rejection
+          if (lockPromise && typeof lockPromise.catch === "function") lockPromise.catch(() => {});
         } catch (err) {}
       }
     }
 
-    function openSetupModal() {
-      isSetupOpen = true;
-      document.body.classList.add("modal-open");
+    // =========================================================================
+    // MATCH UI FLOW GRAPH (flowgraphs/matchUiFlow.json)
+    // The graph owns ONLY the client presentation state machine
+    // (setup → active → knocked-down / game-over → restart). Code reports facts
+    // via ui.* events; the graph answers with ui.enter*/ui.request* effects that
+    // the handlers below render. Networking, authority and simulation stay here.
+    // =========================================================================
+    const MATCH_UI_FLOW_URL = "flowgraphs/matchUiFlow.json";
+    let matchUiCoordinator = null;
+    const pendingUiEvents = [];
+    let lastMatchEndInfo = { endedByHost: false, hostName: "" };
+
+    function uiNotify(eventId, data = {}) {
+      if (!matchUiCoordinator) {
+        pendingUiEvents.push([eventId, data]);
+        return;
+      }
+      matchUiCoordinator.notifyCustomEvent(eventId, data, false);
+    }
+
+    function releaseGameplayInput() {
       isMouseDown = false;
       isMobileFiring = false;
       mobileFireBtnEl.classList.remove("active");
       resetJoystick();
-      endMessageEl.style.display = "none";
-      setupModalEl.style.display = "block";
-      readHostSetupInputs(false);
-      updateHostControlsVisibility();
-      pollServerRoomsPreview();
       if (document.pointerLockElement && document.exitPointerLock) {
         document.exitPointerLock();
       }
     }
 
+    function setRestartButtonState(label, enabled) {
+      restartBtn.textContent = label;
+      restartBtn.disabled = !enabled;
+      restartBtn.style.opacity = enabled ? "1" : "0.65";
+      restartBtn.style.cursor = enabled ? "pointer" : "default";
+    }
+
+    function renderGameOverOverlay({ endedByHost, hostName }) {
+      const greenKills = soldiers
+        .filter((s) => s.team === "green")
+        .reduce((acc, s) => acc + (s.kills || 0), 0);
+      const tanKills = soldiers
+        .filter((s) => s.team === "tan")
+        .reduce((acc, s) => acc + (s.kills || 0), 0);
+      const scoreLine = `Green: ${greenKills} Kills  |  Tan: ${tanKills} Kills`;
+
+      if (endedByHost) {
+        endTitleEl.textContent = "MATCH ENDED BY HOST";
+        endTitleEl.style.color = "#ff856b";
+        endSubtitleEl.textContent = `Host (${hostName || "Host"}) ended the match — ${scoreLine}`;
+      } else if (greenKills > tanKills) {
+        endTitleEl.textContent = "GREEN TEAM WINS!";
+        endTitleEl.style.color = "#8df57e";
+        endSubtitleEl.textContent = `Final Score — ${scoreLine}`;
+      } else if (tanKills > greenKills) {
+        endTitleEl.textContent = "TAN TEAM WINS!";
+        endTitleEl.style.color = "#ffd584";
+        endSubtitleEl.textContent = `Final Score — ${scoreLine}`;
+      } else {
+        endTitleEl.textContent = "DRAW MATCH!";
+        endTitleEl.style.color = "#ffffff";
+        endSubtitleEl.textContent = `Final Score — ${scoreLine}`;
+      }
+
+      // Sort participants: Human players first, then by Kills desc, Deaths asc
+      const sorted = [...soldiers].sort((a, b) => {
+        const aHuman = a.isPlayer || a.isRemotePlayer ? 1 : 0;
+        const bHuman = b.isPlayer || b.isRemotePlayer ? 1 : 0;
+        if (bHuman !== aHuman) return bHuman - aHuman;
+        if ((b.kills || 0) !== (a.kills || 0)) return (b.kills || 0) - (a.kills || 0);
+        return (a.deaths || 0) - (b.deaths || 0);
+      });
+
+      finalScoreboardBodyEl.innerHTML = sorted
+        .map((s) => {
+          const teamColor = s.team === "green" ? "#7dff70" : "#ffd584";
+          const rowStyle = s.isPlayer
+            ? "background: rgba(90, 210, 80, 0.18); font-weight: bold;"
+            : s.isRemotePlayer
+            ? "background: rgba(122, 215, 255, 0.12); font-weight: bold;"
+            : "";
+          return `
+            <tr style="${rowStyle}">
+              <td>${escapeHtml(s.name)}</td>
+              <td style="color:${teamColor}; font-weight:bold;">${s.team.toUpperCase()}</td>
+              <td>${s.kills || 0}</td>
+              <td>${s.deaths || 0}</td>
+            </tr>
+          `;
+        })
+        .join("");
+
+      finalScoreboardWrapEl.style.display = "block";
+      if (mpState.active && !isLocalPlayerHost()) {
+        setRestartButtonState("Waiting for Host...", false);
+      } else {
+        setRestartButtonState("New Round (R)", true);
+      }
+    }
+
+    const MATCH_UI_EFFECTS = {
+      "ui.enterSetup": () => {
+        isSetupOpen = true;
+        document.body.classList.add("modal-open");
+        releaseGameplayInput();
+        endMessageEl.style.display = "none";
+        setupModalEl.style.display = "block";
+        readHostSetupInputs(false);
+        updateHostControlsVisibility();
+        pollServerRoomsPreview();
+      },
+      "ui.enterActive": () => {
+        isSetupOpen = false;
+        setupModalEl.style.display = "none";
+        endMessageEl.style.display = "none";
+        finalScoreboardWrapEl.style.display = "none";
+        document.body.classList.remove("modal-open");
+        updateHostControlsVisibility();
+        tryLockPointer();
+      },
+      "ui.enterKnockedDown": () => {
+        isSetupOpen = false;
+        setupModalEl.style.display = "none";
+        document.body.classList.add("modal-open");
+        releaseGameplayInput();
+        endTitleEl.textContent = "KNOCKED DOWN!";
+        endTitleEl.style.color = "#ff856b";
+        endSubtitleEl.textContent =
+          "The battle is still raging — respawn at a safe location far from enemies.";
+        finalScoreboardWrapEl.style.display = "none";
+        setRestartButtonState("Respawn Soldier (R)", true);
+        updateHostControlsVisibility();
+        endMessageEl.style.display = "block";
+      },
+      "ui.enterGameOver": () => {
+        isSetupOpen = false;
+        setupModalEl.style.display = "none";
+        document.body.classList.add("modal-open");
+        releaseGameplayInput();
+        renderGameOverOverlay(lastMatchEndInfo);
+        updateHostControlsVisibility();
+        endMessageEl.style.display = "block";
+      },
+      "ui.matchEndedInSetup": () => {
+        mpModalStatusEl.textContent = lastMatchEndInfo.endedByHost ? "Match ended by host" : "Match ended";
+        mpModalStatusEl.style.color = "#ff9e7b";
+        updateHostControlsVisibility();
+      },
+      "ui.requestRespawn": () => {
+        if (!gameEnded && isPlayerKnockedDown) respawnLocalPlayer();
+      },
+      "ui.requestNewRound": () => {
+        if (mpState.active && !isLocalPlayerHost()) return;
+        if (mpState.active) {
+          const gTotal = mpState.roster ? mpState.roster.greenTotal : configuredFriendlyCount + 1;
+          const tTotal = mpState.roster ? mpState.roster.tanTotal : configuredEnemyCount;
+          sendNetMessage({
+            type: "restart_match",
+            clientToken: mpState.clientToken,
+            greenTotal: gTotal,
+            tanTotal: tTotal,
+            mapType: getActiveMapType(),
+            worldLimit:
+              getActiveMapType() === "shoebox"
+                ? 28
+                : (mpState.roster && mpState.roster.worldLimit) || configuredMapLimit,
+            hardcoreMode: isHardcoreActive(),
+            durationSec: (mpState.roster && mpState.roster.durationSec) || configuredDurationSec
+          });
+        }
+        uiNotify("ui.matchStarted");
+        resetGame();
+      }
+    };
+
+    async function loadMatchUiFlow() {
+      try {
+        const response = await fetch(MATCH_UI_FLOW_URL);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const json = await response.json();
+        const coordinator = await BABYLON.ParseCoordinatorAsync(json, { scene });
+        // Process transitions in order inside the triggering call (welcome → start → ended)
+        coordinator.dispatchEventsSynchronously = true;
+        for (const [eventId, handler] of Object.entries(MATCH_UI_EFFECTS)) {
+          coordinator.getCustomEventObservable(eventId).add(() => handler());
+        }
+        coordinator.start();
+        matchUiCoordinator = coordinator;
+        for (const [eventId, data] of pendingUiEvents.splice(0)) {
+          uiNotify(eventId, data);
+        }
+      } catch (err) {
+        console.error("[MatchUiFlow] failed to load", MATCH_UI_FLOW_URL, err);
+        showMpToast("⚠️ Match UI flow failed to load — reload the page.", "#ff9e7b");
+      }
+    }
+    loadMatchUiFlow();
+
     startMatchBtn.addEventListener("click", () => {
       saveSetupSettingsToStorage();
       disconnectMultiplayer(true);
       readHostSetupInputs(true);
-      setupModalEl.style.display = "none";
-      isSetupOpen = false;
-      document.body.classList.remove("modal-open");
+      uiNotify("ui.matchStarted");
       resetGame();
       updateHostControlsVisibility();
-      tryLockPointer();
     });
 
     hostMpBtn.addEventListener("click", () => {
@@ -6655,60 +6660,17 @@
       });
     }
 
-    function handleRetryAction() {
-      // If the match is still running (timer > 0) and only the player was knocked down,
-      // respawn ONLY this player at a safe spot far from enemies without resetting the match!
-      if (!gameEnded && isPlayerKnockedDown) {
-        respawnLocalPlayer();
-        return;
-      }
+    restartBtn.addEventListener("click", () => uiNotify("ui.retryRequested"));
+    setupAgainBtn.addEventListener("click", () => uiNotify("ui.setupRequested"));
 
-      if (mpState.active && !isLocalPlayerHost()) {
-        return;
-      }
-
-      // Otherwise the match timer ended -> start a brand-new round and respawn all AI & players on both sides
-      isSetupOpen = false;
-      document.body.classList.remove("modal-open");
-      setupModalEl.style.display = "none";
-      if (mpState.active) {
-        const gTotal = mpState.roster ? mpState.roster.greenTotal : configuredFriendlyCount + 1;
-        const tTotal = mpState.roster ? mpState.roster.tanTotal : configuredEnemyCount;
-        sendNetMessage({
-          type: "restart_match",
-          clientToken: mpState.clientToken,
-          greenTotal: gTotal,
-          tanTotal: tTotal,
-          mapType: getActiveMapType(),
-          worldLimit:
-            getActiveMapType() === "shoebox"
-              ? 28
-              : (mpState.roster && mpState.roster.worldLimit) || configuredMapLimit,
-          hardcoreMode: isHardcoreActive(),
-          durationSec: (mpState.roster && mpState.roster.durationSec) || configuredDurationSec
-        });
-      }
-      resetGame();
-      updateHostControlsVisibility();
-      tryLockPointer();
-    }
-
-    restartBtn.addEventListener("click", handleRetryAction);
-    setupAgainBtn.addEventListener("click", openSetupModal);
-
-    function applyDamage(target, amount, shotDir, attacker) {
+    function applyDamage(target, amount, attacker) {
       if (!target.alive || gameEnded || isSetupOpen) return;
 
       const finalAmount = isHardcoreActive() ? Math.max(amount, target.maxHealth) : amount;
       target.health = Math.max(0, target.health - finalAmount);
       target.model.flinchTimer = 1.0;
 
-      if (target.model.overheadBarFill) {
-        target.model.overheadBarFill.scaling.x = Math.max(
-          0.001,
-          target.health / target.maxHealth
-        );
-      }
+      setPlateHealth(target.model, target.health / target.maxHealth);
 
       if (target.health <= 0) {
         target.alive = false;
@@ -6728,7 +6690,9 @@
         // If the local player was knocked down while the match is still running,
         // show the Respawn prompt for this player ONLY (gameEnded remains false so the battle never freezes!)
         if (target.isPlayer && !gameEnded) {
-          showPlayerRespawnOverlay();
+          isPlayerKnockedDown = true;
+          // Rigged soldiers raise the prompt from beginDeathFade once the fall finishes.
+          if (!target.model.animationGroups) uiNotify("ui.playerKnockedDown");
         }
       }
 
@@ -6794,118 +6758,18 @@
       }
     }
 
-    // Shows a personal Respawn prompt when the local player is knocked down (without freezing the match!)
-    function showPlayerRespawnOverlay() {
-      isPlayerKnockedDown = true;
-      document.body.classList.add("modal-open");
-      isMouseDown = false;
-      isMobileFiring = false;
-      mobileFireBtnEl.classList.remove("active");
-      if (document.pointerLockElement && document.exitPointerLock) {
-        document.exitPointerLock();
-      }
-
-      endTitleEl.textContent = "KNOCKED DOWN!";
-      endTitleEl.style.color = "#ff856b";
-      endSubtitleEl.textContent =
-        "The battle is still raging — respawn at a safe location far from enemies.";
-      finalScoreboardWrapEl.style.display = "none";
-      restartBtn.disabled = false;
-      restartBtn.style.opacity = "1";
-      restartBtn.style.cursor = "pointer";
-      restartBtn.textContent = "Respawn Soldier (R)";
-      updateHostControlsVisibility();
-      endMessageEl.style.display = "block";
-    }
-
-    // Ends the match when the countdown timer hits 0:00 (or when ended by the host) and displays the Kills & Deaths Scoreboard
+    // Ends the match when the countdown timer hits 0:00 (or when ended by the host).
+    // Presentation (scoreboard overlay vs. setup-modal status) is chosen by the match UI flow graph.
     function endMatchByTimeLimit(options = null) {
       const endedByHost = Boolean(options && options.endedByHost);
       if (gameEnded && !endedByHost) return;
       gameEnded = true;
       isPlayerKnockedDown = false;
-      document.body.classList.add("modal-open");
-      isMouseDown = false;
-      isMobileFiring = false;
-      mobileFireBtnEl.classList.remove("active");
-      if (document.pointerLockElement && document.exitPointerLock) {
-        document.exitPointerLock();
-      }
-
-      const greenKills = soldiers
-        .filter((s) => s.team === "green")
-        .reduce((acc, s) => acc + (s.kills || 0), 0);
-      const tanKills = soldiers
-        .filter((s) => s.team === "tan")
-        .reduce((acc, s) => acc + (s.kills || 0), 0);
-
-      if (endedByHost) {
-        const hostName = (options && options.hostName) || "Host";
-        endTitleEl.textContent = "MATCH ENDED BY HOST";
-        endTitleEl.style.color = "#ff856b";
-        endSubtitleEl.textContent = `Host (${hostName}) ended the match — Green: ${greenKills} Kills  |  Tan: ${tanKills} Kills`;
-      } else if (greenKills > tanKills) {
-        endTitleEl.textContent = "GREEN TEAM WINS!";
-        endTitleEl.style.color = "#8df57e";
-        endSubtitleEl.textContent = `Final Score — Green: ${greenKills} Kills  |  Tan: ${tanKills} Kills`;
-      } else if (tanKills > greenKills) {
-        endTitleEl.textContent = "TAN TEAM WINS!";
-        endTitleEl.style.color = "#ffd584";
-        endSubtitleEl.textContent = `Final Score — Green: ${greenKills} Kills  |  Tan: ${tanKills} Kills`;
-      } else {
-        endTitleEl.textContent = "DRAW MATCH!";
-        endTitleEl.style.color = "#ffffff";
-        endSubtitleEl.textContent = `Final Score — Green: ${greenKills} Kills  |  Tan: ${tanKills} Kills`;
-      }
-
-      // Sort participants: Human players first, then by Kills desc, Deaths asc
-      const sorted = [...soldiers].sort((a, b) => {
-        const aHuman = a.isPlayer || a.isRemotePlayer ? 1 : 0;
-        const bHuman = b.isPlayer || b.isRemotePlayer ? 1 : 0;
-        if (bHuman !== aHuman) return bHuman - aHuman;
-        if ((b.kills || 0) !== (a.kills || 0)) return (b.kills || 0) - (a.kills || 0);
-        return (a.deaths || 0) - (b.deaths || 0);
-      });
-
-      finalScoreboardBodyEl.innerHTML = sorted
-        .map((s) => {
-          const teamColor = s.team === "green" ? "#7dff70" : "#ffd584";
-          const rowStyle = s.isPlayer
-            ? "background: rgba(90, 210, 80, 0.18); font-weight: bold;"
-            : s.isRemotePlayer
-            ? "background: rgba(122, 215, 255, 0.12); font-weight: bold;"
-            : "";
-          return `
-            <tr style="${rowStyle}">
-              <td>${escapeHtml(s.name)}</td>
-              <td style="color:${teamColor}; font-weight:bold;">${s.team.toUpperCase()}</td>
-              <td>${s.kills || 0}</td>
-              <td>${s.deaths || 0}</td>
-            </tr>
-          `;
-        })
-        .join("");
-
-      finalScoreboardWrapEl.style.display = "block";
-      if (mpState.active && !isLocalPlayerHost()) {
-        restartBtn.textContent = "Waiting for Host...";
-        restartBtn.disabled = true;
-        restartBtn.style.opacity = "0.65";
-        restartBtn.style.cursor = "default";
-      } else {
-        restartBtn.textContent = "New Round (R)";
-        restartBtn.disabled = false;
-        restartBtn.style.opacity = "1";
-        restartBtn.style.cursor = "pointer";
-      }
-
-      updateHostControlsVisibility();
-      if (isSetupOpen) {
-        mpModalStatusEl.textContent = endedByHost ? "Match ended by host" : "Match ended";
-        mpModalStatusEl.style.color = "#ff9e7b";
-      } else {
-        endMessageEl.style.display = "block";
-      }
+      lastMatchEndInfo = {
+        endedByHost,
+        hostName: endedByHost ? (options && options.hostName) || "Host" : ""
+      };
+      uiNotify("ui.matchEnded");
     }
 
     function resetGame() {
@@ -6916,11 +6780,6 @@
           ? mpState.roster.durationSec
           : configuredDurationSec;
       mpState.localMatchEndTimestamp = performance.now() + matchTimeRemaining * 1000;
-      if (!isSetupOpen) {
-        document.body.classList.remove("modal-open");
-      }
-      finalScoreboardWrapEl.style.display = "none";
-      endMessageEl.style.display = "none";
       spawnAllSoldiers();
     }
 
@@ -6965,7 +6824,7 @@
     function updateAISoldier(ai, dt) {
       if (!ai.alive) {
         updateSoldierPhysicsAndCollisions(ai, dt);
-        animateSoldier(ai, dt, false, 0);
+        animateSoldier(ai, dt, false);
         return;
       }
 
@@ -6993,7 +6852,7 @@
       if (!nearestTarget) {
         ai.moveBlend = Math.max(0, ai.moveBlend - dt * 4);
         updateSoldierPhysicsAndCollisions(ai, dt);
-        animateSoldier(ai, dt, false, 0);
+        animateSoldier(ai, dt, false);
         return;
       }
 
@@ -7086,7 +6945,7 @@
       }
 
       updateSoldierPhysicsAndCollisions(ai, dt);
-      animateSoldier(ai, dt, isMoving, ai.strafeDir * 0.5);
+      animateSoldier(ai, dt, isMoving);
 
       if (ai.fireCooldown > 0) ai.fireCooldown -= dt;
       if (ai.fireCooldown <= 0 && horizDist < 75 && canSee) {
@@ -7182,19 +7041,6 @@
         }
       }
 
-      // Update physical impact particles
-      for (let i = impactParticles.length - 1; i >= 0; i--) {
-        const p = impactParticles[i];
-        p.life -= dt;
-        p.velocity.y -= 18.0 * dt;
-        p.mesh.position.addInPlace(p.velocity.scale(dt));
-        if (p.life <= 0) {
-          p.mesh.dispose();
-          if (p.mat) p.mat.dispose();
-          impactParticles.splice(i, 1);
-        }
-      }
-
       // Update dynamic physics beach ball
       updatePhysicsBeachBall(dt);
 
@@ -7274,7 +7120,7 @@
           const tP0 = performance.now();
           updateSoldierPhysicsAndCollisions(player, dt);
           const tP1 = performance.now();
-          animateSoldier(player, dt, isMoving, strideDir);
+          animateSoldier(player, dt, isMoving);
           const tP2 = performance.now();
           perfTelemetry._physAccum += tP1 - tP0;
           perfTelemetry._animAccum += tP2 - tP1;
@@ -7305,7 +7151,7 @@
           const tP0 = performance.now();
           updateSoldierPhysicsAndCollisions(player, dt);
           const tP1 = performance.now();
-          animateSoldier(player, dt, false, 0);
+          animateSoldier(player, dt, false);
           const tP2 = performance.now();
           perfTelemetry._physAccum += tP1 - tP0;
           perfTelemetry._animAccum += tP2 - tP1;
@@ -7328,10 +7174,10 @@
               s.position
             );
             s.model.root.rotation.y = s.yaw;
-            animateSoldier(s, dt, s.moveBlend > 0.1, s.strideDir || 0);
+            animateSoldier(s, dt, s.moveBlend > 0.1);
           } else {
             updateSoldierPhysicsAndCollisions(s, dt);
-            animateSoldier(s, dt, false, 0);
+            animateSoldier(s, dt, false);
           }
           continue;
         }
@@ -7339,7 +7185,8 @@
         // Auto-respawn dead AI bots while the match timer is running
         if (!s.alive && !gameEnded && !isSetupOpen && matchTimeRemaining > 0) {
           s.respawnTimer -= dt;
-          if (s.respawnTimer <= 0) {
+          // Wait for the fall + fade so a bot never pops back mid-animation.
+          if (s.respawnTimer <= 0 && isDeathSequenceDone(s.model)) {
             const sp = findFarthestSafeSpawnPoint(s.team);
             const y = getSandHeight(sp.x, sp.z);
             respawnSingleSoldier(s, sp.x, y, sp.z, sp.yaw);
@@ -7363,7 +7210,7 @@
         if ((gameEnded || isSetupOpen) && s.alive) {
           s.moveBlend = Math.max(0, s.moveBlend - dt * 4);
           updateSoldierPhysicsAndCollisions(s, dt);
-          animateSoldier(s, dt, false, 0);
+          animateSoldier(s, dt, false);
         } else {
           updateAISoldier(s, dt);
         }
@@ -7492,6 +7339,8 @@
         lookTarget.y = player.position.y + 1.55 - Math.sin(player.pitch) * 6.5;
         camera.setTarget(lookTarget);
       }
+
+      updateOverheadPlates();
     });
 
     // Enforce a hard 60 FPS cap across all clients (including 90Hz/120Hz/144Hz/240Hz displays)

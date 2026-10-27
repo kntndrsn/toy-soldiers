@@ -1,0 +1,2082 @@
+{
+  "customType": "BABYLON.NodeGeometry",
+  "outputNodeId": 43,
+  "blocks": [
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 1,
+      "name": "worldLimit",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 80,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 2,
+      "name": "two",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 2,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 3,
+      "name": "frameExtra",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 5.6,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 4,
+      "name": "wallOffset",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 1.4,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 5,
+      "name": "seatInset",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": -1.2,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 6,
+      "name": "minusOne",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": -1,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 7,
+      "name": "wallHeight",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 3.8,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 8,
+      "name": "wallThickness",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 2.8,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 9,
+      "name": "wallY",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 1.4,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 10,
+      "name": "seatY",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 3.45,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 11,
+      "name": "zero",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 0,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 12,
+      "name": "one",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 1,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 13,
+      "name": "seatSize",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        6.5,
+        0.5,
+        6.5
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.MathBlock",
+      "id": 14,
+      "name": "twoL",
+      "inputs": [
+        {
+          "name": "left",
+          "displayName": "left",
+          "inputName": "left",
+          "targetBlockId": 1,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "right",
+          "displayName": "right",
+          "inputName": "right",
+          "targetBlockId": 2,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "operation": 2
+    },
+    {
+      "customType": "BABYLON.MathBlock",
+      "id": 15,
+      "name": "nsWidth",
+      "inputs": [
+        {
+          "name": "left",
+          "displayName": "left",
+          "inputName": "left",
+          "targetBlockId": 14,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "right",
+          "displayName": "right",
+          "inputName": "right",
+          "targetBlockId": 3,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "operation": 0
+    },
+    {
+      "customType": "BABYLON.MathBlock",
+      "id": 16,
+      "name": "wallOff",
+      "inputs": [
+        {
+          "name": "left",
+          "displayName": "left",
+          "inputName": "left",
+          "targetBlockId": 1,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "right",
+          "displayName": "right",
+          "inputName": "right",
+          "targetBlockId": 4,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "operation": 0
+    },
+    {
+      "customType": "BABYLON.MathBlock",
+      "id": 17,
+      "name": "negWallOff",
+      "inputs": [
+        {
+          "name": "left",
+          "displayName": "left",
+          "inputName": "left",
+          "targetBlockId": 16,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "right",
+          "displayName": "right",
+          "inputName": "right",
+          "targetBlockId": 6,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "operation": 2
+    },
+    {
+      "customType": "BABYLON.MathBlock",
+      "id": 18,
+      "name": "seatOff",
+      "inputs": [
+        {
+          "name": "left",
+          "displayName": "left",
+          "inputName": "left",
+          "targetBlockId": 1,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "right",
+          "displayName": "right",
+          "inputName": "right",
+          "targetBlockId": 5,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "operation": 0
+    },
+    {
+      "customType": "BABYLON.MathBlock",
+      "id": 19,
+      "name": "negSeatOff",
+      "inputs": [
+        {
+          "name": "left",
+          "displayName": "left",
+          "inputName": "left",
+          "targetBlockId": 18,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "right",
+          "displayName": "right",
+          "inputName": "right",
+          "targetBlockId": 6,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "operation": 2
+    },
+    {
+      "customType": "BABYLON.VectorConverterBlock",
+      "id": 20,
+      "name": "nsSize",
+      "inputs": [
+        {
+          "name": "xyzw ",
+          "displayName": "xyzw "
+        },
+        {
+          "name": "xyz ",
+          "displayName": "xyz "
+        },
+        {
+          "name": "xy ",
+          "displayName": "xy "
+        },
+        {
+          "name": "zw ",
+          "displayName": "zw "
+        },
+        {
+          "name": "x ",
+          "displayName": "x ",
+          "inputName": "x ",
+          "targetBlockId": 15,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "y ",
+          "displayName": "y ",
+          "inputName": "y ",
+          "targetBlockId": 7,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "z ",
+          "displayName": "z ",
+          "inputName": "z ",
+          "targetBlockId": 8,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "w ",
+          "displayName": "w "
+        }
+      ],
+      "outputs": [
+        {
+          "name": "xyzw",
+          "displayName": "xyzw"
+        },
+        {
+          "name": "xyz",
+          "displayName": "xyz"
+        },
+        {
+          "name": "xy",
+          "displayName": "xy"
+        },
+        {
+          "name": "zw",
+          "displayName": "zw"
+        },
+        {
+          "name": "x",
+          "displayName": "x"
+        },
+        {
+          "name": "y",
+          "displayName": "y"
+        },
+        {
+          "name": "z",
+          "displayName": "z"
+        },
+        {
+          "name": "w",
+          "displayName": "w"
+        }
+      ]
+    },
+    {
+      "customType": "BABYLON.VectorConverterBlock",
+      "id": 21,
+      "name": "ewSize",
+      "inputs": [
+        {
+          "name": "xyzw ",
+          "displayName": "xyzw "
+        },
+        {
+          "name": "xyz ",
+          "displayName": "xyz "
+        },
+        {
+          "name": "xy ",
+          "displayName": "xy "
+        },
+        {
+          "name": "zw ",
+          "displayName": "zw "
+        },
+        {
+          "name": "x ",
+          "displayName": "x ",
+          "inputName": "x ",
+          "targetBlockId": 8,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "y ",
+          "displayName": "y ",
+          "inputName": "y ",
+          "targetBlockId": 7,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "z ",
+          "displayName": "z ",
+          "inputName": "z ",
+          "targetBlockId": 14,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "w ",
+          "displayName": "w "
+        }
+      ],
+      "outputs": [
+        {
+          "name": "xyzw",
+          "displayName": "xyzw"
+        },
+        {
+          "name": "xyz",
+          "displayName": "xyz"
+        },
+        {
+          "name": "xy",
+          "displayName": "xy"
+        },
+        {
+          "name": "zw",
+          "displayName": "zw"
+        },
+        {
+          "name": "x",
+          "displayName": "x"
+        },
+        {
+          "name": "y",
+          "displayName": "y"
+        },
+        {
+          "name": "z",
+          "displayName": "z"
+        },
+        {
+          "name": "w",
+          "displayName": "w"
+        }
+      ]
+    },
+    {
+      "customType": "BABYLON.VectorConverterBlock",
+      "id": 22,
+      "name": "northPos",
+      "inputs": [
+        {
+          "name": "xyzw ",
+          "displayName": "xyzw "
+        },
+        {
+          "name": "xyz ",
+          "displayName": "xyz "
+        },
+        {
+          "name": "xy ",
+          "displayName": "xy "
+        },
+        {
+          "name": "zw ",
+          "displayName": "zw "
+        },
+        {
+          "name": "x ",
+          "displayName": "x ",
+          "inputName": "x ",
+          "targetBlockId": 11,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "y ",
+          "displayName": "y ",
+          "inputName": "y ",
+          "targetBlockId": 9,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "z ",
+          "displayName": "z ",
+          "inputName": "z ",
+          "targetBlockId": 16,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "w ",
+          "displayName": "w "
+        }
+      ],
+      "outputs": [
+        {
+          "name": "xyzw",
+          "displayName": "xyzw"
+        },
+        {
+          "name": "xyz",
+          "displayName": "xyz"
+        },
+        {
+          "name": "xy",
+          "displayName": "xy"
+        },
+        {
+          "name": "zw",
+          "displayName": "zw"
+        },
+        {
+          "name": "x",
+          "displayName": "x"
+        },
+        {
+          "name": "y",
+          "displayName": "y"
+        },
+        {
+          "name": "z",
+          "displayName": "z"
+        },
+        {
+          "name": "w",
+          "displayName": "w"
+        }
+      ]
+    },
+    {
+      "customType": "BABYLON.VectorConverterBlock",
+      "id": 23,
+      "name": "southPos",
+      "inputs": [
+        {
+          "name": "xyzw ",
+          "displayName": "xyzw "
+        },
+        {
+          "name": "xyz ",
+          "displayName": "xyz "
+        },
+        {
+          "name": "xy ",
+          "displayName": "xy "
+        },
+        {
+          "name": "zw ",
+          "displayName": "zw "
+        },
+        {
+          "name": "x ",
+          "displayName": "x ",
+          "inputName": "x ",
+          "targetBlockId": 11,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "y ",
+          "displayName": "y ",
+          "inputName": "y ",
+          "targetBlockId": 9,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "z ",
+          "displayName": "z ",
+          "inputName": "z ",
+          "targetBlockId": 17,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "w ",
+          "displayName": "w "
+        }
+      ],
+      "outputs": [
+        {
+          "name": "xyzw",
+          "displayName": "xyzw"
+        },
+        {
+          "name": "xyz",
+          "displayName": "xyz"
+        },
+        {
+          "name": "xy",
+          "displayName": "xy"
+        },
+        {
+          "name": "zw",
+          "displayName": "zw"
+        },
+        {
+          "name": "x",
+          "displayName": "x"
+        },
+        {
+          "name": "y",
+          "displayName": "y"
+        },
+        {
+          "name": "z",
+          "displayName": "z"
+        },
+        {
+          "name": "w",
+          "displayName": "w"
+        }
+      ]
+    },
+    {
+      "customType": "BABYLON.VectorConverterBlock",
+      "id": 24,
+      "name": "eastPos",
+      "inputs": [
+        {
+          "name": "xyzw ",
+          "displayName": "xyzw "
+        },
+        {
+          "name": "xyz ",
+          "displayName": "xyz "
+        },
+        {
+          "name": "xy ",
+          "displayName": "xy "
+        },
+        {
+          "name": "zw ",
+          "displayName": "zw "
+        },
+        {
+          "name": "x ",
+          "displayName": "x ",
+          "inputName": "x ",
+          "targetBlockId": 16,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "y ",
+          "displayName": "y ",
+          "inputName": "y ",
+          "targetBlockId": 9,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "z ",
+          "displayName": "z ",
+          "inputName": "z ",
+          "targetBlockId": 11,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "w ",
+          "displayName": "w "
+        }
+      ],
+      "outputs": [
+        {
+          "name": "xyzw",
+          "displayName": "xyzw"
+        },
+        {
+          "name": "xyz",
+          "displayName": "xyz"
+        },
+        {
+          "name": "xy",
+          "displayName": "xy"
+        },
+        {
+          "name": "zw",
+          "displayName": "zw"
+        },
+        {
+          "name": "x",
+          "displayName": "x"
+        },
+        {
+          "name": "y",
+          "displayName": "y"
+        },
+        {
+          "name": "z",
+          "displayName": "z"
+        },
+        {
+          "name": "w",
+          "displayName": "w"
+        }
+      ]
+    },
+    {
+      "customType": "BABYLON.VectorConverterBlock",
+      "id": 25,
+      "name": "westPos",
+      "inputs": [
+        {
+          "name": "xyzw ",
+          "displayName": "xyzw "
+        },
+        {
+          "name": "xyz ",
+          "displayName": "xyz "
+        },
+        {
+          "name": "xy ",
+          "displayName": "xy "
+        },
+        {
+          "name": "zw ",
+          "displayName": "zw "
+        },
+        {
+          "name": "x ",
+          "displayName": "x ",
+          "inputName": "x ",
+          "targetBlockId": 17,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "y ",
+          "displayName": "y ",
+          "inputName": "y ",
+          "targetBlockId": 9,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "z ",
+          "displayName": "z ",
+          "inputName": "z ",
+          "targetBlockId": 11,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "w ",
+          "displayName": "w "
+        }
+      ],
+      "outputs": [
+        {
+          "name": "xyzw",
+          "displayName": "xyzw"
+        },
+        {
+          "name": "xyz",
+          "displayName": "xyz"
+        },
+        {
+          "name": "xy",
+          "displayName": "xy"
+        },
+        {
+          "name": "zw",
+          "displayName": "zw"
+        },
+        {
+          "name": "x",
+          "displayName": "x"
+        },
+        {
+          "name": "y",
+          "displayName": "y"
+        },
+        {
+          "name": "z",
+          "displayName": "z"
+        },
+        {
+          "name": "w",
+          "displayName": "w"
+        }
+      ]
+    },
+    {
+      "customType": "BABYLON.VectorConverterBlock",
+      "id": 26,
+      "name": "seatNE",
+      "inputs": [
+        {
+          "name": "xyzw ",
+          "displayName": "xyzw "
+        },
+        {
+          "name": "xyz ",
+          "displayName": "xyz "
+        },
+        {
+          "name": "xy ",
+          "displayName": "xy "
+        },
+        {
+          "name": "zw ",
+          "displayName": "zw "
+        },
+        {
+          "name": "x ",
+          "displayName": "x ",
+          "inputName": "x ",
+          "targetBlockId": 18,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "y ",
+          "displayName": "y ",
+          "inputName": "y ",
+          "targetBlockId": 10,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "z ",
+          "displayName": "z ",
+          "inputName": "z ",
+          "targetBlockId": 18,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "w ",
+          "displayName": "w "
+        }
+      ],
+      "outputs": [
+        {
+          "name": "xyzw",
+          "displayName": "xyzw"
+        },
+        {
+          "name": "xyz",
+          "displayName": "xyz"
+        },
+        {
+          "name": "xy",
+          "displayName": "xy"
+        },
+        {
+          "name": "zw",
+          "displayName": "zw"
+        },
+        {
+          "name": "x",
+          "displayName": "x"
+        },
+        {
+          "name": "y",
+          "displayName": "y"
+        },
+        {
+          "name": "z",
+          "displayName": "z"
+        },
+        {
+          "name": "w",
+          "displayName": "w"
+        }
+      ]
+    },
+    {
+      "customType": "BABYLON.VectorConverterBlock",
+      "id": 27,
+      "name": "seatNW",
+      "inputs": [
+        {
+          "name": "xyzw ",
+          "displayName": "xyzw "
+        },
+        {
+          "name": "xyz ",
+          "displayName": "xyz "
+        },
+        {
+          "name": "xy ",
+          "displayName": "xy "
+        },
+        {
+          "name": "zw ",
+          "displayName": "zw "
+        },
+        {
+          "name": "x ",
+          "displayName": "x ",
+          "inputName": "x ",
+          "targetBlockId": 19,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "y ",
+          "displayName": "y ",
+          "inputName": "y ",
+          "targetBlockId": 10,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "z ",
+          "displayName": "z ",
+          "inputName": "z ",
+          "targetBlockId": 18,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "w ",
+          "displayName": "w "
+        }
+      ],
+      "outputs": [
+        {
+          "name": "xyzw",
+          "displayName": "xyzw"
+        },
+        {
+          "name": "xyz",
+          "displayName": "xyz"
+        },
+        {
+          "name": "xy",
+          "displayName": "xy"
+        },
+        {
+          "name": "zw",
+          "displayName": "zw"
+        },
+        {
+          "name": "x",
+          "displayName": "x"
+        },
+        {
+          "name": "y",
+          "displayName": "y"
+        },
+        {
+          "name": "z",
+          "displayName": "z"
+        },
+        {
+          "name": "w",
+          "displayName": "w"
+        }
+      ]
+    },
+    {
+      "customType": "BABYLON.VectorConverterBlock",
+      "id": 28,
+      "name": "seatSE",
+      "inputs": [
+        {
+          "name": "xyzw ",
+          "displayName": "xyzw "
+        },
+        {
+          "name": "xyz ",
+          "displayName": "xyz "
+        },
+        {
+          "name": "xy ",
+          "displayName": "xy "
+        },
+        {
+          "name": "zw ",
+          "displayName": "zw "
+        },
+        {
+          "name": "x ",
+          "displayName": "x ",
+          "inputName": "x ",
+          "targetBlockId": 18,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "y ",
+          "displayName": "y ",
+          "inputName": "y ",
+          "targetBlockId": 10,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "z ",
+          "displayName": "z ",
+          "inputName": "z ",
+          "targetBlockId": 19,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "w ",
+          "displayName": "w "
+        }
+      ],
+      "outputs": [
+        {
+          "name": "xyzw",
+          "displayName": "xyzw"
+        },
+        {
+          "name": "xyz",
+          "displayName": "xyz"
+        },
+        {
+          "name": "xy",
+          "displayName": "xy"
+        },
+        {
+          "name": "zw",
+          "displayName": "zw"
+        },
+        {
+          "name": "x",
+          "displayName": "x"
+        },
+        {
+          "name": "y",
+          "displayName": "y"
+        },
+        {
+          "name": "z",
+          "displayName": "z"
+        },
+        {
+          "name": "w",
+          "displayName": "w"
+        }
+      ]
+    },
+    {
+      "customType": "BABYLON.VectorConverterBlock",
+      "id": 29,
+      "name": "seatSW",
+      "inputs": [
+        {
+          "name": "xyzw ",
+          "displayName": "xyzw "
+        },
+        {
+          "name": "xyz ",
+          "displayName": "xyz "
+        },
+        {
+          "name": "xy ",
+          "displayName": "xy "
+        },
+        {
+          "name": "zw ",
+          "displayName": "zw "
+        },
+        {
+          "name": "x ",
+          "displayName": "x ",
+          "inputName": "x ",
+          "targetBlockId": 19,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "y ",
+          "displayName": "y ",
+          "inputName": "y ",
+          "targetBlockId": 10,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "z ",
+          "displayName": "z ",
+          "inputName": "z ",
+          "targetBlockId": 19,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "w ",
+          "displayName": "w "
+        }
+      ],
+      "outputs": [
+        {
+          "name": "xyzw",
+          "displayName": "xyzw"
+        },
+        {
+          "name": "xyz",
+          "displayName": "xyz"
+        },
+        {
+          "name": "xy",
+          "displayName": "xy"
+        },
+        {
+          "name": "zw",
+          "displayName": "zw"
+        },
+        {
+          "name": "x",
+          "displayName": "x"
+        },
+        {
+          "name": "y",
+          "displayName": "y"
+        },
+        {
+          "name": "z",
+          "displayName": "z"
+        },
+        {
+          "name": "w",
+          "displayName": "w"
+        }
+      ]
+    },
+    {
+      "customType": "BABYLON.BoxBlock",
+      "id": 30,
+      "name": "unitBox",
+      "inputs": [
+        {
+          "name": "size",
+          "displayName": "size",
+          "inputName": "size",
+          "targetBlockId": 12,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "width",
+          "displayName": "width"
+        },
+        {
+          "name": "height",
+          "displayName": "height"
+        },
+        {
+          "name": "depth",
+          "displayName": "depth"
+        },
+        {
+          "name": "subdivisions",
+          "displayName": "subdivisions"
+        },
+        {
+          "name": "subdivisionsX",
+          "displayName": "subdivisionsX"
+        },
+        {
+          "name": "subdivisionsY",
+          "displayName": "subdivisionsY"
+        },
+        {
+          "name": "subdivisionsZ",
+          "displayName": "subdivisionsZ"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 31,
+      "name": "northWall",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 30,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 22,
+          "targetConnectionName": "xyz"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling",
+          "inputName": "scaling",
+          "targetBlockId": 20,
+          "targetConnectionName": "xyz"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 32,
+      "name": "southWall",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 30,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 23,
+          "targetConnectionName": "xyz"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling",
+          "inputName": "scaling",
+          "targetBlockId": 20,
+          "targetConnectionName": "xyz"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 33,
+      "name": "eastWall",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 30,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 24,
+          "targetConnectionName": "xyz"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling",
+          "inputName": "scaling",
+          "targetBlockId": 21,
+          "targetConnectionName": "xyz"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 34,
+      "name": "westWall",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 30,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 25,
+          "targetConnectionName": "xyz"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling",
+          "inputName": "scaling",
+          "targetBlockId": 21,
+          "targetConnectionName": "xyz"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 35,
+      "name": "seatBox",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 30,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling",
+          "inputName": "scaling",
+          "targetBlockId": 13,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 36,
+      "name": "seatNEMesh",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 35,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 26,
+          "targetConnectionName": "xyz"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 37,
+      "name": "seatNWMesh",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 35,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 27,
+          "targetConnectionName": "xyz"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 38,
+      "name": "seatSEMesh",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 35,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 28,
+          "targetConnectionName": "xyz"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 39,
+      "name": "seatSWMesh",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 35,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 29,
+          "targetConnectionName": "xyz"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": true
+    },
+    {
+      "customType": "BABYLON.MergeGeometryBlock",
+      "id": 40,
+      "name": "walls",
+      "inputs": [
+        {
+          "name": "geometry0",
+          "displayName": "geometry0",
+          "inputName": "geometry0",
+          "targetBlockId": 31,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry1",
+          "displayName": "geometry1",
+          "inputName": "geometry1",
+          "targetBlockId": 32,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry2",
+          "displayName": "geometry2",
+          "inputName": "geometry2",
+          "targetBlockId": 33,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry3",
+          "displayName": "geometry3",
+          "inputName": "geometry3",
+          "targetBlockId": 34,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry4",
+          "displayName": "geometry4"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.MergeGeometryBlock",
+      "id": 41,
+      "name": "seats",
+      "inputs": [
+        {
+          "name": "geometry0",
+          "displayName": "geometry0",
+          "inputName": "geometry0",
+          "targetBlockId": 36,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry1",
+          "displayName": "geometry1",
+          "inputName": "geometry1",
+          "targetBlockId": 37,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry2",
+          "displayName": "geometry2",
+          "inputName": "geometry2",
+          "targetBlockId": 38,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry3",
+          "displayName": "geometry3",
+          "inputName": "geometry3",
+          "targetBlockId": 39,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry4",
+          "displayName": "geometry4"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.MergeGeometryBlock",
+      "id": 42,
+      "name": "frame",
+      "inputs": [
+        {
+          "name": "geometry0",
+          "displayName": "geometry0",
+          "inputName": "geometry0",
+          "targetBlockId": 40,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry1",
+          "displayName": "geometry1",
+          "inputName": "geometry1",
+          "targetBlockId": 41,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry2",
+          "displayName": "geometry2"
+        },
+        {
+          "name": "geometry3",
+          "displayName": "geometry3"
+        },
+        {
+          "name": "geometry4",
+          "displayName": "geometry4"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.GeometryOutputBlock",
+      "id": 43,
+      "name": "output",
+      "inputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry",
+          "inputName": "geometry",
+          "targetBlockId": 42,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": []
+    }
+  ],
+  "comment": "Wooden sandbox frame: 4 walls + 4 corner seats parameterized by worldLimit (L). Single wood material. Origin at world center. Visual only; WORLD_LIMIT clamping stays in code.",
+  "editorData": {
+    "locations": [
+      {
+        "blockId": 1,
+        "x": 0,
+        "y": 360
+      },
+      {
+        "blockId": 2,
+        "x": 0,
+        "y": 0
+      },
+      {
+        "blockId": 3,
+        "x": 340,
+        "y": 0
+      },
+      {
+        "blockId": 4,
+        "x": 0,
+        "y": 180
+      },
+      {
+        "blockId": 5,
+        "x": 0,
+        "y": 540
+      },
+      {
+        "blockId": 6,
+        "x": 340,
+        "y": 720
+      },
+      {
+        "blockId": 7,
+        "x": 680,
+        "y": 180
+      },
+      {
+        "blockId": 8,
+        "x": 680,
+        "y": 360
+      },
+      {
+        "blockId": 9,
+        "x": 680,
+        "y": 540
+      },
+      {
+        "blockId": 10,
+        "x": 680,
+        "y": 1260
+      },
+      {
+        "blockId": 11,
+        "x": 680,
+        "y": 720
+      },
+      {
+        "blockId": 12,
+        "x": 340,
+        "y": 540
+      },
+      {
+        "blockId": 13,
+        "x": 680,
+        "y": 1440
+      },
+      {
+        "blockId": 14,
+        "x": 340,
+        "y": 180
+      },
+      {
+        "blockId": 15,
+        "x": 680,
+        "y": 0
+      },
+      {
+        "blockId": 16,
+        "x": 340,
+        "y": 360
+      },
+      {
+        "blockId": 17,
+        "x": 680,
+        "y": 1080
+      },
+      {
+        "blockId": 18,
+        "x": 340,
+        "y": 900
+      },
+      {
+        "blockId": 19,
+        "x": 680,
+        "y": 1620
+      },
+      {
+        "blockId": 20,
+        "x": 1020,
+        "y": 180
+      },
+      {
+        "blockId": 21,
+        "x": 1020,
+        "y": 720
+      },
+      {
+        "blockId": 22,
+        "x": 1020,
+        "y": 0
+      },
+      {
+        "blockId": 23,
+        "x": 1020,
+        "y": 360
+      },
+      {
+        "blockId": 24,
+        "x": 1020,
+        "y": 540
+      },
+      {
+        "blockId": 25,
+        "x": 1020,
+        "y": 900
+      },
+      {
+        "blockId": 26,
+        "x": 1020,
+        "y": 1080
+      },
+      {
+        "blockId": 27,
+        "x": 1020,
+        "y": 1260
+      },
+      {
+        "blockId": 28,
+        "x": 1020,
+        "y": 1620
+      },
+      {
+        "blockId": 29,
+        "x": 1020,
+        "y": 1800
+      },
+      {
+        "blockId": 30,
+        "x": 680,
+        "y": 900
+      },
+      {
+        "blockId": 31,
+        "x": 1360,
+        "y": 0
+      },
+      {
+        "blockId": 32,
+        "x": 1360,
+        "y": 180
+      },
+      {
+        "blockId": 33,
+        "x": 1360,
+        "y": 360
+      },
+      {
+        "blockId": 34,
+        "x": 1360,
+        "y": 540
+      },
+      {
+        "blockId": 35,
+        "x": 1020,
+        "y": 1440
+      },
+      {
+        "blockId": 36,
+        "x": 1360,
+        "y": 720
+      },
+      {
+        "blockId": 37,
+        "x": 1360,
+        "y": 900
+      },
+      {
+        "blockId": 38,
+        "x": 1360,
+        "y": 1080
+      },
+      {
+        "blockId": 39,
+        "x": 1360,
+        "y": 1260
+      },
+      {
+        "blockId": 40,
+        "x": 1700,
+        "y": 0
+      },
+      {
+        "blockId": 41,
+        "x": 1700,
+        "y": 180
+      },
+      {
+        "blockId": 42,
+        "x": 2040,
+        "y": 0
+      },
+      {
+        "blockId": 43,
+        "x": 2380,
+        "y": 0
+      }
+    ]
+  }
+}
