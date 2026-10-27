@@ -6004,9 +6004,7 @@
     }
 
     function isLocalPlayerHost() {
-      return Boolean(
-        mpState.active && (mpState.isHostOwner || mpState.clientId === mpState.hostId)
-      );
+      return Boolean(mpState.active && mpState.isHostOwner);
     }
 
     function updateHostControlsVisibility() {
@@ -6502,8 +6500,7 @@
       closeTopRightMenu();
       const codeToEnd = (
         targetRoomCode ||
-        mpState.roomCode ||
-        mpState.persistedHostRoomCode ||
+        (mpState.active ? mpState.roomCode : mpState.persistedHostRoomCode || mpState.roomCode) ||
         ""
       )
         .trim()
@@ -6698,10 +6695,21 @@
         handleNetworkMessage(msg);
       });
 
-      ws.addEventListener("close", () => {
+      ws.addEventListener("close", (event) => {
         if (mpState.ws === ws) {
           mpState.active = false;
           mpState.ws = null;
+          if (event && event.code === 4001) {
+            mpState.intentionalDisconnect = true;
+            mpState.lastActiveRoomCode = null;
+            cancelAutoReconnect();
+            mpModalStatusEl.textContent = "Session active in another tab";
+            mpModalStatusEl.style.color = "#ffd584";
+            showMpToast("ℹ️ Session moved to another window/tab.", "#ffd584");
+            updateMpStatusBadge();
+            updateHostControlsVisibility();
+            return;
+          }
           mpModalStatusEl.textContent = "Disconnected";
           mpModalStatusEl.style.color = "#ff9e7b";
           if (!mpState.intentionalDisconnect && mpState.lastActiveRoomCode && !gameEnded) {
@@ -6871,6 +6879,16 @@
           s.isRemotePlayer = true;
           s.rawPlayerName = info.name || "Player";
           s.name = s.rawPlayerName + " (Player)";
+          const st = roster.unitStats && roster.unitStats[s.unitId];
+          const shouldBeAlive =
+            (st && typeof st.alive === "boolean" ? st.alive : info.alive) !== false;
+          if (shouldBeAlive && !s.alive) {
+            const rx = typeof info.x === "number" ? info.x : s.position.x;
+            const rz = typeof info.z === "number" ? info.z : s.position.z;
+            const ry = getSandHeight(rx, rz);
+            const ryaw = typeof info.yaw === "number" ? info.yaw : s.yaw;
+            respawnSingleSoldier(s, rx, ry, rz, ryaw);
+          }
         } else {
           s.isPlayer = false;
           s.isRemotePlayer = false;
@@ -6971,7 +6989,6 @@
           mpState.hostId = msg.roster.hostId;
           mpState.isHostOwner = Boolean(
             msg.isHostOwner ||
-              msg.isHost ||
               (msg.roster.originalHostClientId &&
                 msg.roster.originalHostClientId === msg.clientId)
           );

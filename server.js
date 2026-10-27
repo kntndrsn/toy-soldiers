@@ -1058,6 +1058,11 @@ function resetRoomMatchState(room) {
   room.matchEnded = false;
   room.endedByHost = false;
   room.lastWorldState = null;
+  room.pendingWorldState = null;
+  if (room.dirtyPlayers) room.dirtyPlayers.clear();
+  if (room.pendingShots) room.pendingShots.length = 0;
+  if (room.pendingDamages) room.pendingDamages.length = 0;
+  if (room.pendingRespawns) room.pendingRespawns.length = 0;
   if (room.disconnectedPlayers) {
     room.disconnectedPlayers.clear();
   }
@@ -1074,6 +1079,17 @@ function resetRoomMatchState(room) {
   }
   room.statsDirty = true;
   room.statsDirtyForSync = true;
+}
+
+function isRoomOwner(room, clientId, clientToken) {
+  if (!room) return false;
+  if (room.originalHostToken) {
+    return Boolean(
+      (clientToken && room.originalHostToken === clientToken) ||
+        (room.originalHostClientId && room.originalHostClientId === clientId)
+    );
+  }
+  return room.hostId === clientId;
 }
 
 function endRoomByHost(room) {
@@ -1221,8 +1237,37 @@ function assignSlotForPlayer(room, team) {
       usedSlots.add(c.slotIndex);
     }
   }
+  if (room.disconnectedPlayers) {
+    for (const saved of room.disconnectedPlayers.values()) {
+      if (saved && saved.team === team && typeof saved.slotIndex === "number") {
+        usedSlots.add(saved.slotIndex);
+      }
+    }
+  }
   let slot = 0;
-  while (usedSlots.has(slot)) {
+  if (usedSlots.size < MAX_BOTS_PER_TEAM + 1) {
+    while (usedSlots.has(slot)) {
+      slot++;
+    }
+    return slot;
+  }
+  // If all team slots are occupied or reserved, evict the oldest non-owner disconnected reservation
+  if (room.disconnectedPlayers) {
+    for (const [tok, saved] of room.disconnectedPlayers.entries()) {
+      if (saved && saved.team === team && tok !== room.originalHostToken) {
+        room.disconnectedPlayers.delete(tok);
+        return saved.slotIndex;
+      }
+    }
+  }
+  const activeSlots = new Set();
+  for (const c of room.clients.values()) {
+    if (c.team === team) {
+      activeSlots.add(c.slotIndex);
+    }
+  }
+  slot = 0;
+  while (activeSlots.has(slot)) {
     slot++;
   }
   return slot;
@@ -1353,11 +1398,7 @@ wss.on("connection", (ws, req) => {
           // Check if this host already has an existing room (active or waiting on end screen)
           // so that starting a new match pulls all connected players in their room into the new match!
           let existingHostRoom = null;
-          if (
-            currentRoom &&
-            (currentRoom.hostId === clientId ||
-              (clientToken && currentRoom.originalHostToken === clientToken))
-          ) {
+          if (currentRoom && isRoomOwner(currentRoom, clientId, clientToken)) {
             existingHostRoom = currentRoom;
           } else if (clientToken) {
             for (const r of rooms.values()) {
@@ -1380,7 +1421,7 @@ wss.on("connection", (ws, req) => {
                 if (cid !== clientId && c.clientToken === clientToken) {
                   existingHostRoom.clients.delete(cid);
                   try {
-                    c.ws.close();
+                    c.ws.close(4001, "Duplicate session replaced");
                   } catch {}
                 }
               }
@@ -1708,7 +1749,7 @@ wss.on("connection", (ws, req) => {
               room.clients.delete(cid);
               if (room.dirtyPlayers) room.dirtyPlayers.delete(cid);
               try {
-                c.ws.close();
+                c.ws.close(4001, "Duplicate session replaced");
               } catch {}
             }
           }
@@ -1767,11 +1808,13 @@ wss.on("connection", (ws, req) => {
 
         const unitId = `${finalTeam}_${slotIndex}`;
         const unitStat = getUnitStat(room, unitId);
+        let revivedDeadUnit = false;
         if (!unitStat.alive || unitStat.health <= 0) {
           unitStat.health = 100;
           unitStat.alive = true;
           room.statsDirty = true;
           room.statsDirtyForSync = true;
+          revivedDeadUnit = true;
         }
 
         const spawnMaxX = room.mapType === "shoebox" ? 18 : Math.max(30, room.worldLimit - 10);
@@ -1853,6 +1896,32 @@ wss.on("connection", (ws, req) => {
             },
             clientId
           );
+          if (revivedDeadUnit) {
+            broadcastToRoom(
+              room,
+              {
+                type: "unit_respawned",
+                senderClientId: clientId,
+                unitId,
+                playerName: name,
+                team: finalTeam,
+                isAI: false,
+                x: spawnX,
+                y: spawnY,
+                z: spawnZ,
+                yaw: spawnYaw,
+                unitStats: {
+                  [unitId]: {
+                    kills: unitStat.kills,
+                    deaths: unitStat.deaths,
+                    health: unitStat.health,
+                    alive: unitStat.alive
+                  }
+                }
+              },
+              clientId
+            );
+          }
         }
         break;
       }
@@ -2093,11 +2162,7 @@ wss.on("connection", (ws, req) => {
         }
         if (!targetRoom) break;
 
-        const isAuthorizedHost =
-          targetRoom.hostId === clientId ||
-          targetRoom.originalHostClientId === clientId ||
-          Boolean(clientToken && targetRoom.originalHostToken === clientToken);
-        if (!isAuthorizedHost) break;
+        if (!isRoomOwner(targetRoom, clientId, clientToken)) break;
 
         endRoomByHost(targetRoom);
         break;
@@ -2109,10 +2174,7 @@ wss.on("connection", (ws, req) => {
         const clientToken = msg.clientToken
           ? String(msg.clientToken).trim().slice(0, 64)
           : null;
-        const isRoomHost =
-          currentRoom.hostId === clientId ||
-          currentRoom.originalHostClientId === clientId ||
-          Boolean(clientToken && currentRoom.originalHostToken === clientToken);
+        const isRoomHost = isRoomOwner(currentRoom, clientId, clientToken);
         if (!isRoomHost) break;
 
         if (isRoomHost) {
