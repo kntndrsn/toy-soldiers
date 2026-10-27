@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <!--TS_BUILD_MANIFEST-->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Toy Soldiers</title>
   <meta name="description" content="Multiplayer 3D Plastic Army Men Shooter — Battle in the Sandbox, Shoebox, or Kitchen Table!" />
@@ -1138,6 +1139,31 @@
 
   <script>
     // =========================================================================
+    // 0. BUILD VERSION & CACHE-BUSTED ASSET URLS
+    // =========================================================================
+    // server.js injects { build, assets: { "<path>": "<contentHash>" } } into the
+    // page. Static hosts (e.g. GitHub Pages) don't, so URLs stay unversioned there.
+    const BUILD_INFO =
+      window.__TS_BUILD__ && typeof window.__TS_BUILD__.build === "string"
+        ? window.__TS_BUILD__
+        : null;
+    const CLIENT_BUILD = BUILD_INFO ? BUILD_INFO.build : null;
+
+    function assetUrl(relPath) {
+      const hash = BUILD_INFO && BUILD_INFO.assets ? BUILD_INFO.assets[relPath] : null;
+      return hash ? `${relPath}?v=${encodeURIComponent(hash)}` : relPath;
+    }
+
+    // Drop the one-shot ?v=<build> cache-buster from the address bar after an update reload
+    try {
+      const loadedUrl = new URL(window.location.href);
+      if (loadedUrl.searchParams.has("v")) {
+        loadedUrl.searchParams.delete("v");
+        history.replaceState(null, "", loadedUrl.pathname + loadedUrl.search + loadedUrl.hash);
+      }
+    } catch (err) {}
+
+    // =========================================================================
     // 1. BABYLON ENGINE, SCENE, CAMERA & TONE MAPPING
     // =========================================================================
     const canvas = document.getElementById("renderCanvas");
@@ -1429,7 +1455,7 @@
     }
 
     async function loadSandNodeMaterial() {
-      const res = await fetch("materials/sandboxSand.json");
+      const res = await fetch(assetUrl("materials/sandboxSand.json"));
       if (!res.ok) throw new Error("HTTP " + res.status);
       const mat = BABYLON.NodeMaterial.Parse(await res.json(), scene);
       mat.name = "sandNodeMat";
@@ -1528,7 +1554,7 @@
     async function loadPropGraphs() {
       const results = await Promise.allSettled(
         Object.entries(PROP_GRAPH_FILES).map(async ([key, file]) => {
-          const res = await fetch("geometry/" + file);
+          const res = await fetch(assetUrl("geometry/" + file));
           if (!res.ok) throw new Error(file + ": HTTP " + res.status);
           propGraphs.set(key, BABYLON.NodeGeometry.Parse(await res.json()));
         })
@@ -2775,7 +2801,7 @@
 
     // Both GLB materials are replaced by the shared team plastics, so skip decoding their textures.
     function loadSoldierAssetContainer(file) {
-      return BABYLON.LoadAssetContainerAsync("models/" + file, scene, {
+      return BABYLON.LoadAssetContainerAsync(assetUrl("models/" + file), scene, {
         pluginExtension: ".glb",
         pluginOptions: { gltf: { skipMaterials: true } }
       });
@@ -2818,7 +2844,7 @@
 
     async function loadRiggedSoldierAssets() {
       const containers = await Promise.allSettled([
-        loadSoldierAssetContainer("Meshy_AI_rigged_green_All_Animations.glb?v=death-with-rifle"),
+        loadSoldierAssetContainer("Meshy_AI_rigged_green_All_Animations.glb"),
         loadSoldierAssetContainer("Meshy_AI_vintage_toy_m16_rifle.glb")
       ]);
       const failed = containers.find((result) => result.status === "rejected");
@@ -3235,7 +3261,7 @@
     }
 
     async function loadOverheadPlates() {
-      const response = await fetch(OVERHEAD_GUI_URL);
+      const response = await fetch(assetUrl(OVERHEAD_GUI_URL));
       if (!response.ok) throw new Error(`HTTP ${response.status} for ${OVERHEAD_GUI_URL}`);
       const layout = await response.json();
       const templates = {};
@@ -4595,7 +4621,7 @@
     async function loadImpactEffects() {
       await Promise.all(
         Object.entries(IMPACT_FX_GRAPHS).map(async ([key, file]) => {
-          const res = await fetch("particles/" + file);
+          const res = await fetch(assetUrl("particles/" + file));
           if (!res.ok) throw new Error(file + ": HTTP " + res.status);
           const json = await res.json();
           const pool = [];
@@ -5928,6 +5954,49 @@
         .catch(() => {});
     }
 
+    // ----- Build version check: runs once each time the Match Setup page shows -----
+    // If the server has a newer build, reload with ?v=<build> so index.html bypasses caches.
+    // Skipped while connected to a multiplayer match so players aren't dropped mid-game;
+    // the check runs again the next time the setup page shows.
+    const UPDATE_RELOAD_GUARD_KEY = "toy_soldiers_update_reload_target";
+
+    function reloadToBuild(build) {
+      try {
+        sessionStorage.setItem(UPDATE_RELOAD_GUARD_KEY, build);
+      } catch (err) {}
+      try {
+        saveSetupSettingsToStorage();
+      } catch (err) {}
+      const url = new URL(window.location.href);
+      // A never-before-seen URL bypasses browser/proxy caches for index.html
+      url.searchParams.set("v", build);
+      window.location.replace(url.toString());
+    }
+
+    function checkForUpdateOnSetup() {
+      // Only the server that served this page (and injected CLIENT_BUILD) is comparable
+      if (!CLIENT_BUILD || typeof fetch !== "function") return;
+      if (mpState.active || mpState.reconnectTimer) return;
+      fetch(`${window.location.origin}/api/version`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((data) => {
+          const serverBuild = data && typeof data.build === "string" ? data.build : "";
+          if (!serverBuild || !isSetupOpen || mpState.active) return;
+          if (serverBuild === CLIENT_BUILD) {
+            try {
+              sessionStorage.removeItem(UPDATE_RELOAD_GUARD_KEY);
+            } catch (err) {}
+            return;
+          }
+          // Loop guard: never auto-reload twice for the same target build in this tab
+          try {
+            if (sessionStorage.getItem(UPDATE_RELOAD_GUARD_KEY) === serverBuild) return;
+          } catch (err) {}
+          reloadToBuild(serverBuild);
+        })
+        .catch(() => {});
+    }
+
     // Sends immediately and restarts the 5s cadence (used on load, match start & mode changes)
     function announcePresence() {
       sendPresenceHeartbeat();
@@ -5941,9 +6010,13 @@
       } catch (err) {}
     });
     window.addEventListener("pageshow", (e) => {
-      if (e.persisted) announcePresence();
+      if (!e.persisted) return;
+      announcePresence();
+      if (isSetupOpen) checkForUpdateOnSetup();
     });
     announcePresence();
+    // The setup page is visible on initial load without going through ui.enterSetup
+    if (isSetupOpen) checkForUpdateOnSetup();
 
     function cancelAutoReconnect() {
       if (mpState.reconnectTimer) {
@@ -7074,6 +7147,7 @@
         readHostSetupInputs(false);
         updateHostControlsVisibility();
         pollServerRoomsPreview();
+        checkForUpdateOnSetup();
       },
       "ui.enterActive": () => {
         isSetupOpen = false;
@@ -7141,7 +7215,7 @@
 
     async function loadMatchUiFlow() {
       try {
-        const response = await fetch(MATCH_UI_FLOW_URL);
+        const response = await fetch(assetUrl(MATCH_UI_FLOW_URL));
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const json = await response.json();
         const coordinator = await BABYLON.ParseCoordinatorAsync(json, { scene });
