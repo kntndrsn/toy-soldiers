@@ -27,7 +27,7 @@ const FAVICON_FILES = new Set([
 ]);
 
 const MODEL_FILES = new Set([
-  "Meshy_AI_green_toy_soldier_split.glb",
+  "Meshy_AI_rigged_green_All_Animations.glb",
   "Meshy_AI_vintage_toy_m16_rifle.glb"
 ]);
 
