@@ -3547,7 +3547,7 @@
           wanderWeight: 0,
           avoidWeight: 1,
           separationWeight: 0.85,
-          leadShots: true,
+          leadShots: false,
           spreadMul: 0.52,
           fireRateMul: 0.82,
           memorySpan: 4.5,
@@ -6605,11 +6605,18 @@
             respawnSingleSoldier(s, rx, ry, rz, ryaw);
           }
         } else {
+          const wasHuman = s.isPlayer || s.isRemotePlayer;
           s.isPlayer = false;
           s.isRemotePlayer = false;
           s.rawPlayerName = "";
           if (s.botName) {
             s.name = s.botName;
+          }
+          // Remote/player → bot without a full respawn: give them a Yuka brain + bot fire rate
+          if (wasHuman || !s.vehicle || !s.aiProfile) {
+            const skillProfile = getAiSkillProfile(getActiveAiSkill());
+            s.fireRate = (0.78 + (s.slotIndex % 3) * 0.15) * skillProfile.fireRateMul;
+            attachYukaBrain(s);
           }
         }
         updateSoldierOverheadPlate(s);
@@ -7557,6 +7564,7 @@
       yukaObstacles: []
     };
     let navPathBudget = 0;
+    let navPathFairOffset = 0;
     let aiStepDt = 0.016;
     let aiSharedStates = null;
 
@@ -7580,7 +7588,12 @@
             return true;
           }
         } else if (obs.shape === "ellipsoid") {
-          continue;
+          // Block solid body at soldier feet; overhead flower canopy stays passable (radius → 0)
+          const feetY = getSandHeight(x, z);
+          const shapeR = getEllipsoidRadiusAt(obs, feetY);
+          if (shapeR > 0.05 && Math.hypot(x - obs.cx, z - obs.cz) <= shapeR + p) {
+            return true;
+          }
         } else if (
           x > obs.minX - p &&
           x < obs.maxX + p &&
@@ -7642,7 +7655,14 @@
             if (nx < 0 || nz < 0 || nx >= cols || nz >= rows) continue;
             const to = nz * cols + nx;
             if (!walkable[to] || !graph.hasNode(to)) continue;
-            const cost = dirs[d][0] !== 0 && dirs[d][1] !== 0 ? cellSize * 1.4142 : cellSize;
+            const isDiag = dirs[d][0] !== 0 && dirs[d][1] !== 0;
+            // No diagonal corner-cutting through blocked toys
+            if (isDiag) {
+              const sideA = gz * cols + nx;
+              const sideB = nz * cols + gx;
+              if (!walkable[sideA] || !walkable[sideB]) continue;
+            }
+            const cost = isDiag ? cellSize * 1.4142 : cellSize;
             graph.addEdge(new YUKA.NavEdge(from, to, cost));
           }
         }
@@ -7950,73 +7970,90 @@
         return;
       }
       try {
-      ensureAiSharedStates();
-      const profile = getAiSkillProfile(getActiveAiSkill());
-      const vehicle = new YUKA.Vehicle();
-      vehicle.updateOrientation = false;
-      vehicle.maxSpeed = unit.speed * profile.speedMul;
-      vehicle.maxForce = profile.maxForce;
-      vehicle.mass = profile.mass;
-      vehicle.boundingRadius = unit.radius;
-      vehicle.soldier = unit;
-      vehicle.position.set(unit.position.x, unit.position.y, unit.position.z);
+        // Replace any prior identity/brain entity so human→bot transitions don't leak
+        if (unit.vehicle && yukaEntityManager && typeof yukaEntityManager.remove === "function") {
+          try {
+            yukaEntityManager.remove(unit.vehicle);
+          } catch (err) {}
+        } else if (
+          unit.yukaEntity &&
+          unit.yukaEntity !== unit.vehicle &&
+          yukaEntityManager &&
+          typeof yukaEntityManager.remove === "function"
+        ) {
+          try {
+            yukaEntityManager.remove(unit.yukaEntity);
+          } catch (err) {}
+        }
 
-      const seek = new YUKA.SeekBehavior(new YUKA.Vector3(unit.position.x, 0, unit.position.z));
-      const followPath = new YUKA.FollowPathBehavior(new YUKA.Path(), 2.15);
-      followPath.active = false;
-      const wander = new YUKA.WanderBehavior();
-      wander.weight = profile.wanderWeight;
-      wander.active = profile.wanderWeight > 0.01;
-      const avoid = new YUKA.ObstacleAvoidanceBehavior(navGraphState.yukaObstacles);
-      avoid.weight = profile.avoidWeight;
-      avoid.active = profile.avoidWeight > 0.01 && navGraphState.yukaObstacles.length > 0;
+        ensureAiSharedStates();
+        const profile = getAiSkillProfile(getActiveAiSkill());
+        const vehicle = new YUKA.Vehicle();
+        vehicle.updateOrientation = false;
+        vehicle.maxSpeed = unit.speed * profile.speedMul;
+        vehicle.maxForce = profile.maxForce;
+        vehicle.mass = profile.mass;
+        vehicle.boundingRadius = unit.radius;
+        vehicle.soldier = unit;
+        vehicle.position.set(unit.position.x, unit.position.y, unit.position.z);
+        // Vehicle does not construct a StateMachine by default
+        vehicle.stateMachine = new YUKA.StateMachine(vehicle);
 
-      vehicle.steering.add(seek);
-      vehicle.steering.add(followPath);
-      vehicle.steering.add(wander);
-      vehicle.steering.add(avoid);
+        const seek = new YUKA.SeekBehavior(new YUKA.Vector3(unit.position.x, 0, unit.position.z));
+        const followPath = new YUKA.FollowPathBehavior(new YUKA.Path(), 2.15);
+        followPath.active = false;
+        const wander = new YUKA.WanderBehavior();
+        wander.weight = profile.wanderWeight;
+        wander.active = profile.wanderWeight > 0.01;
+        const avoid = new YUKA.ObstacleAvoidanceBehavior(navGraphState.yukaObstacles);
+        avoid.weight = profile.avoidWeight;
+        avoid.active = profile.avoidWeight > 0.01 && navGraphState.yukaObstacles.length > 0;
 
-      if (profile.usePursuit) {
-        const dummy = new YUKA.Vehicle();
-        const pursuit = new YUKA.PursuitBehavior(dummy, 2.4);
-        pursuit.active = false;
-        vehicle.steering.add(pursuit);
-        unit.pursuitBehavior = pursuit;
-      }
+        vehicle.steering.add(seek);
+        vehicle.steering.add(followPath);
+        vehicle.steering.add(wander);
+        vehicle.steering.add(avoid);
 
-      if (aiSharedStates) {
-        vehicle.stateMachine.add("ADVANCE", aiSharedStates.ADVANCE);
-        vehicle.stateMachine.add("ENGAGE", aiSharedStates.ENGAGE);
-        vehicle.stateMachine.add("CLOSE", aiSharedStates.CLOSE);
-        vehicle.stateMachine.add("COVER", aiSharedStates.COVER);
-        vehicle.stateMachine.add("UNSTICK", aiSharedStates.UNSTICK);
-        if (vehicle.stateMachine.get("ADVANCE")) {
+        unit.pursuitBehavior = null;
+        if (profile.usePursuit) {
+          const dummy = new YUKA.Vehicle();
+          const pursuit = new YUKA.PursuitBehavior(dummy, 2.4);
+          pursuit.active = false;
+          vehicle.steering.add(pursuit);
+          unit.pursuitBehavior = pursuit;
+        }
+
+        if (aiSharedStates) {
+          vehicle.stateMachine.add("ADVANCE", aiSharedStates.ADVANCE);
+          vehicle.stateMachine.add("ENGAGE", aiSharedStates.ENGAGE);
+          vehicle.stateMachine.add("CLOSE", aiSharedStates.CLOSE);
+          vehicle.stateMachine.add("COVER", aiSharedStates.COVER);
+          vehicle.stateMachine.add("UNSTICK", aiSharedStates.UNSTICK);
           vehicle.stateMachine.changeTo("ADVANCE");
         }
-      }
 
-      const memory = new YUKA.MemorySystem(vehicle);
-      memory.memorySpan = profile.memorySpan;
+        const memory = new YUKA.MemorySystem(vehicle);
+        memory.memorySpan = profile.memorySpan;
 
-      unit.vehicle = vehicle;
-      unit.yukaEntity = vehicle;
-      unit.seekBehavior = seek;
-      unit.followPathBehavior = followPath;
-      unit.wanderBehavior = wander;
-      unit.avoidBehavior = avoid;
-      unit.memorySystem = memory;
-      unit.aiProfile = profile;
-      unit.aiIntent = "advance";
-      unit.navPathAge = 99;
-      unit.navWaypoints = null;
-      unit.navWaypointIndex = 0;
-      unit.cachedCanSee = false;
-      unit.recentLosTimer = 0;
-      unit.coverSlot = null;
-      unit.lastSensedTarget = null;
-      unit.lastSensedAt = 0;
-      unit.lastSensedPos = new BABYLON.Vector3(unit.position.x, unit.position.y, unit.position.z);
-      yukaEntityManager.add(vehicle);
+        unit.vehicle = vehicle;
+        unit.yukaEntity = vehicle;
+        unit.seekBehavior = seek;
+        unit.followPathBehavior = followPath;
+        unit.wanderBehavior = wander;
+        unit.avoidBehavior = avoid;
+        unit.memorySystem = memory;
+        unit.aiProfile = profile;
+        unit.aiIntent = "advance";
+        unit.navPathAge = 99;
+        unit.navWaypoints = null;
+        unit.navWaypointIndex = 0;
+        unit.cachedCanSee = false;
+        unit.recentLosTimer = 0;
+        unit.coverSlot = null;
+        unit.lastSensedTarget = null;
+        unit.lastSensedAt = 0;
+        unit.lastSensedPos = new BABYLON.Vector3(unit.position.x, unit.position.y, unit.position.z);
+        yukaEntityManager.add(vehicle);
       } catch (err) {
         console.warn("Yuka brain attach failed", err);
         ensureYukaIdentity(unit);
@@ -8213,10 +8250,13 @@
           }
         }
         const pts = findNavPath(ai.position.x, ai.position.z, destX, destZ);
-        if (pts && pts.length) {
+        if (pts === null) {
+          // Shared search budget exhausted — keep existing route; retry next frames
+        } else if (pts.length) {
           applyPathToVehicle(ai, pts);
           ai.navPathAge = 0;
         } else {
+          // Graph search ran but found nothing useful
           applyPathToVehicle(ai, null);
           ai.navPathAge = profile.pathAge * 0.45;
         }
@@ -8312,20 +8352,11 @@
       if (ai.fireCooldown <= 0 && canFire) {
         const muzzlePos = getMuzzleWorldPosition(ai);
         const spread = (ai.team === "green" ? 1.2 : 1.5) * profile.spreadMul;
-        let aimX = nearestTarget.position.x;
-        let aimY = nearestTarget.position.y + 1.25;
-        let aimZ = nearestTarget.position.z;
-        if (profile.leadShots) {
-          const shotSpeed = 90;
-          const lead = horizDist / shotSpeed;
-          aimX += nearestTarget.velocity.x * lead;
-          aimY += nearestTarget.velocity.y * lead * 0.35;
-          aimZ += nearestTarget.velocity.z * lead;
-        }
+        // Hitscan (instant ray) — aim at current hitbox, no travel-time lead
         const aimPos = new BABYLON.Vector3(
-          aimX + (Math.random() - 0.5) * spread,
-          aimY + (Math.random() - 0.5) * 0.6 * profile.spreadMul,
-          aimZ + (Math.random() - 0.5) * spread
+          nearestTarget.position.x + (Math.random() - 0.5) * spread,
+          nearestTarget.position.y + 1.25 + (Math.random() - 0.5) * 0.6 * profile.spreadMul,
+          nearestTarget.position.z + (Math.random() - 0.5) * spread
         );
         const shotDir = aimPos.subtract(muzzlePos);
         if (shotDir.lengthSquared() > 1e-6) {
@@ -8535,8 +8566,14 @@
       // ----- REMOTE PLAYERS & AI SQUADS UPDATE (WITH AUTO-RESPAWN) -----
       const tAiLoopStart = performance.now();
       navPathBudget = soldiers.length > 80 ? 5 : soldiers.length > 40 ? 8 : 12;
+      // Rotate start index so path-search budget is not always eaten by early slots
+      const soldierCount = soldiers.length;
+      const aiStart =
+        soldierCount > 0 ? navPathFairOffset % soldierCount : 0;
+      navPathFairOffset = soldierCount > 0 ? (aiStart + 1) % soldierCount : 0;
       const isHost = isMultiplayerAuthority();
-      for (const s of soldiers) {
+      for (let si = 0; si < soldierCount; si++) {
+        const s = soldiers[(aiStart + si) % soldierCount];
         if (s.isPlayer) continue;
 
         // Remote human player OR non-host AI soldier: interpolate smoothly from network state
