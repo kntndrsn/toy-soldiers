@@ -836,9 +836,7 @@ const server = http.createServer((req, res) => {
     if (qIdx !== -1) {
       try {
         const params = new URLSearchParams(req.url.slice(qIdx + 1));
-        if (params.get("mode") === "solo") {
-          recordSoloPresence(params.get("clientToken"));
-        }
+        recordPresence(params.get("id"), params.get("mode"));
       } catch {}
     }
     res.writeHead(200, {
@@ -1066,40 +1064,54 @@ const rooms = new Map();
 let nextClientId = 1;
 let nextRoomSyncSlot = 0;
 
-// App-wide presence: solo clients heartbeat GET /api/presence (~5s); multiplayer
-// counts come from live room sockets. Totals are recomputed on a 5s cadence and
-// served from cache so /api/presence, /rooms and pong replies stay O(1).
+// App-wide presence: every open page (solo or multiplayer) heartbeats
+// GET /api/presence?id=<per-tab id>&mode=<solo|multiplayer|offline> on load, on
+// match start and every ~5s. Ids are per tab (not the shared localStorage token)
+// so multiple tabs/players behind one browser are each counted. Multiplayer totals
+// come from live room sockets (authoritative); solo totals from fresh solo
+// heartbeats. Totals are cached and recomputed on the server tick (immediately when
+// something changed, otherwise once per second) so all reads stay O(1).
 const PRESENCE_TTL_MS = 15000;
-const PRESENCE_REFRESH_TICKS = 20; // 20 x 250ms server tick = 5s
-const MAX_SOLO_PRESENCE_ENTRIES = 20000;
-const soloPresence = new Map(); // Map<clientToken, lastSeenMs>
+const MAX_PRESENCE_ENTRIES = 20000;
+const presenceById = new Map(); // Map<presenceId, { mode, lastSeen }>
 let cachedPresence = { solo: 0, multiplayer: 0, total: 0 };
+let presenceDirty = true;
 
 function refreshPresenceCounts(now = Date.now()) {
   let multiplayer = 0;
-  const inMatchTokens = new Set();
   for (const room of rooms.values()) {
     multiplayer += room.clients.size;
-    for (const c of room.clients.values()) {
-      if (c.clientToken) inMatchTokens.add(c.clientToken);
-    }
   }
   let solo = 0;
-  for (const [tok, lastSeen] of soloPresence) {
-    if (now - lastSeen > PRESENCE_TTL_MS) {
-      soloPresence.delete(tok);
-    } else if (!inMatchTokens.has(tok)) {
+  for (const [id, entry] of presenceById) {
+    if (now - entry.lastSeen > PRESENCE_TTL_MS) {
+      presenceById.delete(id);
+    } else if (entry.mode === "solo") {
       solo++;
     }
   }
   cachedPresence = { solo, multiplayer, total: solo + multiplayer };
+  presenceDirty = false;
 }
 
-function recordSoloPresence(clientToken) {
-  const tok = String(clientToken || "").trim().slice(0, 64);
-  if (!tok) return;
-  if (!soloPresence.has(tok) && soloPresence.size >= MAX_SOLO_PRESENCE_ENTRIES) return;
-  soloPresence.set(tok, Date.now());
+function recordPresence(rawId, rawMode) {
+  const id = String(rawId || "").trim().slice(0, 64);
+  if (!id) return;
+  if (rawMode === "offline") {
+    if (presenceById.delete(id)) presenceDirty = true;
+    return;
+  }
+  const mode = rawMode === "multiplayer" ? "multiplayer" : "solo";
+  const existing = presenceById.get(id);
+  if (existing) {
+    if (existing.mode !== mode) presenceDirty = true;
+    existing.mode = mode;
+    existing.lastSeen = Date.now();
+    return;
+  }
+  if (presenceById.size >= MAX_PRESENCE_ENTRIES) return;
+  presenceById.set(id, { mode, lastSeen: Date.now() });
+  presenceDirty = true;
 }
 
 function safeSend(ws, payload) {
@@ -2574,7 +2586,9 @@ setInterval(() => {
     perfMetrics.tickHistoryMs.shift();
   }
 
-  if (tickCounter % PRESENCE_REFRESH_TICKS === 1) {
+  // Presence: recompute promptly after joins/mode changes, otherwise once per second
+  // (picks up room join/leave and expires stale heartbeats)
+  if (presenceDirty || tickCounter % 4 === 1) {
     refreshPresenceCounts(now);
   }
 

@@ -5905,25 +5905,45 @@
       updateMpStatusBadge();
     }
 
-    // Solo/menu clients heartbeat app-wide presence every 5s (multiplayer clients get it via pong)
+    // Every open page (solo or multiplayer) announces itself on load, on match
+    // start/join and every 5s. The id is per tab so several tabs/players sharing
+    // one browser's localStorage token are each counted.
     const PRESENCE_HEARTBEAT_MS = 5000;
+    const presenceId =
+      "p_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+    let presenceHeartbeatTimer = null;
+
+    function getPresenceUrl(mode) {
+      return `${getServerHttpBase()}/api/presence?id=${encodeURIComponent(presenceId)}&mode=${mode}`;
+    }
+
     function sendPresenceHeartbeat() {
-      if (mpState.active || document.hidden || typeof fetch !== "function") return;
-      const tokenParam = mpState.clientToken
-        ? `&clientToken=${encodeURIComponent(mpState.clientToken)}`
-        : "";
-      fetch(`${getServerHttpBase()}/api/presence?mode=solo${tokenParam}`, { cache: "no-store" })
+      if (typeof fetch !== "function") return;
+      const mode = mpState.active ? "multiplayer" : "solo";
+      fetch(getPresenceUrl(mode), { cache: "no-store" })
         .then((r) => r.json())
         .then((data) => {
-          if (data && !mpState.active) applyPresence(data.presence);
+          if (data) applyPresence(data.presence);
         })
         .catch(() => {});
     }
-    setInterval(sendPresenceHeartbeat, PRESENCE_HEARTBEAT_MS);
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) sendPresenceHeartbeat();
+
+    // Sends immediately and restarts the 5s cadence (used on load, match start & mode changes)
+    function announcePresence() {
+      sendPresenceHeartbeat();
+      if (presenceHeartbeatTimer) clearInterval(presenceHeartbeatTimer);
+      presenceHeartbeatTimer = setInterval(sendPresenceHeartbeat, PRESENCE_HEARTBEAT_MS);
+    }
+
+    window.addEventListener("pagehide", () => {
+      try {
+        if (navigator.sendBeacon) navigator.sendBeacon(getPresenceUrl("offline"));
+      } catch (err) {}
     });
-    setTimeout(sendPresenceHeartbeat, 0);
+    window.addEventListener("pageshow", (e) => {
+      if (e.persisted) announcePresence();
+    });
+    announcePresence();
 
     function cancelAutoReconnect() {
       if (mpState.reconnectTimer) {
@@ -5933,6 +5953,7 @@
     }
 
     function disconnectMultiplayer(intentional = true) {
+      const wasActive = mpState.active;
       if (intentional) {
         mpState.intentionalDisconnect = true;
         mpState.lastActiveRoomCode = null;
@@ -5950,6 +5971,7 @@
       if (intentional) {
         mpState.isHostOwner = false;
       }
+      if (wasActive) announcePresence();
       updateMpStatusBadge();
       updateHostControlsVisibility();
       updatePerfHudDOM();
@@ -6212,6 +6234,7 @@
         if (mpState.ws === ws) {
           mpState.active = false;
           mpState.ws = null;
+          announcePresence();
           if (event && event.code === 4001) {
             mpState.intentionalDisconnect = true;
             mpState.lastActiveRoomCode = null;
@@ -6472,6 +6495,7 @@
         case "room_joined": {
           cancelAutoReconnect();
           mpState.active = true;
+          announcePresence();
           mpState.intentionalDisconnect = false;
           mpState.clientId = msg.clientId;
           mpState.myUnitId = msg.unitId;
@@ -7145,6 +7169,7 @@
       uiNotify("ui.matchStarted");
       resetGame();
       updateHostControlsVisibility();
+      announcePresence();
     });
 
     hostMpBtn.addEventListener("click", () => {
