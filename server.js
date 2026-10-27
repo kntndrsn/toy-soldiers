@@ -50,7 +50,8 @@ const GEOMETRY_FILES = new Set([
   "armyTruck.json",
   "armyJeep.json",
   "shoeboxShell.json",
-  "tissueSheet.json"
+  "tissueSheet.json",
+  "kitchenPlate.json"
 ]);
 
 // Node Particle Editor graphs (NPE JSON) served at /particles/<file>
@@ -714,7 +715,7 @@ function renderPerfDashboardHtml() {
                 "<tr>" +
                 "<td>" + (c.clientId || "local") + "</td>" +
                 "<td>" + (c.mode || "solo") + (c.roomCode ? " (" + c.roomCode + ")" : "") + "</td>" +
-                "<td>" + (c.mapType === "shoebox" ? "Shoebox" : "Sandbox") + "</td>" +
+                "<td>" + (c.mapType === "kitchen" ? "Kitchen Table" : c.mapType === "shoebox" ? "Shoebox" : "Sandbox") + "</td>" +
                 "<td>" + (c.aliveUnits || 0) + "/" + (c.totalUnits || 0) + "</td>" +
                 "<td style='color:#84ff78;font-weight:bold;'>" + (c.fps || 0) + "</td>" +
                 "<td>" + (c.frameMs || 0) + "</td>" +
@@ -747,7 +748,7 @@ function renderPerfDashboardHtml() {
               (r) =>
                 "<tr>" +
                 "<td>" + r.roomCode + "</td>" +
-                "<td>" + (r.mapType === "shoebox" ? "Shoebox" : "Sandbox") + "</td>" +
+                "<td>" + (r.mapType === "kitchen" ? "Kitchen Table" : r.mapType === "shoebox" ? "Shoebox" : "Sandbox") + "</td>" +
                 "<td>" + (r.hardcoreMode ? "Yes" : "No") + "</td>" +
                 "<td>" + (r.hasPassword ? "🔒 Protected" : "Open") + "</td>" +
                 "<td>" + r.playersOnline + "</td>" +
@@ -915,7 +916,7 @@ const server = http.createServer((req, res) => {
           clientId: cid,
           mode: data.mode === "multiplayer" ? "multiplayer" : "solo",
           roomCode: data.roomCode ? String(data.roomCode).slice(0, 12) : null,
-          mapType: data.mapType === "shoebox" ? "shoebox" : "sandbox",
+          mapType: resolveMapType(data.mapType),
           fps: Number(Number(data.fps || 0).toFixed(1)),
           frameMs: Number(Number(data.frameMs || 0).toFixed(2)),
           renderMs: Number(Number(data.renderMs || 0).toFixed(2)),
@@ -1057,8 +1058,26 @@ function safeSend(ws, payload) {
   }
 }
 
+function resolveMapType(mapType, limit) {
+  if (mapType === "kitchen") return "kitchen";
+  return mapType === "shoebox" || Number(limit) <= 50 ? "shoebox" : "sandbox";
+}
+
+function resolveWorldLimit(mapType, limit) {
+  return mapType === "kitchen" ? 64 : mapType === "shoebox" ? 28
+    : Math.max(50, Math.min(130, Number(limit) || 80));
+}
+
+function getSpawnBounds(room) {
+  return {
+    maxX: room.mapType === "kitchen" ? 38 : room.mapType === "shoebox" ? 18 : Math.max(30, room.worldLimit - 10),
+    minZ: room.mapType === "shoebox" ? 10 : Math.max(18, room.worldLimit * 0.35),
+    maxZ: room.mapType === "shoebox" ? 25 : Math.max(28, room.worldLimit - 8)
+  };
+}
+
 function sanitizeCode(raw, mapType = "sandbox") {
-  const fallbackPrefix = mapType === "shoebox" ? "SHOE" : "SAND";
+  const fallbackPrefix = mapType === "kitchen" ? "KITC" : mapType === "shoebox" ? "SHOE" : "SAND";
   const cleaned = String(raw || "")
     .toUpperCase()
     .replace(/[^A-Z0-9_-]/g, "")
@@ -1067,14 +1086,14 @@ function sanitizeCode(raw, mapType = "sandbox") {
 }
 
 function allocateUniqueRoomCode(requestedRaw, mapType = "sandbox") {
-  const prefix = mapType === "shoebox" ? "SHOE" : "SAND";
+  const prefix = mapType === "kitchen" ? "KITC" : mapType === "shoebox" ? "SHOE" : "SAND";
   const cleaned = sanitizeCode(requestedRaw, mapType);
   // If the requested code matches the selected map prefix and is unused, keep it
   const matchesMapPrefix = cleaned.startsWith(prefix);
-  if (cleaned && cleaned !== "SAND1" && cleaned !== "SHOE1" && matchesMapPrefix && !rooms.has(cleaned)) {
+  if (cleaned && cleaned !== "SAND1" && cleaned !== "SHOE1" && cleaned !== "KITC1" && matchesMapPrefix && !rooms.has(cleaned)) {
     return cleaned;
   }
-  if (cleaned && !cleaned.startsWith("SAND") && !cleaned.startsWith("SHOE") && !rooms.has(cleaned)) {
+  if (cleaned && !cleaned.startsWith("SAND") && !cleaned.startsWith("SHOE") && !cleaned.startsWith("KITC") && !rooms.has(cleaned)) {
     return cleaned;
   }
   for (let attempt = 0; attempt < 200; attempt++) {
@@ -1204,10 +1223,8 @@ function getOrCreateRoom(
   let room = rooms.get(roomCode);
   if (!room) {
     const dur = Math.max(60, Math.min(1800, Number(durationSec) || 300));
-    const resolvedMap = mapType === "shoebox" || Number(worldLimit) <= 50 ? "shoebox" : "sandbox";
-    const lim = resolvedMap === "shoebox"
-      ? 28
-      : Math.max(50, Math.min(130, Number(worldLimit) || 80));
+    const resolvedMap = resolveMapType(mapType, worldLimit);
+    const lim = resolveWorldLimit(resolvedMap, worldLimit);
     room = {
       code: roomCode,
       syncSlot: nextRoomSyncSlot++ & 7, // Stagger timer_sync across 8 x 250ms ticks (2.0s cycle)
@@ -1448,15 +1465,13 @@ wss.on("connection", (ws, req) => {
         const clientToken = msg.clientToken
           ? String(msg.clientToken).trim().slice(0, 64)
           : null;
-        const requestedMapType =
-          msg.mapType === "shoebox" || Number(msg.worldLimit) <= 50 ? "shoebox" : "sandbox";
+        const requestedMapType = resolveMapType(msg.mapType, msg.worldLimit);
         const suppliedPassword = String(msg.password || "").trim().slice(0, 32);
         const team = msg.team === "tan" ? "tan" : "green";
         const name = String(msg.name || "Washington").slice(0, 18);
         const requestedGreen = Number(msg.greenTotal) || 4;
         const requestedTan = Number(msg.tanTotal) || 4;
-        const requestedLimit =
-          requestedMapType === "shoebox" ? 28 : Number(msg.worldLimit) || 80;
+        const requestedLimit = resolveWorldLimit(requestedMapType, msg.worldLimit);
         const requestedHardcore = Boolean(msg.hardcoreMode);
         const requestedDuration = Number(msg.durationSec) || 300;
 
@@ -1493,13 +1508,14 @@ wss.on("connection", (ws, req) => {
               }
             }
 
-            // Update room code if map prefix changed between SAND and SHOE
-            const prefix = requestedMapType === "shoebox" ? "SHOE" : "SAND";
+            // Update generated room codes when the host changes maps.
+            const prefix = requestedMapType === "kitchen" ? "KITC" : requestedMapType === "shoebox" ? "SHOE" : "SAND";
             const cleanedReq = sanitizeCode(msg.roomCode, requestedMapType);
             let nextRoomCode = existingHostRoom.code;
             if (
               (existingHostRoom.code.startsWith("SAND") ||
-                existingHostRoom.code.startsWith("SHOE")) &&
+                existingHostRoom.code.startsWith("SHOE") ||
+                existingHostRoom.code.startsWith("KITC")) &&
               !existingHostRoom.code.startsWith(prefix)
             ) {
               nextRoomCode = allocateUniqueRoomCode(cleanedReq, requestedMapType);
@@ -1508,6 +1524,7 @@ wss.on("connection", (ws, req) => {
               cleanedReq !== existingHostRoom.code &&
               !cleanedReq.startsWith("SAND") &&
               !cleanedReq.startsWith("SHOE") &&
+              !cleanedReq.startsWith("KITC") &&
               !rooms.has(cleanedReq)
             ) {
               nextRoomCode = cleanedReq;
@@ -1535,25 +1552,11 @@ wss.on("connection", (ws, req) => {
               Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(requestedTan))
             );
             existingHostRoom.mapType = requestedMapType;
-            existingHostRoom.worldLimit =
-              requestedMapType === "shoebox"
-                ? 28
-                : Math.max(50, Math.min(130, requestedLimit));
+            existingHostRoom.worldLimit = requestedLimit;
             existingHostRoom.hardcoreMode = requestedHardcore;
             existingHostRoom.durationSec = Math.max(60, Math.min(1800, requestedDuration));
 
-            const spawnMaxX =
-              existingHostRoom.mapType === "shoebox"
-                ? 18
-                : Math.max(30, existingHostRoom.worldLimit - 10);
-            const spawnMinZ =
-              existingHostRoom.mapType === "shoebox"
-                ? 10
-                : Math.max(18, existingHostRoom.worldLimit * 0.35);
-            const spawnMaxZ =
-              existingHostRoom.mapType === "shoebox"
-                ? 25
-                : Math.max(28, existingHostRoom.worldLimit - 8);
+            const { maxX: spawnMaxX, minZ: spawnMinZ, maxZ: spawnMaxZ } = getSpawnBounds(existingHostRoom);
 
             // Upsert host client in existingHostRoom.clients
             let hostClient = existingHostRoom.clients.get(clientId);
@@ -1680,10 +1683,7 @@ wss.on("connection", (ws, req) => {
             Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(requestedTan))
           );
           room.mapType = requestedMapType;
-          room.worldLimit =
-            requestedMapType === "shoebox"
-              ? 28
-              : Math.max(50, Math.min(130, requestedLimit));
+          room.worldLimit = requestedLimit;
           room.hardcoreMode = requestedHardcore;
           room.durationSec = Math.max(60, Math.min(1800, requestedDuration));
           resetRoomMatchState(room);
@@ -1691,9 +1691,7 @@ wss.on("connection", (ws, req) => {
           const slotIndex = assignSlotForPlayer(room, team);
           const unitId = `${team}_${slotIndex}`;
           getUnitStat(room, unitId);
-          const spawnMaxX = room.mapType === "shoebox" ? 18 : Math.max(30, room.worldLimit - 10);
-          const spawnMinZ = room.mapType === "shoebox" ? 10 : Math.max(18, room.worldLimit * 0.35);
-          const spawnMaxZ = room.mapType === "shoebox" ? 25 : Math.max(28, room.worldLimit - 8);
+          const { maxX: spawnMaxX, minZ: spawnMinZ, maxZ: spawnMaxZ } = getSpawnBounds(room);
           const randX = Math.round((Math.random() * 2 - 1) * spawnMaxX * 100) / 100;
           const randZMag =
             Math.round((spawnMinZ + Math.random() * (spawnMaxZ - spawnMinZ)) * 100) / 100;
@@ -1883,9 +1881,7 @@ wss.on("connection", (ws, req) => {
           revivedDeadUnit = true;
         }
 
-        const spawnMaxX = room.mapType === "shoebox" ? 18 : Math.max(30, room.worldLimit - 10);
-        const spawnMinZ = room.mapType === "shoebox" ? 10 : Math.max(18, room.worldLimit * 0.35);
-        const spawnMaxZ = room.mapType === "shoebox" ? 25 : Math.max(28, room.worldLimit - 8);
+        const { maxX: spawnMaxX, minZ: spawnMinZ, maxZ: spawnMaxZ } = getSpawnBounds(room);
         const randX = Math.round((Math.random() * 2 - 1) * spawnMaxX * 100) / 100;
         const randZMag =
           Math.round((spawnMinZ + Math.random() * (spawnMaxZ - spawnMinZ)) * 100) / 100;
@@ -2063,9 +2059,21 @@ wss.on("connection", (ws, req) => {
       case "damage_unit": {
         if (!currentRoom || currentRoom.matchEnded) break;
         const targetUnitId = String(msg.targetUnitId || "");
-        const attackerUnitId = msg.attackerUnitId ? String(msg.attackerUnitId) : null;
+        const tableFall = msg.cause === "table_fall";
+        let fallPosition = null;
+        if (tableFall) {
+          const pos = msg.fallPosition;
+          const sender = currentRoom.clients.get(clientId);
+          const targetIsHuman = Array.from(currentRoom.clients.values()).some((c) => c.unitId === targetUnitId);
+          if (currentRoom.mapType !== "kitchen" || !currentRoom.unitStats.has(targetUnitId) || !sender ||
+              (sender.unitId !== targetUnitId && (currentRoom.hostId !== clientId || targetIsHuman)) ||
+              !pos || ![pos.x, pos.y, pos.z].every(Number.isFinite) ||
+              (Math.abs(pos.x) <= 48 && Math.abs(pos.z) <= 64)) break;
+          fallPosition = { x: pos.x, y: pos.y, z: pos.z };
+        }
+        const attackerUnitId = !tableFall && msg.attackerUnitId ? String(msg.attackerUnitId) : null;
         const rawAmount = Math.max(0, Number(msg.amount) || 0);
-        const amount = currentRoom.hardcoreMode ? Math.max(rawAmount, 100) : rawAmount;
+        const amount = tableFall ? 100 : currentRoom.hardcoreMode ? Math.max(rawAmount, 100) : rawAmount;
         if (!targetUnitId || amount <= 0) break;
 
         const targetStat = getUnitStat(currentRoom, targetUnitId);
@@ -2114,6 +2122,10 @@ wss.on("connection", (ws, req) => {
           shotDir: msg.shotDir || null,
           unitStats: deltaStats
         };
+        if (tableFall) {
+          dmgEvent.cause = "table_fall";
+          dmgEvent.fallPosition = fallPosition;
+        }
 
         // For 1-player rooms, reply immediately; for multi-player rooms, coalesce into 25 Hz room_tick
         if (currentRoom.clients.size <= 1) {
@@ -2250,17 +2262,14 @@ wss.on("connection", (ws, req) => {
           if (msg.tanTotal) {
             currentRoom.tanTotal = Math.max(1, Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(Number(msg.tanTotal))));
           }
-          if (msg.mapType === "shoebox" || msg.mapType === "sandbox") {
+          if (msg.mapType === "shoebox" || msg.mapType === "sandbox" || msg.mapType === "kitchen") {
             currentRoom.mapType = msg.mapType;
           }
           if (msg.worldLimit) {
-            if (currentRoom.mapType === "shoebox" || Number(msg.worldLimit) <= 50) {
-              currentRoom.mapType = "shoebox";
-              currentRoom.worldLimit = 28;
-            } else {
-              currentRoom.worldLimit = Math.max(50, Math.min(130, Number(msg.worldLimit)));
-            }
+            currentRoom.mapType = resolveMapType(currentRoom.mapType, msg.worldLimit);
+            currentRoom.worldLimit = resolveWorldLimit(currentRoom.mapType, msg.worldLimit);
           }
+          currentRoom.worldLimit = resolveWorldLimit(currentRoom.mapType, currentRoom.worldLimit);
           if (typeof msg.hardcoreMode === "boolean") {
             currentRoom.hardcoreMode = msg.hardcoreMode;
           }

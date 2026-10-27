@@ -1,0 +1,428 @@
+{
+  "customType": "BABYLON.NodeGeometry",
+  "outputNodeId": 12,
+  "blocks": [
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 1,
+      "name": "plateDiameter",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 16,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 2,
+      "name": "plateHeight",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 0.8,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 3,
+      "name": "rimThickness",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 2,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 1.2,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 4,
+      "name": "segments",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 1,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": 48,
+      "valueType": "number"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 5,
+      "name": "baseOffset",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        0.4,
+        0
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.GeometryInputBlock",
+      "id": 6,
+      "name": "rimOffset",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "type": 8,
+      "contextualValue": 0,
+      "min": 0,
+      "max": 0,
+      "groupInInspector": "",
+      "displayInInspector": true,
+      "value": [
+        0,
+        0.9,
+        0
+      ],
+      "valueType": "BABYLON.Vector3"
+    },
+    {
+      "customType": "BABYLON.CylinderBlock",
+      "id": 7,
+      "name": "porcelainBase",
+      "inputs": [
+        {
+          "name": "height",
+          "displayName": "height",
+          "inputName": "height",
+          "targetBlockId": 2,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "diameter",
+          "displayName": "diameter",
+          "inputName": "diameter",
+          "targetBlockId": 1,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "diameterTop",
+          "displayName": "diameterTop"
+        },
+        {
+          "name": "diameterBottom",
+          "displayName": "diameterBottom"
+        },
+        {
+          "name": "subdivisions",
+          "displayName": "subdivisions"
+        },
+        {
+          "name": "tessellation",
+          "displayName": "tessellation",
+          "inputName": "tessellation",
+          "targetBlockId": 4,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "arc",
+          "displayName": "arc"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.TorusBlock",
+      "id": 8,
+      "name": "rolledRim",
+      "inputs": [
+        {
+          "name": "diameter",
+          "displayName": "diameter",
+          "inputName": "diameter",
+          "targetBlockId": 1,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "thickness",
+          "displayName": "thickness",
+          "inputName": "thickness",
+          "targetBlockId": 3,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "tessellation",
+          "displayName": "tessellation",
+          "inputName": "tessellation",
+          "targetBlockId": 4,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 9,
+      "name": "liftBase",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 7,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 5,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.GeometryTransformBlock",
+      "id": 10,
+      "name": "liftRim",
+      "inputs": [
+        {
+          "name": "value",
+          "displayName": "value",
+          "inputName": "value",
+          "targetBlockId": 8,
+          "targetConnectionName": "geometry"
+        },
+        {
+          "name": "matrix",
+          "displayName": "matrix"
+        },
+        {
+          "name": "translation",
+          "displayName": "translation",
+          "inputName": "translation",
+          "targetBlockId": 6,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "rotation",
+          "displayName": "rotation"
+        },
+        {
+          "name": "scaling",
+          "displayName": "scaling"
+        },
+        {
+          "name": "pivot",
+          "displayName": "pivot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.MergeGeometryBlock",
+      "id": 11,
+      "name": "plate",
+      "inputs": [
+        {
+          "name": "geometry0",
+          "displayName": "geometry0",
+          "inputName": "geometry0",
+          "targetBlockId": 9,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry1",
+          "displayName": "geometry1",
+          "inputName": "geometry1",
+          "targetBlockId": 10,
+          "targetConnectionName": "output"
+        },
+        {
+          "name": "geometry2",
+          "displayName": "geometry2"
+        },
+        {
+          "name": "geometry3",
+          "displayName": "geometry3"
+        },
+        {
+          "name": "geometry4",
+          "displayName": "geometry4"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "displayName": "output"
+        }
+      ],
+      "evaluateContext": false
+    },
+    {
+      "customType": "BABYLON.GeometryOutputBlock",
+      "id": 12,
+      "name": "output",
+      "inputs": [
+        {
+          "name": "geometry",
+          "displayName": "geometry",
+          "inputName": "geometry",
+          "targetBlockId": 11,
+          "targetConnectionName": "output"
+        }
+      ],
+      "outputs": []
+    }
+  ],
+  "comment": "Raised porcelain dinner plate with a broad foot and rounded rim, used as tabletop cover.",
+  "editorData": {
+    "locations": [
+      {
+        "blockId": 1,
+        "x": 0,
+        "y": 180
+      },
+      {
+        "blockId": 2,
+        "x": 0,
+        "y": 0
+      },
+      {
+        "blockId": 3,
+        "x": 0,
+        "y": 540
+      },
+      {
+        "blockId": 4,
+        "x": 0,
+        "y": 360
+      },
+      {
+        "blockId": 5,
+        "x": 340,
+        "y": 0
+      },
+      {
+        "blockId": 6,
+        "x": 340,
+        "y": 360
+      },
+      {
+        "blockId": 7,
+        "x": 340,
+        "y": 180
+      },
+      {
+        "blockId": 8,
+        "x": 340,
+        "y": 540
+      },
+      {
+        "blockId": 9,
+        "x": 680,
+        "y": 0
+      },
+      {
+        "blockId": 10,
+        "x": 680,
+        "y": 180
+      },
+      {
+        "blockId": 11,
+        "x": 1020,
+        "y": 0
+      },
+      {
+        "blockId": 12,
+        "x": 1360,
+        "y": 0
+      }
+    ]
+  }
+}

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Toy Soldiers</title>
-  <meta name="description" content="Multiplayer 3D Plastic Army Men Shooter — Battle in the Sandbox or Shoebox!" />
+  <meta name="description" content="Multiplayer 3D Plastic Army Men Shooter — Battle in the Sandbox, Shoebox, or Kitchen Table!" />
   <meta name="apple-mobile-web-app-title" content="Toy Soldiers" />
   <meta name="theme-color" content="#101610" />
   <link rel="icon" type="image/png" href="favicon/favicon-96x96.png" sizes="96x96" />
@@ -15,7 +15,7 @@
   <!-- Open Graph & Social Link Preview Images -->
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Toy Soldiers" />
-  <meta property="og:description" content="Multiplayer 3D Plastic Army Men Shooter — Battle in the Sandbox or Shoebox!" />
+  <meta property="og:description" content="Multiplayer 3D Plastic Army Men Shooter — Battle in the Sandbox, Shoebox, or Kitchen Table!" />
   <meta property="og:image" content="https://toy-soldiers.duckdns.org/favicon/web-app-manifest-512x512.png" />
   <meta property="og:image:type" content="image/png" />
   <meta property="og:image:width" content="512" />
@@ -966,6 +966,7 @@
           <select id="map-select" class="count-input" style="width: 100%; font-size: 13px;">
             <option value="sandbox" selected>Sandbox</option>
             <option value="shoebox">Shoebox</option>
+            <option value="kitchen">Kitchen Table</option>
           </select>
         </div>
 
@@ -973,11 +974,16 @@
           <span class="setup-field-label" style="color: #e8d59e;">Map Size</span>
           <select id="map-size-select" class="count-input" style="width: 100%; font-size: 13px;">
             <option value="28">Small (Shoebox)</option>
+            <option value="64">Kitchen Table (96 x 128)</option>
             <option value="60">Medium</option>
             <option value="80" selected>Large</option>
             <option value="105">Huge</option>
           </select>
         </div>
+      </div>
+
+      <div id="kitchen-map-hint" style="display: none; font-size: 12px; color: #ffd584; margin-bottom: 10px;">
+        Fight among six place settings and the floral centerpiece. Watch your step: falling off the table is fatal!
       </div>
 
       <!-- Row 4: Time Limit & Hardcore Mode -->
@@ -1193,8 +1199,20 @@
     let envRootNode = null;
     const obstacles = []; // Static toy bounding boxes for movement collision
 
+    function resolveMapType(mapType, limit) {
+      if (mapType === "kitchen") return "kitchen";
+      return mapType === "shoebox" || Number(limit) <= 50 ? "shoebox" : "sandbox";
+    }
+
+    function isOutsideTable(x, z) {
+      return Math.abs(x) > WORLD_LIMIT_X || Math.abs(z) > WORLD_LIMIT_Z;
+    }
+
     // Analytical height function for sculpted sand dunes, hills, and hollows (flat cardboard floor in Shoe Box)
     function getSandHeight(x, z) {
+      if (builtMapType === "kitchen") {
+        return isOutsideTable(x, z) ? -58 : 0;
+      }
       if (builtMapType === "shoebox") {
         return 0;
       }
@@ -1229,7 +1247,7 @@
 
     // Surface normal of the sand at (x, z) for physics rolling & ragdoll tilt
     function getSandNormal(x, z) {
-      if (builtMapType === "shoebox") {
+      if (builtMapType === "shoebox" || builtMapType === "kitchen") {
         return new BABYLON.Vector3(0, 1, 0);
       }
       const eps = 0.25;
@@ -1339,7 +1357,8 @@
       armyTruck: "armyTruck.json",
       armyJeep: "armyJeep.json",
       shoeboxShell: "shoeboxShell.json",
-      tissueSheet: "tissueSheet.json"
+      tissueSheet: "tissueSheet.json",
+      kitchenPlate: "kitchenPlate.json"
     };
     const propGraphs = new Map();
     const propVertexDataCache = new Map();
@@ -2268,12 +2287,219 @@
       windowPane.parent = envRootNode;
     }
 
+    let kitchenMaterials = null;
+
+    function buildKitchenEnvironment() {
+      if (!kitchenMaterials) {
+        kitchenMaterials = {
+          porcelain: createPlasticPBR("kitchenPorcelain", "#faf4df", 0.18),
+          linen: createPlasticPBR("kitchenLinen", "#9d4538", 0.95),
+          cabinets: createPlasticPBR("kitchenCabinets", "#567568", 0.65),
+          stone: createPlasticPBR("kitchenStone", "#ded4be", 0.7),
+          wall: createPlasticPBR("kitchenWall", "#e7d6b7", 0.95),
+          metal: createPlasticPBR("kitchenSteel", "#b8c5cb", 0.24),
+          glass: createPlasticPBR("kitchenBlueGlass", "#82b9c9", 0.12),
+          leaf: createPlasticPBR("kitchenLeaf", "#3d713b", 0.8),
+          flower: createPlasticPBR("kitchenFlower", "#df986e", 0.65)
+        };
+        kitchenMaterials.metal.metallic = 0.35;
+        kitchenMaterials.linen.clearCoat.isEnabled = false;
+      }
+      const m = kitchenMaterials;
+      function finish(mesh, x, y, z, material, cover = false) {
+        mesh.position.set(x, y, z);
+        mesh.material = material;
+        mesh.parent = envRootNode;
+        mesh.receiveShadows = true;
+        mesh.isPickable = cover;
+        mesh.metadata = { isEnvironment: true, isToy: cover };
+        shadowGen.addShadowCaster(mesh);
+        return mesh;
+      }
+      function box(name, w, h, d, x, y, z, material, cover = false) {
+        return finish(BABYLON.MeshBuilder.CreateBox(name, { width: w, height: h, depth: d }, scene),
+          x, y, z, material, cover);
+      }
+      function cylinder(name, diameter, h, x, y, z, material, cover = false) {
+        return finish(BABYLON.MeshBuilder.CreateCylinder(name,
+          { diameter, height: h, tessellation: 32 }, scene), x, y, z, material, cover);
+      }
+      function sphere(name, w, h, d, x, y, z, material, cover = false) {
+        return finish(BABYLON.MeshBuilder.CreateSphere(name,
+          { diameterX: w, diameterY: h, diameterZ: d, segments: 12 }, scene),
+          x, y, z, material, cover);
+      }
+
+      box("kitchenTabletop", 96, 3, 128, 0, -1.5, 0, woodMat);
+      for (let x = -36; x <= 36; x += 12) {
+        box("tablePlankSeam", 0.06, 0.02, 128, x, 0.01, 0, tireMat);
+      }
+      for (const x of [-39, 39]) {
+        for (const z of [-55, 55]) box("tableLeg", 6, 55, 6, x, -30.5, z, woodMat);
+        box("tableApron", 3, 9, 112, x, -7, 0, woodMat);
+      }
+
+      // Local place-setting coordinates keep both sides of the table symmetric.
+      for (const side of [-1, 1]) {
+        for (const z of [-38, 0, 38]) {
+          const angle = -side * Math.PI / 2;
+          const cx = side * 29;
+          function place(mesh, x, localZ) {
+            mesh.position.x = cx + x * Math.cos(angle) + localZ * Math.sin(angle);
+            mesh.position.z = z - x * Math.sin(angle) + localZ * Math.cos(angle);
+            mesh.rotation.y = angle;
+            return mesh;
+          }
+          const plateRoot = new BABYLON.TransformNode("dinnerPlate", scene);
+          plateRoot.position.set(cx, 0, z);
+          mountProceduralProp({
+            graph: "kitchenPlate", root: plateRoot, materials: m.porcelain,
+            castShadows: true, metadata: { isEnvironment: true, isToy: true }
+          });
+          registerToyObstacle(plateRoot, cx, z, 17.2, 17.2, 1.5);
+          place(box("foldedNapkin", 6, 2.4, 8, 0, 1.2, 0, m.linen, true), -12, -1);
+          place(box("napkinFold", 5.4, 0.5, 3, 0, 2.55, 0, m.linen, true), -12, 1);
+          for (const forkX of [-12, -17]) {
+            const forkY = forkX === -12 ? 3.1 : 0.3;
+            place(box("forkHandle", 0.9, 0.55, 7, 0, forkY, 0, m.metal, true), forkX, -2);
+            place(box("forkShoulder", 2.4, 0.55, 1.6, 0, forkY, 0, m.metal, true), forkX, 2.2);
+            for (let tine = 0; tine < 4; tine++) {
+              place(box("forkTine", 0.35, 0.45, 2.5, 0, forkY, 0, m.metal, true),
+                forkX - 0.9 + tine * 0.6, 4);
+            }
+          }
+          place(box("knifeHandle", 1.1, 0.75, 6.5, 0, 0.4, 0, m.metal, true), 11, -2.5);
+          place(box("knifeBlade", 1.8, 0.4, 6, 0, 0.25, 0, m.metal, true), 10.7, 3.5);
+          place(box("spoonHandle", 0.8, 0.5, 7, 0, 0.3, 0, m.metal, true), 15, -2.5);
+          place(sphere("spoonBowl", 3.2, 0.9, 4.5, 0, 0.55, 0, m.metal, true), 15, 3);
+          place(cylinder("waterGlass", 4.6, 7, 0, 3.5, 0, m.glass, true), 11, 12);
+          place(cylinder("glassWaterSurface", 4.2, 0.1, 0, 6.6, 0, blueToyMat, true), 11, 12);
+          place(cylinder("coffeeCup", 4.2, 4.8, 0, 2.4, 0, m.porcelain, true), -11, 12);
+          place(cylinder("coffeeSurface", 3.5, 0.12, 0, 4.65, 0, woodMat, true), -11, 12);
+          const handle = finish(BABYLON.MeshBuilder.CreateTorus("cupHandle",
+            { diameter: 2.8, thickness: 0.7, tessellation: 20 }, scene),
+            0, 2.5, 0, m.porcelain, true);
+          place(handle, -14, 12);
+          handle.rotation.x = Math.PI / 2;
+        }
+      }
+
+      box("centerpieceRunner", 18, 0.12, 67, 0, 0.06, 0, m.linen);
+      cylinder("centerpieceTray", 20, 0.8, 0, 0.4, 0, m.metal, true);
+      sphere("flowerVaseBody", 11, 12, 11, 0, 6.6, 0, m.glass, true);
+      cylinder("flowerVaseNeck", 5, 7, 0, 13, 0, m.glass, true);
+      for (let i = 0; i < 9; i++) {
+        const angle = i * Math.PI * 2 / 9;
+        const x = Math.cos(angle) * 5;
+        const z = Math.sin(angle) * 5;
+        const top = 23 + (i % 3) * 2;
+        cylinder("flowerStem", 0.35, top - 8, x, (top + 8) / 2, z, m.leaf, true);
+        const leaf = sphere("flowerLeaf", 4, 0.65, 2, x, 18, z, m.leaf, true);
+        leaf.rotation.z = angle;
+        sphere("flowerCenter", 2.2, 1.8, 2.2, x, top, z, yellowToyMat, true);
+        for (let p = 0; p < 5; p++) {
+          const a = p * Math.PI * 2 / 5;
+          sphere("flowerPetal", 2.8, 1.3, 2.8, x + Math.cos(a) * 1.6,
+            top - 0.25, z + Math.sin(a) * 1.6, m.flower, true);
+        }
+      }
+      for (const z of [-23, 23]) {
+        cylinder("saltPepperShaker", 3.5, 5.5, 0, 2.75, z, m.porcelain, true);
+        cylinder("shakerCap", 3.6, 0.8, 0, 5.8, z, m.metal, true);
+      }
+
+      // Match the analytical collision/raycast bounds to the final transformed meshes.
+      envRootNode.getChildMeshes().filter((mesh) =>
+        mesh.metadata?.isToy && mesh.parent.name !== "dinnerPlate").forEach((mesh) => {
+        mesh.computeWorldMatrix(true);
+        const bounds = mesh.getBoundingInfo().boundingBox;
+        const lo = bounds.minimumWorld;
+        const hi = bounds.maximumWorld;
+        obstacles.push({
+          cx: (lo.x + hi.x) / 2, cz: (lo.z + hi.z) / 2,
+          radius: Math.hypot(hi.x - lo.x, hi.z - lo.z) / 2,
+          minX: lo.x, maxX: hi.x, minZ: lo.z, maxZ: hi.z, minY: lo.y, maxY: hi.y
+        });
+      });
+
+      for (let x = -168; x < 168; x += 28) {
+        for (let z = -182; z < 182; z += 28) {
+          box("kitchenFloorTile", 27.8, 1, 27.8, x + 14, -58.5, z + 14,
+            ((x + 168) / 28 + (z + 182) / 28) % 2 ? m.stone : m.porcelain);
+        }
+      }
+      box("kitchenBackWall", 340, 175, 3, 0, 29, 184, m.wall);
+      box("kitchenLeftWall", 3, 175, 370, -170, 29, 0, m.wall);
+      box("kitchenRightWall", 3, 175, 370, 170, 29, 0, m.wall);
+      box("kitchenFrontWall", 340, 175, 3, 0, 29, -184, m.wall);
+      for (let x = -105; x <= 105; x += 42) {
+        box("baseCabinet", 40, 62, 33, x, -27, 159, m.cabinets);
+        box("cabinetDoor", 37, 52, 1.5, x, -27, 141.5, m.cabinets);
+        box("cabinetHandle", 12, 1.4, 2, x, -8, 139.5, m.metal);
+        box("upperCabinet", 40, 38, 24, x, 70, 165, m.cabinets);
+        box("upperHandle", 1.2, 10, 2, x + 12, 66, 152, m.metal);
+      }
+      box("countertop", 258, 3, 38, 0, 5.5, 158, m.stone);
+      box("tileBacksplash", 258, 26, 1, 0, 20, 181, m.porcelain);
+      box("sinkRim", 38, 1, 27, -42, 7.5, 157, m.metal);
+      box("sinkBasin", 31, 1, 21, -42, 8.1, 157, tireMat);
+      cylinder("faucetUpright", 2, 16, -42, 16, 171, m.metal);
+      box("faucetSpout", 2, 2, 12, -42, 24, 166, m.metal);
+      box("stoveTop", 39, 1.5, 32, 63, 7.6, 157, tireMat);
+      for (const x of [54, 72]) {
+        for (const z of [149, 166]) cylinder("stoveBurner", 10, 0.7, x, 8.7, z, m.metal);
+      }
+      box("ovenDoor", 34, 33, 2, 63, -28, 140, tireMat);
+      box("ovenWindow", 27, 22, 1, 63, -29, 138.5, m.metal);
+      box("ovenHandle", 27, 2, 3, 63, -9, 137, m.metal);
+      box("rangeHood", 48, 10, 37, 63, 48, 160, m.metal);
+      box("hoodChimney", 20, 40, 20, 63, 73, 171, m.metal);
+      box("refrigerator", 40, 110, 40, -143, -3, 150, m.porcelain);
+      box("fridgeDoor", 38, 66, 2, -143, -21, 129, m.porcelain);
+      box("freezerDoor", 38, 39, 2, -143, 33, 129, m.porcelain);
+      box("fridgeHandle", 2, 25, 3, -129, -9, 126.5, m.metal);
+      box("freezerHandle", 2, 16, 3, -129, 32, 126.5, m.metal);
+      box("dishwasher", 39, 58, 34, 146, -27, 104, m.metal);
+      box("dishwasherHandle", 26, 2, 3, 146, -5, 85, tireMat);
+      box("sideCounter", 38, 3, 100, 146, 5.5, 55, m.stone);
+      box("sideCupboard", 34, 62, 61, 146, -27, 35, m.cabinets);
+      box("toaster", 19, 13, 13, 146, 13.5, 44, m.metal);
+      for (const x of [142, 150]) box("toasterSlot", 2, 0.4, 9, x, 20.2, 44, tireMat);
+      box("cuttingBoard", 24, 1.5, 18, 9, 8, 158, woodMat);
+      cylinder("fruitBowl", 15, 4, 105, 9.5, 157, m.porcelain);
+      for (let i = 0; i < 4; i++) sphere("counterFruit", 5, 5, 5, 101 + i * 2.5,
+        13, 155 + (i % 2) * 4, i % 2 ? yellowToyMat : redToyMat);
+
+      for (const side of [-1, 1]) {
+        for (const z of [-38, 0, 38]) {
+          const x = side * 67;
+          box("diningChairSeat", 26, 3, 27, x, -23, z, woodMat);
+          box("diningChairBack", 3, 35, 27, x + side * 12, -5, z, woodMat);
+          for (const dx of [-10, 10]) {
+            for (const dz of [-10, 10]) box("chairLeg", 3, 33, 3, x + dx, -41, z + dz, woodMat);
+          }
+        }
+      }
+      box("kitchenDoor", 43, 111, 2, -95, -2, -181, woodMat);
+      sphere("kitchenDoorKnob", 3, 3, 3, -79, -4, -179, m.metal);
+      box("windowFrame", 3, 65, 100, -167, 40, 20, m.porcelain);
+      box("kitchenWindow", 1, 57, 92, -164.8, 40, 20, m.glass);
+      m.glass.emissiveColor = new BABYLON.Color3(0.08, 0.13, 0.15);
+      box("windowMullionVertical", 2, 60, 2, -163.5, 40, 20, m.porcelain);
+      box("windowMullionHorizontal", 2, 2, 96, -163.5, 40, 20, m.porcelain);
+      for (const z of [-35, 35]) {
+        cylinder("pendantCord", 0.5, 35, 0, 97, z, tireMat);
+        cylinder("pendantShade", 16, 8, 0, 76, z, m.cabinets);
+        sphere("pendantBulb", 5, 3, 5, 0, 71, z, m.porcelain);
+      }
+    }
+
     function rebuildSandboxEnvironment(newLimit, newMapType) {
-      const targetMapType =
-        newMapType === "shoebox" || Number(newLimit) <= 50 ? "shoebox" : "sandbox";
+      const targetMapType = resolveMapType(newMapType, newLimit);
       const targetLimit =
         targetMapType === "shoebox"
           ? 28
+          : targetMapType === "kitchen" ? 64
           : Math.max(50, Math.min(130, Number(newLimit) || 80));
 
       if (
@@ -2299,6 +2525,7 @@
         envRootNode = null;
       }
       physicsBall = null;
+      activeSandMesh = null;
       obstacles.length = 0;
       proceduralProps = [];
       builtMapType = targetMapType;
@@ -2306,7 +2533,17 @@
 
       envRootNode = new BABYLON.TransformNode("envRoot", scene);
 
-      if (targetMapType === "shoebox") {
+      if (targetMapType === "kitchen") {
+        WORLD_LIMIT = 64;
+        WORLD_LIMIT_X = 48;
+        WORLD_LIMIT_Z = 64;
+        scene.clearColor = new BABYLON.Color4(0.72, 0.68, 0.59, 1);
+        scene.fogColor = new BABYLON.Color3(0.78, 0.73, 0.64);
+        scene.fogStart = 210;
+        scene.fogEnd = 520;
+        camera.maxZ = 620;
+        buildKitchenEnvironment();
+      } else if (targetMapType === "shoebox") {
         // Small Close-Quarters Combat Shoe Box dimensions (44 x 60 interior)
         WORLD_LIMIT = 28;
         WORLD_LIMIT_X = 22;
@@ -3074,7 +3311,7 @@
     let player = null;
     let configuredFriendlyCount = 3; // Default: 3 Friendly AI + You = 4 Green Total (Max 64 bots)
     let configuredEnemyCount = 4;    // Default: 4 Enemy Tan Soldiers (Max 64 bots)
-    let configuredMapType = "sandbox"; // "sandbox" | "shoebox"
+    let configuredMapType = "sandbox"; // "sandbox" | "shoebox" | "kitchen"
     let configuredMapLimit = 80;     // Default: Large (80 -> 160x160)
     let configuredHardcoreMode = false; // 1-Shot Kill Hardcore Mode
     let configuredDurationSec = 300; // Default: 5 Minutes (300s)
@@ -3090,12 +3327,9 @@
 
     function getActiveMapType() {
       if (mpState.active && mpState.roster) {
-        if (mpState.roster.mapType === "shoebox" || Number(mpState.roster.worldLimit) <= 50) {
-          return "shoebox";
-        }
-        return "sandbox";
+        return resolveMapType(mpState.roster.mapType, mpState.roster.worldLimit);
       }
-      return configuredMapType === "shoebox" ? "shoebox" : "sandbox";
+      return resolveMapType(configuredMapType);
     }
 
     // WebSocket Multiplayer State
@@ -3301,7 +3535,7 @@
     }
 
     function generateUniqueRoomCode(mapType) {
-      const prefix = mapType === "shoebox" ? "SHOE" : "SAND";
+      const prefix = mapType === "kitchen" ? "KITC" : mapType === "shoebox" ? "SHOE" : "SAND";
       for (let attempt = 0; attempt < 200; attempt++) {
         const num = Math.floor(100 + Math.random() * 900);
         const code = `${prefix}${num}`;
@@ -4343,13 +4577,30 @@
         const obs = obstacles[i];
         const d = intersectRayAABB(
           ox, oy, oz, dx, dy, dz,
-          obs.minX, obs.maxX, -1.5, obs.maxY, obs.minZ, obs.maxZ,
+          obs.minX, obs.maxX, obs.minY ?? -1.5, obs.maxY, obs.minZ, obs.maxZ,
           closestDist
         );
         if (d >= 0 && d < closestDist) {
           closestDist = d;
           hitKind = "toy";
         }
+      }
+
+      if (builtMapType === "kitchen") {
+        const tableHit = intersectRayAABB(ox, oy, oz, dx, dy, dz,
+          -WORLD_LIMIT_X, WORLD_LIMIT_X, -3, 0, -WORLD_LIMIT_Z, WORLD_LIMIT_Z, closestDist);
+        if (tableHit >= 0 && tableHit < closestDist) {
+          closestDist = tableHit;
+          hitKind = "toy";
+        }
+        if (checkSand && dy < -1e-5 && oy > -58) {
+          const floorHit = (-58 - oy) / dy;
+          if (floorHit > 0 && floorHit < closestDist) {
+            closestDist = floorHit;
+            hitKind = "sand";
+          }
+        }
+        return { dist: closestDist, hitKind };
       }
 
       // 2. Check outer wooden sandbox / cardboard shoe box walls
@@ -4641,13 +4892,16 @@
       soldier.velocity.y -= 24.0 * dt;
       pos.y += soldier.velocity.y * dt;
 
-      // Keep inside wooden sandbox / cardboard shoe box walls
-      pos.x = Math.max(-WORLD_LIMIT_X + 1.15, Math.min(WORLD_LIMIT_X - 1.15, pos.x));
-      pos.z = Math.max(-WORLD_LIMIT_Z + 1.15, Math.min(WORLD_LIMIT_Z - 1.15, pos.z));
+      if (builtMapType !== "kitchen") {
+        pos.x = Math.max(-WORLD_LIMIT_X + 1.15, Math.min(WORLD_LIMIT_X - 1.15, pos.x));
+        pos.z = Math.max(-WORLD_LIMIT_Z + 1.15, Math.min(WORLD_LIMIT_Z - 1.15, pos.z));
+      }
 
       // Push out of static sandbox toys
       for (let i = 0; i < obstacles.length; i++) {
         const obs = obstacles[i];
+        if (builtMapType === "kitchen" &&
+            (soldier.fellFromTable || pos.y >= obs.maxY || pos.y + 2.05 < (obs.minY ?? -1.5))) continue;
         const minX = obs.minX - r;
         const maxX = obs.maxX + r;
         const minZ = obs.minZ - r;
@@ -4718,7 +4972,22 @@
       }
 
       // Snap/land on uneven sand heightfield
-      const sandY = getSandHeight(pos.x, pos.z);
+      if (builtMapType === "kitchen" && isOutsideTable(pos.x, pos.z)) {
+        soldier.fellFromTable = true;
+        if (soldier.alive && !gameEnded && !isSetupOpen) {
+          if (mpState.active) {
+            sendNetMessage({
+              type: "damage_unit", targetUnitId: soldier.unitId, amount: soldier.maxHealth,
+              cause: "table_fall",
+              fallPosition: { x: pos.x, y: pos.y, z: pos.z }
+            });
+            applyNetworkDamageState(soldier, 0, false);
+          } else {
+            applyDamage(soldier, soldier.maxHealth, null);
+          }
+        }
+      }
+      const sandY = soldier.fellFromTable ? -58 : getSandHeight(pos.x, pos.z);
       if (pos.y <= sandY) {
         pos.y = sandY;
         soldier.velocity.y = 0;
@@ -4973,7 +5242,12 @@
       const savedMap = localStorage.getItem(MAP_STORAGE_KEY);
       const savedMapSize = localStorage.getItem(MAP_SIZE_STORAGE_KEY);
       const savedSandboxSize = localStorage.getItem(SANDBOX_SIZE_STORAGE_KEY);
-      if (savedMap === "shoebox" || savedMapSize === "28") {
+      if (savedMap === "kitchen") {
+        configuredMapType = "kitchen";
+        configuredMapLimit = 64;
+        if (mapSelectEl) mapSelectEl.value = "kitchen";
+        if (mapSizeSelectEl) mapSizeSelectEl.value = "64";
+      } else if (savedMap === "shoebox" || savedMapSize === "28") {
         configuredMapType = "shoebox";
         configuredMapLimit = 28;
         if (mapSelectEl) mapSelectEl.value = "shoebox";
@@ -5070,7 +5344,7 @@
         mpRoomInputEl.value = mpState.persistedHostRoomCode;
         return;
       }
-      const prefix = mapType === "shoebox" ? "SHOE" : "SAND";
+      const prefix = mapType === "kitchen" ? "KITC" : mapType === "shoebox" ? "SHOE" : "SAND";
       const currentVal = (mpRoomInputEl.value || "").trim().toUpperCase();
       const isTakenByOtherRoom =
         activeServerRoomCodes.has(currentVal) &&
@@ -5110,12 +5384,12 @@
         if (mapSelectEl) {
           localStorage.setItem(
             MAP_STORAGE_KEY,
-            mapSelectEl.value === "shoebox" ? "shoebox" : "sandbox"
+            resolveMapType(mapSelectEl.value)
           );
         }
         if (mapSizeSelectEl) {
           localStorage.setItem(MAP_SIZE_STORAGE_KEY, String(mapSizeSelectEl.value));
-          if (Number(mapSizeSelectEl.value) > 50) {
+          if (mapSelectEl.value === "sandbox" && Number(mapSizeSelectEl.value) > 50) {
             localStorage.setItem(SANDBOX_SIZE_STORAGE_KEY, String(mapSizeSelectEl.value));
           }
         }
@@ -5208,6 +5482,7 @@
     }
 
     function getMapSizeLabel(limit, mapType) {
+      if (mapType === "kitchen") return "Kitchen Table";
       if (mapType === "shoebox" || limit <= 50) return "Shoebox";
       if (limit <= 65) return "Sandbox (Medium)";
       if (limit >= 95) return "Sandbox (Huge)";
@@ -5558,18 +5833,22 @@
       configuredEnemyCount = clampInt(enemyInputEl.value, 1, MAX_BOTS_PER_TEAM, 4);
       friendlyInputEl.value = configuredFriendlyCount;
       enemyInputEl.value = configuredEnemyCount;
-      configuredMapType =
-        mapSelectEl && mapSelectEl.value === "shoebox" ? "shoebox" : "sandbox";
-      if (configuredMapType === "shoebox") {
+      configuredMapType = resolveMapType(mapSelectEl && mapSelectEl.value);
+      if (configuredMapType === "kitchen") {
+        configuredMapLimit = 64;
+        if (mapSizeSelectEl) mapSizeSelectEl.value = "64";
+      } else if (configuredMapType === "shoebox") {
         configuredMapLimit = 28;
         if (mapSizeSelectEl) mapSizeSelectEl.value = "28";
       } else {
         const rawLim = clampInt(mapSizeSelectEl.value, 28, 130, 80);
-        configuredMapLimit = rawLim <= 50 ? 80 : rawLim;
-        if (mapSizeSelectEl && Number(mapSizeSelectEl.value) <= 50) {
+        configuredMapLimit = rawLim <= 50 || rawLim === 64 ? 80 : rawLim;
+        if (mapSizeSelectEl && (Number(mapSizeSelectEl.value) <= 50 || rawLim === 64)) {
           mapSizeSelectEl.value = String(configuredMapLimit);
         }
       }
+      document.getElementById("kitchen-map-hint").style.display =
+        configuredMapType === "kitchen" ? "" : "none";
       if (prevMapType !== configuredMapType) {
         userCustomizedRoomCode = false;
         updateRoomCodeForSelectedMap(configuredMapType, true);
@@ -5738,6 +6017,7 @@
     // Restores a single soldier (local, remote, or AI) to full health & upright pose at (x, y, z)
     function respawnSingleSoldier(unit, x, y, z, yaw) {
       if (!unit) return;
+      unit.fellFromTable = false;
       unit.health = unit.maxHealth;
       unit.alive = true;
       unit.respawnTimer = 0;
@@ -6264,6 +6544,14 @@
           }
           const target = soldiersById.get(msg.targetUnitId);
           if (!target) return;
+          if (msg.cause === "table_fall" && msg.fallPosition && builtMapType === "kitchen") {
+            target.fellFromTable = true;
+            target.isGrounded = false;
+            if (target.isRemotePlayer || (!target.isPlayer && !isMultiplayerAuthority())) {
+              target.position.set(msg.fallPosition.x, msg.fallPosition.y, msg.fallPosition.z);
+              target.velocity.set(0, 0, 0);
+            }
+          }
           const dir = msg.shotDir
             ? new BABYLON.Vector3(msg.shotDir.x, msg.shotDir.y, msg.shotDir.z)
             : null;
@@ -6379,9 +6667,11 @@
     enemyInputEl.addEventListener("input", () => readHostSetupInputs());
     if (mapSelectEl) {
       mapSelectEl.addEventListener("change", () => {
-        if (mapSelectEl.value === "shoebox") {
+        if (mapSelectEl.value === "kitchen") {
+          mapSizeSelectEl.value = "64";
+        } else if (mapSelectEl.value === "shoebox") {
           mapSizeSelectEl.value = "28";
-        } else if (Number(mapSizeSelectEl.value) <= 50) {
+        } else if (Number(mapSizeSelectEl.value) <= 50 || mapSizeSelectEl.value === "64") {
           let fallbackSandboxSize = "80";
           try {
             const savedSb = localStorage.getItem(SANDBOX_SIZE_STORAGE_KEY);
@@ -6393,7 +6683,9 @@
       });
     }
     mapSizeSelectEl.addEventListener("change", () => {
-      if (Number(mapSizeSelectEl.value) <= 50) {
+      if (mapSizeSelectEl.value === "64") {
+        if (mapSelectEl) mapSelectEl.value = "kitchen";
+      } else if (Number(mapSizeSelectEl.value) <= 50) {
         if (mapSelectEl) mapSelectEl.value = "shoebox";
       } else {
         if (mapSelectEl) mapSelectEl.value = "sandbox";
@@ -6912,6 +7204,10 @@
       );
       moveVec.x += avoid.x;
       moveVec.z += avoid.z;
+      if (builtMapType === "kitchen") {
+        moveVec.x -= Math.sign(ai.position.x) * Math.max(0, (Math.abs(ai.position.x) - WORLD_LIMIT_X + 7) / 3);
+        moveVec.z -= Math.sign(ai.position.z) * Math.max(0, (Math.abs(ai.position.z) - WORLD_LIMIT_Z + 7) / 3);
+      }
 
       const isMoving = moveVec.lengthSquared() > 0.01;
       if (isMoving) {
@@ -6946,6 +7242,7 @@
 
       updateSoldierPhysicsAndCollisions(ai, dt);
       animateSoldier(ai, dt, isMoving);
+      if (!ai.alive) return;
 
       if (ai.fireCooldown > 0) ai.fireCooldown -= dt;
       if (ai.fireCooldown <= 0 && horizDist < 75 && canSee) {
@@ -7291,8 +7588,8 @@
         const camVec = idealCamPos.subtract(headOrigin);
         const camLen = camVec.length();
         let safeFraction = 1.0;
-        const wallBoundX = WORLD_LIMIT_X - 1.1;
-        const wallBoundZ = WORLD_LIMIT_Z - 1.1;
+        const wallBoundX = builtMapType === "kitchen" ? Infinity : WORLD_LIMIT_X - 1.1;
+        const wallBoundZ = builtMapType === "kitchen" ? Infinity : WORLD_LIMIT_Z - 1.1;
 
         if (Math.abs(camVec.x) > 0.001) {
           if (idealCamPos.x > wallBoundX) {
