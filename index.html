@@ -1066,6 +1066,15 @@
         </div>
       </div>
 
+      <div class="setup-field" style="flex-direction: column; align-items: stretch; gap: 6px;">
+        <span class="setup-field-label" style="color: #c4b5fd;">Bot AI Skill</span>
+        <select id="ai-skill-select" class="count-input" style="width: 100%; font-size: 13px;">
+          <option value="beginner">Beginner — slower, no cover, wide shots</option>
+          <option value="intermediate" selected>Intermediate — paths around toys</option>
+          <option value="expert">Expert — cover, leading shots, memory</option>
+        </select>
+      </div>
+
       <!-- Row 4: Solo or Host Online -->
       <div style="display: flex; gap: 6px; margin-bottom: 8px; align-items: center;">
         <button class="primary-btn" id="start-match-btn" type="button" style="flex: 1; background: #3b6e36;">
@@ -1136,6 +1145,7 @@
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
   <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/yuka@0.7.8/build/yuka.min.js"></script>
 
   <script>
     // =========================================================================
@@ -1281,6 +1291,7 @@
     let builtMapType = "";
     let envRootNode = null;
     const obstacles = []; // Static toy bounding boxes for movement collision
+    var tsNavGraphReady = false;
 
     function resolveMapType(mapType, limit) {
       if (mapType === "kitchen") return "kitchen";
@@ -2668,6 +2679,7 @@
           );
           physicsBall.velocity.set(0, 0, 0);
         }
+        if (tsNavGraphReady) rebuildNavGraphFromObstacles();
         return;
       }
 
@@ -2754,6 +2766,8 @@
           m.freezeWorldMatrix();
         }
       });
+
+      if (tsNavGraphReady) rebuildNavGraphFromObstacles();
     }
 
     rebuildSandboxEnvironment(WORLD_LIMIT);
@@ -3469,6 +3483,7 @@
     let configuredMapType = "sandbox"; // "sandbox" | "shoebox" | "kitchen"
     let configuredMapLimit = 80;     // Default: Large (80 -> 160x160)
     let configuredHardcoreMode = false; // 1-Shot Kill Hardcore Mode
+    let configuredAiSkill = "intermediate"; // beginner | intermediate | expert
     let configuredDurationSec = 300; // Default: 5 Minutes (300s)
     let matchTimeRemaining = 300;
     let isSetupOpen = true;
@@ -3478,6 +3493,93 @@
         return mpState.roster.hardcoreMode;
       }
       return Boolean(configuredHardcoreMode);
+    }
+
+    function normalizeAiSkill(raw) {
+      const v = String(raw || "intermediate").toLowerCase();
+      if (v === "beginner" || v === "expert") return v;
+      return "intermediate";
+    }
+
+    function getActiveAiSkill() {
+      if (mpState.active && mpState.roster && mpState.roster.aiSkill) {
+        return normalizeAiSkill(mpState.roster.aiSkill);
+      }
+      return normalizeAiSkill(configuredAiSkill);
+    }
+
+    function getAiSkillProfile(level) {
+      const skill = normalizeAiSkill(level);
+      if (skill === "beginner") {
+        return {
+          id: "beginner",
+          speedMul: 0.72,
+          maxForce: 8,
+          mass: 1.45,
+          usePath: false,
+          useCover: false,
+          useClose: false,
+          usePursuit: false,
+          wanderWeight: 0.5,
+          avoidWeight: 0.4,
+          separationWeight: 0,
+          leadShots: false,
+          spreadMul: 2.15,
+          fireRateMul: 1.35,
+          memorySpan: 0.7,
+          targetSearch: 0.45,
+          losInterval: 0.32,
+          pathAge: 1.2,
+          turnRate: 4.2,
+          coverChance: 0
+        };
+      }
+      if (skill === "expert") {
+        return {
+          id: "expert",
+          speedMul: 1.12,
+          maxForce: 22,
+          mass: 0.85,
+          usePath: true,
+          useCover: true,
+          useClose: true,
+          usePursuit: true,
+          wanderWeight: 0,
+          avoidWeight: 1,
+          separationWeight: 0.85,
+          leadShots: false,
+          spreadMul: 0.52,
+          fireRateMul: 0.82,
+          memorySpan: 4.5,
+          targetSearch: 0.12,
+          losInterval: 0.1,
+          pathAge: 0.35,
+          turnRate: 11,
+          coverChance: 1
+        };
+      }
+      return {
+        id: "intermediate",
+        speedMul: 1,
+        maxForce: 14,
+        mass: 1,
+        usePath: true,
+        useCover: false,
+        useClose: true,
+        usePursuit: false,
+        wanderWeight: 0.12,
+        avoidWeight: 0.85,
+        separationWeight: 0.3,
+        leadShots: false,
+        spreadMul: 1,
+        fireRateMul: 1,
+        memorySpan: 2,
+        targetSearch: 0.22,
+        losInterval: 0.16,
+        pathAge: 0.6,
+        turnRate: 8,
+        coverChance: 0.12
+      };
     }
 
     function getActiveMapType() {
@@ -3865,6 +3967,7 @@
       soldiers.forEach((s) => s.model.root.dispose());
       soldiers.length = 0;
       soldiersById.clear();
+      clearYukaBrains();
 
       const greenTotal = Math.min(
         MAX_BOTS_PER_TEAM + 1,
@@ -3987,8 +4090,17 @@
             strafeTimer: 1.5 + (i % 3) * 0.6,
             flankSign: pt.x >= 0 ? 1 : -1,
             stuckTimer: 0,
-            unstickTimer: 0
+            unstickTimer: 0,
+            tookFireTimer: 0
           };
+
+          if (!isLocalPlayer && !isRemotePlayer) {
+            const skillProfile = getAiSkillProfile(getActiveAiSkill());
+            unit.fireRate *= skillProfile.fireRateMul;
+            attachYukaBrain(unit);
+          } else {
+            ensureYukaIdentity(unit);
+          }
 
           updateSoldierOverheadPlate(unit);
           animateSoldier(unit, 0.016, false, true);
@@ -4898,6 +5010,7 @@
 
       if (hitSoldier) {
         hitSoldier.velocity.addInPlace(aimDir.scale(4.5));
+        hitSoldier.tookFireTimer = 1.4;
         spawnImpactFx(hitPoint, hitSoldier.team === "green" ? "greenPlastic" : "tanPlastic");
         playImpactHitSound(hitPoint, true);
 
@@ -5314,6 +5427,7 @@
     const mapSizeSelectEl = document.getElementById("map-size-select");
     const timeLimitSelectEl = document.getElementById("time-limit-select");
     const hardcoreCheckboxEl = document.getElementById("hardcore-checkbox");
+    const aiSkillSelectEl = document.getElementById("ai-skill-select");
     const startMatchBtn = document.getElementById("start-match-btn");
     const hostMpBtn = document.getElementById("host-mp-btn");
     const joinMpBtn = document.getElementById("join-mp-btn");
@@ -5404,6 +5518,7 @@
     const FRIENDLY_BOTS_STORAGE_KEY = "toy_soldiers_friendly_bots";
     const ENEMY_BOTS_STORAGE_KEY = "toy_soldiers_enemy_bots";
     const TIME_LIMIT_STORAGE_KEY = "toy_soldiers_time_limit";
+    const AI_SKILL_STORAGE_KEY = "toy_soldiers_ai_skill";
     const CLIENT_TOKEN_STORAGE_KEY = "toy_soldiers_client_token";
 
     try {
@@ -5481,6 +5596,10 @@
         configuredHardcoreMode = savedHardcore === "1";
         hardcoreCheckboxEl.checked = configuredHardcoreMode;
       }
+
+      const savedAiSkill = localStorage.getItem(AI_SKILL_STORAGE_KEY);
+      configuredAiSkill = normalizeAiSkill(savedAiSkill);
+      if (aiSkillSelectEl) aiSkillSelectEl.value = configuredAiSkill;
 
       const savedPassword = localStorage.getItem(PASSWORD_STORAGE_KEY);
       if (savedPassword !== null && mpPasswordInputEl) {
@@ -5629,6 +5748,9 @@
             TIME_LIMIT_STORAGE_KEY,
             String(clampInt(timeLimitSelectEl.value, 60, 1800, 300))
           );
+        }
+        if (aiSkillSelectEl) {
+          localStorage.setItem(AI_SKILL_STORAGE_KEY, normalizeAiSkill(aiSkillSelectEl.value));
         }
       } catch (err) {}
     }
@@ -6181,6 +6303,8 @@
         updateRoomCodeForSelectedMap(configuredMapType, false);
       }
       configuredHardcoreMode = Boolean(hardcoreCheckboxEl && hardcoreCheckboxEl.checked);
+      configuredAiSkill = normalizeAiSkill(aiSkillSelectEl && aiSkillSelectEl.value);
+      if (aiSkillSelectEl) aiSkillSelectEl.value = configuredAiSkill;
       configuredDurationSec = clampInt(timeLimitSelectEl.value, 60, 1800, 300);
       if (shouldSave) {
         saveSetupSettingsToStorage();
@@ -6249,6 +6373,7 @@
         mapType: configuredMapType,
         worldLimit: configuredMapType === "shoebox" ? 28 : configuredMapLimit,
         hardcoreMode: configuredHardcoreMode,
+        aiSkill: configuredAiSkill,
         durationSec: configuredDurationSec
       };
 
@@ -6428,6 +6553,7 @@
 
       target.health = Math.max(0, newHealth);
       target.model.flinchTimer = 1.0;
+      target.tookFireTimer = 1.4;
 
       setPlateHealth(target.model, target.health / target.maxHealth);
 
@@ -6479,11 +6605,18 @@
             respawnSingleSoldier(s, rx, ry, rz, ryaw);
           }
         } else {
+          const wasHuman = s.isPlayer || s.isRemotePlayer;
           s.isPlayer = false;
           s.isRemotePlayer = false;
           s.rawPlayerName = "";
           if (s.botName) {
             s.name = s.botName;
+          }
+          // Remote/player → bot without a full respawn: give them a Yuka brain + bot fire rate
+          if (wasHuman || !s.vehicle || !s.aiProfile) {
+            const skillProfile = getAiSkillProfile(getActiveAiSkill());
+            s.fireRate = (0.78 + (s.slotIndex % 3) * 0.15) * skillProfile.fireRateMul;
+            attachYukaBrain(s);
           }
         }
         updateSoldierOverheadPlate(s);
@@ -7023,6 +7156,9 @@
     if (hardcoreCheckboxEl) {
       hardcoreCheckboxEl.addEventListener("change", () => readHostSetupInputs());
     }
+    if (aiSkillSelectEl) {
+      aiSkillSelectEl.addEventListener("change", () => readHostSetupInputs());
+    }
 
     function tryLockPointer() {
       if (
@@ -7205,6 +7341,7 @@
                 ? 28
                 : (mpState.roster && mpState.roster.worldLimit) || configuredMapLimit,
             hardcoreMode: isHardcoreActive(),
+            aiSkill: getActiveAiSkill(),
             durationSec: (mpState.roster && mpState.roster.durationSec) || configuredDurationSec
           });
         }
@@ -7290,6 +7427,7 @@
       const finalAmount = isHardcoreActive() ? Math.max(amount, target.maxHealth) : amount;
       target.health = Math.max(0, target.health - finalAmount);
       target.model.flinchTimer = 1.0;
+      target.tookFireTimer = 1.4;
 
       setPlateHealth(target.model, target.health / target.maxHealth);
 
@@ -7410,8 +7548,540 @@
     }
 
     // =========================================================================
-    // 12. AI SQUAD LOGIC (WITH SANDCASTLE / OBSTACLE AVOIDANCE & UNSTICK REFLEX)
+    // 12. YUKA BOT AI (NAV GRAPH, FSM, SKILL TIERS, HOST-ONLY)
     // =========================================================================
+    const yukaEntityManager = typeof YUKA !== "undefined" ? new YUKA.EntityManager() : null;
+    const navGraphState = {
+      graph: null,
+      astar: null,
+      cellSize: 1.6,
+      originX: 0,
+      originZ: 0,
+      cols: 0,
+      rows: 0,
+      walkable: null,
+      coverSlots: [],
+      yukaObstacles: []
+    };
+    let navPathBudget = 0;
+    let navPathFairOffset = 0;
+    let aiStepDt = 0.016;
+    let aiSharedStates = null;
+
+    function hasYuka() {
+      return typeof YUKA !== "undefined" && YUKA && yukaEntityManager;
+    }
+
+    function isNavBlockedAt(x, z, pad) {
+      const p = pad == null ? 0.85 : pad;
+      if (builtMapType === "kitchen" && isOutsideTable(x, z)) return true;
+      for (let i = 0; i < obstacles.length; i++) {
+        const obs = obstacles[i];
+        if (obs.walkable) continue;
+        if (obs.shape === "circle") {
+          if (Math.hypot(x - obs.cx, z - obs.cz) <= (obs.shapeRadius || obs.radius || 0) + p) {
+            return true;
+          }
+        } else if (obs.shape === "ring") {
+          const d = Math.hypot(x - obs.cx, z - obs.cz);
+          if (d >= (obs.innerRadius || 0) - p && d <= (obs.shapeRadius || obs.radius || 0) + p) {
+            return true;
+          }
+        } else if (obs.shape === "ellipsoid") {
+          // Block solid body at soldier feet; overhead flower canopy stays passable (radius → 0)
+          const feetY = getSandHeight(x, z);
+          const shapeR = getEllipsoidRadiusAt(obs, feetY);
+          if (shapeR > 0.05 && Math.hypot(x - obs.cx, z - obs.cz) <= shapeR + p) {
+            return true;
+          }
+        } else if (
+          x > obs.minX - p &&
+          x < obs.maxX + p &&
+          z > obs.minZ - p &&
+          z < obs.maxZ + p
+        ) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function rebuildNavGraphFromObstacles() {
+      navGraphState.coverSlots = [];
+      navGraphState.yukaObstacles = [];
+      navGraphState.graph = null;
+      navGraphState.walkable = null;
+      if (!hasYuka()) return;
+
+      const margin = builtMapType === "shoebox" ? 1.6 : 2.2;
+      const minX = -WORLD_LIMIT_X + margin;
+      const maxX = WORLD_LIMIT_X - margin;
+      const minZ = -WORLD_LIMIT_Z + margin;
+      const maxZ = WORLD_LIMIT_Z - margin;
+      const spanX = Math.max(4, maxX - minX);
+      const spanZ = Math.max(4, maxZ - minZ);
+      const cellSize = Math.max(1.35, Math.min(2.7, Math.max(spanX, spanZ) / 48));
+      const cols = Math.max(4, Math.ceil(spanX / cellSize) + 1);
+      const rows = Math.max(4, Math.ceil(spanZ / cellSize) + 1);
+      const walkable = new Uint8Array(cols * rows);
+      const graph = new YUKA.Graph();
+      graph.digraph = false;
+
+      for (let gz = 0; gz < rows; gz++) {
+        for (let gx = 0; gx < cols; gx++) {
+          const x = minX + gx * cellSize;
+          const z = minZ + gz * cellSize;
+          const idx = gz * cols + gx;
+          if (!isNavBlockedAt(x, z, 0.9)) {
+            walkable[idx] = 1;
+            graph.addNode(new YUKA.NavNode(idx, new YUKA.Vector3(x, 0, z)));
+          }
+        }
+      }
+
+      const dirs = [
+        [1, 0],
+        [0, 1],
+        [1, 1],
+        [1, -1]
+      ];
+      for (let gz = 0; gz < rows; gz++) {
+        for (let gx = 0; gx < cols; gx++) {
+          const from = gz * cols + gx;
+          if (!walkable[from] || !graph.hasNode(from)) continue;
+          for (let d = 0; d < dirs.length; d++) {
+            const nx = gx + dirs[d][0];
+            const nz = gz + dirs[d][1];
+            if (nx < 0 || nz < 0 || nx >= cols || nz >= rows) continue;
+            const to = nz * cols + nx;
+            if (!walkable[to] || !graph.hasNode(to)) continue;
+            const isDiag = dirs[d][0] !== 0 && dirs[d][1] !== 0;
+            // No diagonal corner-cutting through blocked toys
+            if (isDiag) {
+              const sideA = gz * cols + nx;
+              const sideB = nz * cols + gx;
+              if (!walkable[sideA] || !walkable[sideB]) continue;
+            }
+            const cost = isDiag ? cellSize * 1.4142 : cellSize;
+            graph.addEdge(new YUKA.NavEdge(from, to, cost));
+          }
+        }
+      }
+
+      navGraphState.graph = graph;
+      navGraphState.astar = new YUKA.AStar(graph, -1, -1);
+      navGraphState.cellSize = cellSize;
+      navGraphState.originX = minX;
+      navGraphState.originZ = minZ;
+      navGraphState.cols = cols;
+      navGraphState.rows = rows;
+      navGraphState.walkable = walkable;
+
+      for (let i = 0; i < obstacles.length; i++) {
+        const obs = obstacles[i];
+        if (obs.walkable) continue;
+        const ent = new YUKA.GameEntity();
+        ent.position.set(obs.cx, 0, obs.cz);
+        ent.boundingRadius = Math.max(0.8, obs.radius || Math.max(obs.maxX - obs.minX, obs.maxZ - obs.minZ) * 0.5);
+        navGraphState.yukaObstacles.push(ent);
+
+        const rim = ent.boundingRadius + 1.65;
+        const angles = [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5];
+        for (let a = 0; a < angles.length; a++) {
+          const x = obs.cx + Math.cos(angles[a]) * rim;
+          const z = obs.cz + Math.sin(angles[a]) * rim;
+          if (!isNavBlockedAt(x, z, 0.7) && nearestNavNodeIndex(x, z) >= 0) {
+            navGraphState.coverSlots.push({
+              x,
+              z,
+              cx: obs.cx,
+              cz: obs.cz,
+              occupiedBy: null
+            });
+          }
+        }
+      }
+    }
+    tsNavGraphReady = true;
+    rebuildNavGraphFromObstacles();
+
+    function nearestNavNodeIndex(x, z) {
+      const g = navGraphState.graph;
+      if (!g || !navGraphState.walkable) return -1;
+      const gx = Math.round((x - navGraphState.originX) / navGraphState.cellSize);
+      const gz = Math.round((z - navGraphState.originZ) / navGraphState.cellSize);
+      const cols = navGraphState.cols;
+      const rows = navGraphState.rows;
+      if (gx >= 0 && gz >= 0 && gx < cols && gz < rows) {
+        const idx = gz * cols + gx;
+        if (navGraphState.walkable[idx] && g.hasNode(idx)) return idx;
+      }
+      let best = -1;
+      let bestD = Infinity;
+      for (let r = 1; r <= 6; r++) {
+        for (let dz = -r; dz <= r; dz++) {
+          for (let dx = -r; dx <= r; dx++) {
+            if (Math.abs(dx) !== r && Math.abs(dz) !== r) continue;
+            const nx = gx + dx;
+            const nz = gz + dz;
+            if (nx < 0 || nz < 0 || nx >= cols || nz >= rows) continue;
+            const idx = nz * cols + nx;
+            if (!navGraphState.walkable[idx] || !g.hasNode(idx)) continue;
+            const node = g.getNode(idx);
+            const d = Math.hypot(node.position.x - x, node.position.z - z);
+            if (d < bestD) {
+              bestD = d;
+              best = idx;
+            }
+          }
+        }
+        if (best >= 0) return best;
+      }
+      return -1;
+    }
+
+    function findNavPath(fromX, fromZ, toX, toZ) {
+      if (!navGraphState.graph || !navGraphState.astar || navPathBudget <= 0) return null;
+      const src = nearestNavNodeIndex(fromX, fromZ);
+      const dst = nearestNavNodeIndex(toX, toZ);
+      if (src < 0 || dst < 0) return [];
+      if (src === dst) {
+        return [new YUKA.Vector3(toX, 0, toZ)];
+      }
+      navPathBudget -= 1;
+      const astar = navGraphState.astar;
+      astar.clear();
+      astar.graph = navGraphState.graph;
+      astar.source = src;
+      astar.target = dst;
+      astar.search();
+      if (!astar.found) return [];
+      const idxPath = astar.getPath();
+      const pts = [];
+      for (let i = 0; i < idxPath.length; i++) {
+        const node = navGraphState.graph.getNode(idxPath[i]);
+        if (node) pts.push(node.position.clone());
+      }
+      if (pts.length) pts[pts.length - 1].set(toX, 0, toZ);
+      return pts;
+    }
+
+    function applyPathToVehicle(ai, points) {
+      if (!points || points.length === 0) {
+        ai.navWaypoints = null;
+        ai.navWaypointIndex = 0;
+        if (ai.followPathBehavior) ai.followPathBehavior.active = false;
+        if (ai.seekBehavior) ai.seekBehavior.active = true;
+        return;
+      }
+      let start = 0;
+      if (
+        points.length > 1 &&
+        Math.hypot(ai.position.x - points[0].x, ai.position.z - points[0].z) < 2.4
+      ) {
+        start = 1;
+      }
+      ai.navWaypoints = [];
+      for (let i = start; i < points.length; i++) {
+        ai.navWaypoints.push({ x: points[i].x, z: points[i].z });
+      }
+      ai.navWaypointIndex = 0;
+
+      const follow = ai.followPathBehavior;
+      if (follow && hasYuka()) {
+        const path = new YUKA.Path();
+        path.loop = false;
+        for (let i = 0; i < ai.navWaypoints.length; i++) {
+          const wp = ai.navWaypoints[i];
+          path.add(new YUKA.Vector3(wp.x, 0, wp.z));
+        }
+        follow.path = path;
+        follow.active = true;
+        if (ai.seekBehavior) ai.seekBehavior.active = false;
+      }
+    }
+
+    function getAiSteerTarget(ai, goalX, goalZ) {
+      const wps = ai.navWaypoints;
+      if (!wps || !wps.length) return { x: goalX, z: goalZ };
+      while (
+        ai.navWaypointIndex < wps.length - 1 &&
+        Math.hypot(
+          ai.position.x - wps[ai.navWaypointIndex].x,
+          ai.position.z - wps[ai.navWaypointIndex].z
+        ) < 2.2
+      ) {
+        ai.navWaypointIndex += 1;
+      }
+      const wp = wps[Math.min(ai.navWaypointIndex, wps.length - 1)];
+      return { x: wp.x, z: wp.z };
+    }
+
+    function pickCoverSlot(ai, target) {
+      const slots = navGraphState.coverSlots;
+      if (!slots.length || !target) return null;
+      let best = null;
+      let bestScore = -Infinity;
+      for (let i = 0; i < slots.length; i++) {
+        const slot = slots[i];
+        if (slot.occupiedBy && slot.occupiedBy !== ai.unitId) {
+          const occ = soldiersById.get(slot.occupiedBy);
+          if (occ && occ.alive && Math.hypot(occ.position.x - slot.x, occ.position.z - slot.z) < 1.7) {
+            continue;
+          }
+        }
+        const dSelf = Math.hypot(slot.x - ai.position.x, slot.z - ai.position.z);
+        if (dSelf < 1.1 || dSelf > 28) continue;
+        const toTgtX = target.position.x - slot.cx;
+        const toTgtZ = target.position.z - slot.cz;
+        const toSlotX = slot.x - slot.cx;
+        const toSlotZ = slot.z - slot.cz;
+        const behind = toTgtX * toSlotX + toTgtZ * toSlotZ;
+        const score = (behind < 0 ? 14 : -6) - dSelf * 0.35;
+        if (score > bestScore) {
+          bestScore = score;
+          best = slot;
+        }
+      }
+      return best;
+    }
+
+    function rememberEnemy(ai, target, visible) {
+      if (!target) return;
+      const ent = target.yukaEntity;
+      if (ent && ai.memorySystem) {
+        if (!ai.memorySystem.hasRecord(ent)) ai.memorySystem.createRecord(ent);
+        const rec = ai.memorySystem.getRecord(ent);
+        rec.visible = visible;
+        rec.timeLastSensed = performance.now() * 0.001;
+        rec.lastSensedPosition.set(target.position.x, target.position.y, target.position.z);
+      }
+      if (visible || !ai.lastSensedTarget) {
+        ai.lastSensedTarget = target;
+        ai.lastSensedAt = performance.now() * 0.001;
+        ai.lastSensedPos.set(target.position.x, target.position.y, target.position.z);
+      }
+    }
+
+    function getHuntPosition(ai, profile) {
+      const now = performance.now() * 0.001;
+      if (ai.lastSensedTarget && now - ai.lastSensedAt <= profile.memorySpan) {
+        return ai.lastSensedPos;
+      }
+      return null;
+    }
+
+    function addSeparationSteer(ai, moveVec, weight) {
+      if (weight <= 0) return;
+      const cx = Math.floor(ai.position.x / SPATIAL_CELL_SIZE);
+      const cz = Math.floor(ai.position.z / SPATIAL_CELL_SIZE);
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const bucket = spatialGrid.get(((cx + dx) << 16) ^ ((cz + dz) & 0xffff));
+          if (!bucket) continue;
+          for (let i = 0; i < bucket.length; i++) {
+            const other = bucket[i];
+            if (other === ai || !other.alive) continue;
+            const ox = ai.position.x - other.position.x;
+            const oz = ai.position.z - other.position.z;
+            const dSq = ox * ox + oz * oz;
+            if (dSq < 0.01 || dSq > 6.25) continue;
+            const d = Math.sqrt(dSq);
+            const push = ((2.5 - d) / 2.5) * weight;
+            moveVec.x += (ox / d) * push;
+            moveVec.z += (oz / d) * push;
+          }
+        }
+      }
+    }
+
+    function ensureAiSharedStates() {
+      if (aiSharedStates || !hasYuka()) return;
+      class AiAdvanceState extends YUKA.State {
+        execute(vehicle) {
+          vehicle.soldier.aiIntent = "advance";
+        }
+      }
+      class AiEngageState extends YUKA.State {
+        execute(vehicle) {
+          vehicle.soldier.aiIntent = "engage";
+        }
+      }
+      class AiCloseState extends YUKA.State {
+        execute(vehicle) {
+          vehicle.soldier.aiIntent = "close";
+        }
+      }
+      class AiCoverState extends YUKA.State {
+        execute(vehicle) {
+          vehicle.soldier.aiIntent = "cover";
+        }
+      }
+      class AiUnstickState extends YUKA.State {
+        execute(vehicle) {
+          vehicle.soldier.aiIntent = "unstick";
+        }
+      }
+      aiSharedStates = {
+        ADVANCE: new AiAdvanceState(),
+        ENGAGE: new AiEngageState(),
+        CLOSE: new AiCloseState(),
+        COVER: new AiCoverState(),
+        UNSTICK: new AiUnstickState()
+      };
+    }
+
+    function clearYukaBrains() {
+      if (!hasYuka()) return;
+      const entities = yukaEntityManager.entities;
+      if (entities && entities.length) {
+        if (typeof yukaEntityManager.clear === "function") {
+          yukaEntityManager.clear();
+        } else if (typeof yukaEntityManager.remove === "function") {
+          for (let i = entities.length - 1; i >= 0; i--) {
+            yukaEntityManager.remove(entities[i]);
+          }
+        } else {
+          entities.length = 0;
+        }
+      }
+    }
+
+    function ensureYukaIdentity(unit) {
+      if (!hasYuka()) return;
+      if (unit.yukaEntity) {
+        unit.yukaEntity.position.set(unit.position.x, unit.position.y, unit.position.z);
+        if (unit.yukaEntity.velocity && unit.velocity) {
+          unit.yukaEntity.velocity.set(unit.velocity.x, unit.velocity.y, unit.velocity.z);
+        }
+        return;
+      }
+      const ent = new YUKA.Vehicle();
+      ent.updateOrientation = false;
+      ent.maxSpeed = 0;
+      ent.position.set(unit.position.x, unit.position.y, unit.position.z);
+      ent.boundingRadius = unit.radius;
+      unit.yukaEntity = ent;
+    }
+
+    function attachYukaBrain(unit) {
+      if (!hasYuka() || unit.isPlayer || unit.isRemotePlayer) {
+        ensureYukaIdentity(unit);
+        return;
+      }
+      try {
+        // Replace any prior identity/brain entity so human→bot transitions don't leak
+        if (unit.vehicle && yukaEntityManager && typeof yukaEntityManager.remove === "function") {
+          try {
+            yukaEntityManager.remove(unit.vehicle);
+          } catch (err) {}
+        } else if (
+          unit.yukaEntity &&
+          unit.yukaEntity !== unit.vehicle &&
+          yukaEntityManager &&
+          typeof yukaEntityManager.remove === "function"
+        ) {
+          try {
+            yukaEntityManager.remove(unit.yukaEntity);
+          } catch (err) {}
+        }
+
+        ensureAiSharedStates();
+        const profile = getAiSkillProfile(getActiveAiSkill());
+        const vehicle = new YUKA.Vehicle();
+        vehicle.updateOrientation = false;
+        vehicle.maxSpeed = unit.speed * profile.speedMul;
+        vehicle.maxForce = profile.maxForce;
+        vehicle.mass = profile.mass;
+        vehicle.boundingRadius = unit.radius;
+        vehicle.soldier = unit;
+        vehicle.position.set(unit.position.x, unit.position.y, unit.position.z);
+        // Vehicle does not construct a StateMachine by default
+        vehicle.stateMachine = new YUKA.StateMachine(vehicle);
+
+        const seek = new YUKA.SeekBehavior(new YUKA.Vector3(unit.position.x, 0, unit.position.z));
+        const followPath = new YUKA.FollowPathBehavior(new YUKA.Path(), 2.15);
+        followPath.active = false;
+        const wander = new YUKA.WanderBehavior();
+        wander.weight = profile.wanderWeight;
+        wander.active = profile.wanderWeight > 0.01;
+        const avoid = new YUKA.ObstacleAvoidanceBehavior(navGraphState.yukaObstacles);
+        avoid.weight = profile.avoidWeight;
+        avoid.active = profile.avoidWeight > 0.01 && navGraphState.yukaObstacles.length > 0;
+
+        vehicle.steering.add(seek);
+        vehicle.steering.add(followPath);
+        vehicle.steering.add(wander);
+        vehicle.steering.add(avoid);
+
+        unit.pursuitBehavior = null;
+        if (profile.usePursuit) {
+          const dummy = new YUKA.Vehicle();
+          const pursuit = new YUKA.PursuitBehavior(dummy, 2.4);
+          pursuit.active = false;
+          vehicle.steering.add(pursuit);
+          unit.pursuitBehavior = pursuit;
+        }
+
+        if (aiSharedStates) {
+          vehicle.stateMachine.add("ADVANCE", aiSharedStates.ADVANCE);
+          vehicle.stateMachine.add("ENGAGE", aiSharedStates.ENGAGE);
+          vehicle.stateMachine.add("CLOSE", aiSharedStates.CLOSE);
+          vehicle.stateMachine.add("COVER", aiSharedStates.COVER);
+          vehicle.stateMachine.add("UNSTICK", aiSharedStates.UNSTICK);
+          vehicle.stateMachine.changeTo("ADVANCE");
+        }
+
+        const memory = new YUKA.MemorySystem(vehicle);
+        memory.memorySpan = profile.memorySpan;
+
+        unit.vehicle = vehicle;
+        unit.yukaEntity = vehicle;
+        unit.seekBehavior = seek;
+        unit.followPathBehavior = followPath;
+        unit.wanderBehavior = wander;
+        unit.avoidBehavior = avoid;
+        unit.memorySystem = memory;
+        unit.aiProfile = profile;
+        unit.aiIntent = "advance";
+        unit.navPathAge = 99;
+        unit.navWaypoints = null;
+        unit.navWaypointIndex = 0;
+        unit.cachedCanSee = false;
+        unit.recentLosTimer = 0;
+        unit.coverSlot = null;
+        unit.lastSensedTarget = null;
+        unit.lastSensedAt = 0;
+        unit.lastSensedPos = new BABYLON.Vector3(unit.position.x, unit.position.y, unit.position.z);
+        yukaEntityManager.add(vehicle);
+      } catch (err) {
+        console.warn("Yuka brain attach failed", err);
+        ensureYukaIdentity(unit);
+      }
+    }
+
+    function chooseAiState(ai, profile, canSee, horizDist) {
+      if (ai.unstickTimer > 0) return "UNSTICK";
+      if (
+        ai.vehicle &&
+        ai.vehicle.stateMachine.in("COVER") &&
+        !canSee &&
+        horizDist > 6 &&
+        horizDist < 28
+      ) {
+        return "COVER";
+      }
+      if (profile.useCover && ((!canSee && horizDist < 22) || (canSee && ai.tookFireTimer > 0))) {
+        return "COVER";
+      }
+      if (!profile.useCover && profile.coverChance > 0 && !canSee && horizDist < 18 && Math.random() < profile.coverChance * 0.02) {
+        return "COVER";
+      }
+      if (profile.useClose && canSee && horizDist < 8) return "CLOSE";
+      if (canSee && horizDist <= 20) return "ENGAGE";
+      return "ADVANCE";
+    }
+
     function computeObstacleAvoidance(ai, goalDirX, goalDirZ) {
       let steerX = 0;
       let steerZ = 0;
@@ -7424,18 +8094,14 @@
         const safeDist = obs.radius + ai.radius + (builtMapType === "shoebox" ? 1.8 : 2.8);
 
         if (dist < safeDist) {
-          // Vector from AI toward obstacle center
           const toObsX = -dx / dist;
           const toObsZ = -dz / dist;
-          // Check if obstacle is ahead of the AI's desired movement direction
           const headingDot = toObsX * goalDirX + toObsZ * goalDirZ;
 
           if (headingDot > -0.25 || dist < obs.radius + ai.radius + 1.0) {
             const weight = ((safeDist - dist) / safeDist) * 2.6;
-            // Outward radial push away from obstacle center
             const outX = dx / dist;
             const outZ = dz / dist;
-            // Tangent vector around obstacle perimeter using the AI's committed flankSign
             const tanX = -outZ * ai.flankSign;
             const tanZ = outX * ai.flankSign;
 
@@ -7455,90 +8121,186 @@
         return;
       }
 
-      // Cache closest living opponent for 0.25s to avoid O(N^2) target scans every frame
+      const profile = ai.aiProfile || getAiSkillProfile(getActiveAiSkill());
+      aiStepDt = dt;
+
       ai.targetSearchTimer = (ai.targetSearchTimer || 0) - dt;
       if (ai.targetSearchTimer <= 0 || !ai.cachedTarget || !ai.cachedTarget.alive) {
-        ai.targetSearchTimer = 0.22 + (ai.slotIndex % 5) * 0.03;
-        let nearest = null;
-        let nearestDistSq = Infinity;
+        ai.targetSearchTimer = profile.targetSearch + (ai.slotIndex % 5) * 0.03;
+        let best = null;
+        let bestScore = -Infinity;
         for (const other of soldiers) {
           if (!other.alive || other.team === ai.team) continue;
           const dx0 = ai.position.x - other.position.x;
           const dz0 = ai.position.z - other.position.z;
           const dSq = dx0 * dx0 + dz0 * dz0;
-          if (dSq < nearestDistSq) {
-            nearestDistSq = dSq;
-            nearest = other;
+          let score = 40000 - dSq;
+          if (other.isPlayer) score += 1800;
+          if (ai.lastSensedTarget === other) score += 900;
+          if (score > bestScore) {
+            bestScore = score;
+            best = other;
           }
         }
-        ai.cachedTarget = nearest;
+        ai.cachedTarget = best;
       }
 
       const nearestTarget = ai.cachedTarget;
-
       if (!nearestTarget) {
-        ai.moveBlend = Math.max(0, ai.moveBlend - dt * 4);
-        updateSoldierPhysicsAndCollisions(ai, dt);
-        animateSoldier(ai, dt, false);
-        return;
+        const hunt = getHuntPosition(ai, profile);
+        if (!hunt) {
+          ai.moveBlend = Math.max(0, ai.moveBlend - dt * 4);
+          updateSoldierPhysicsAndCollisions(ai, dt);
+          animateSoldier(ai, dt, false);
+          return;
+        }
       }
 
-      const dx = nearestTarget.position.x - ai.position.x;
-      const dz = nearestTarget.position.z - ai.position.z;
-      const dy = nearestTarget.position.y - ai.position.y;
+      const focus = nearestTarget || { position: getHuntPosition(ai, profile), velocity: { x: 0, y: 0, z: 0 }, alive: false };
+      const dx = focus.position.x - ai.position.x;
+      const dz = focus.position.z - ai.position.z;
+      const dy = focus.position.y - ai.position.y;
       const horizDist = Math.max(0.01, Math.hypot(dx, dz));
 
-      // Smoothly turn toward target (+Z forward in Babylon)
       const targetYaw = Math.atan2(dx, dz);
       let angleDiff = targetYaw - ai.yaw;
       while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
       while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-      ai.yaw += angleDiff * Math.min(1, dt * 8);
+      ai.yaw += angleDiff * Math.min(1, dt * profile.turnRate);
       ai.model.root.rotation.y = ai.yaw;
-
       ai.pitch = Math.max(-0.35, Math.min(0.35, -Math.atan2(dy, horizDist)));
 
-      // Throttle scene raycast line-of-sight checks (~5 Hz per bot) so 100+ bot battles stay high-FPS
       ai.losTimer = (ai.losTimer || 0) - dt;
-      if (ai.losTimer <= 0) {
-        ai.losTimer = 0.16 + (ai.slotIndex % 5) * 0.025;
-        ai.cachedCanSee = hasLineOfSight(ai, nearestTarget);
+      if (nearestTarget && ai.losTimer <= 0) {
+        ai.losTimer = profile.losInterval + (ai.slotIndex % 5) * 0.025;
+        try {
+          ai.cachedCanSee = hasLineOfSight(ai, nearestTarget);
+        } catch (err) {
+          ai.cachedCanSee = horizDist < 18;
+        }
+      } else if (!nearestTarget) {
+        ai.cachedCanSee = false;
       }
-      const canSee = Boolean(ai.cachedCanSee);
+      const canSee = Boolean(nearestTarget && ai.cachedCanSee);
+      if (canSee) {
+        ai.recentLosTimer = 0.85;
+      } else if (ai.recentLosTimer > 0) {
+        ai.recentLosTimer -= dt;
+      }
+      try {
+        if (nearestTarget) rememberEnemy(ai, nearestTarget, canSee);
+      } catch (err) {}
 
       ai.strafeTimer -= dt;
       if (ai.strafeTimer <= 0) {
         ai.strafeTimer = 1.6 + Math.random() * 1.8;
         ai.strafeDir = Math.random() > 0.5 ? 1 : -1;
       }
+      if (ai.tookFireTimer > 0) ai.tookFireTimer -= dt;
+
+      const huntPos = getHuntPosition(ai, profile);
+      const goalX = canSee || !huntPos ? focus.position.x : huntPos.x;
+      const goalZ = canSee || !huntPos ? focus.position.z : huntPos.z;
+
+      // FSM intent (Yuka StateMachine is optional; always set aiIntent)
+      let intent = "advance";
+      try {
+        if (ai.vehicle && hasYuka() && ai.vehicle.stateMachine.get("ADVANCE")) {
+          const nextState = chooseAiState(ai, profile, canSee, horizDist);
+          if (!ai.vehicle.stateMachine.in(nextState)) {
+            if (ai.coverSlot && nextState !== "COVER") {
+              if (ai.coverSlot.occupiedBy === ai.unitId) ai.coverSlot.occupiedBy = null;
+              ai.coverSlot = null;
+            }
+            ai.vehicle.stateMachine.changeTo(nextState);
+          }
+          ai.vehicle.stateMachine.update();
+          intent = ai.aiIntent || "advance";
+        } else {
+          intent = chooseAiState(ai, profile, canSee, horizDist).toLowerCase();
+          ai.aiIntent = intent;
+        }
+      } catch (err) {
+        intent = canSee && horizDist <= 20 ? (horizDist < 8 ? "close" : "engage") : "advance";
+        ai.aiIntent = intent;
+      }
+
+      // Staggered A* into waypoint list (Intermediate/Expert)
+      ai.navPathAge = (ai.navPathAge || 0) + dt;
+      if (
+        profile.usePath &&
+        (intent === "advance" || intent === "cover") &&
+        (ai.navPathAge >= profile.pathAge || !ai.navWaypoints || !ai.navWaypoints.length)
+      ) {
+        let destX = goalX;
+        let destZ = goalZ;
+        if (intent === "cover") {
+          const slot =
+            ai.coverSlot && ai.coverSlot.occupiedBy === ai.unitId
+              ? ai.coverSlot
+              : pickCoverSlot(ai, nearestTarget);
+          if (slot) {
+            if (ai.coverSlot && ai.coverSlot !== slot && ai.coverSlot.occupiedBy === ai.unitId) {
+              ai.coverSlot.occupiedBy = null;
+            }
+            slot.occupiedBy = ai.unitId;
+            ai.coverSlot = slot;
+            destX = slot.x;
+            destZ = slot.z;
+          }
+        }
+        const pts = findNavPath(ai.position.x, ai.position.z, destX, destZ);
+        if (pts === null) {
+          // Shared search budget exhausted — keep existing route; retry next frames
+        } else if (pts.length) {
+          applyPathToVehicle(ai, pts);
+          ai.navPathAge = 0;
+        } else {
+          // Graph search ran but found nothing useful
+          applyPathToVehicle(ai, null);
+          ai.navPathAge = profile.pathAge * 0.45;
+        }
+      }
+      if (intent === "unstick" || intent === "close" || intent === "engage") {
+        ai.navWaypoints = null;
+        if (ai.followPathBehavior) ai.followPathBehavior.active = false;
+        if (ai.seekBehavior) ai.seekBehavior.active = true;
+      }
 
       const forward = new BABYLON.Vector3(Math.sin(ai.yaw), 0, Math.cos(ai.yaw));
       const right = new BABYLON.Vector3(Math.cos(ai.yaw), 0, -Math.sin(ai.yaw));
       const moveVec = new BABYLON.Vector3(0, 0, 0);
 
-      if (ai.unstickTimer > 0) {
-        // Active unstick maneuver: flank strongly to the side & slightly forward
-        ai.unstickTimer -= dt;
+      if (ai.unstickTimer > 0 || intent === "unstick") {
+        ai.unstickTimer = Math.max(0, (ai.unstickTimer || 0) - dt);
         moveVec.addInPlace(right.scale(ai.flankSign * 1.25));
         moveVec.addInPlace(forward.scale(0.35));
-      } else if (horizDist > 20 || !canSee) {
-        moveVec.addInPlace(forward);
-        moveVec.addInPlace(right.scale(ai.strafeDir * 0.45));
-      } else if (horizDist < 8) {
+      } else if (intent === "close") {
         moveVec.addInPlace(forward.scale(-0.6));
         moveVec.addInPlace(right.scale(ai.strafeDir * 0.8));
-      } else {
+      } else if (intent === "engage") {
         moveVec.addInPlace(right.scale(ai.strafeDir * 0.75));
+      } else {
+        // Advance / Cover: walk toward next nav waypoint or the goal (works for Beginner too)
+        const steer = getAiSteerTarget(ai, goalX, goalZ);
+        const sx = steer.x - ai.position.x;
+        const sz = steer.z - ai.position.z;
+        const sDist = Math.max(0.01, Math.hypot(sx, sz));
+        moveVec.x += sx / sDist;
+        moveVec.z += sz / sDist;
+        const strafeAmt =
+          intent === "cover" ? 0.25 : profile.wanderWeight > 0.01 ? 0.55 : 0.4;
+        moveVec.addInPlace(right.scale(ai.strafeDir * strafeAmt));
+        if (profile.wanderWeight > 0.01) {
+          moveVec.x += (Math.random() - 0.5) * profile.wanderWeight * 0.35;
+          moveVec.z += (Math.random() - 0.5) * profile.wanderWeight * 0.35;
+        }
       }
 
-      // Blend in smooth obstacle avoidance around the central sandcastle & toys
-      const avoid = computeObstacleAvoidance(
-        ai,
-         dx / horizDist,
-         dz / horizDist
-      );
+      const avoid = computeObstacleAvoidance(ai, dx / horizDist, dz / horizDist);
       moveVec.x += avoid.x;
       moveVec.z += avoid.z;
+      addSeparationSteer(ai, moveVec, profile.separationWeight);
       if (builtMapType === "kitchen") {
         moveVec.x -= Math.sign(ai.position.x) * Math.max(0, (Math.abs(ai.position.x) - WORLD_LIMIT_X + 7) / 3);
         moveVec.z -= Math.sign(ai.position.z) * Math.max(0, (Math.abs(ai.position.z) - WORLD_LIMIT_Z + 7) / 3);
@@ -7546,11 +8308,11 @@
 
       const isMoving = moveVec.lengthSquared() > 0.01;
       if (isMoving) {
-        moveVec.normalize().scaleInPlace(ai.speed * dt);
+        const speed = ai.speed * profile.speedMul;
+        moveVec.normalize().scaleInPlace(speed * dt);
         ai.position.addInPlace(moveVec);
         ai.moveBlend = Math.min(1, ai.moveBlend + dt * 5);
 
-        // Stuck detection: if trying to move for 0.4s without covering 0.45 units, flank & hop
         ai.stuckTimer += dt;
         if (ai.stuckTimer >= 0.4) {
           const movedDist = Math.hypot(
@@ -7563,6 +8325,8 @@
           if (movedDist < 0.45) {
             ai.flankSign = -ai.flankSign;
             ai.unstickTimer = 1.1;
+            ai.navPathAge = 99;
+            ai.navWaypoints = null;
             if (ai.isGrounded) {
               ai.velocity.y = 6.2;
               ai.isGrounded = false;
@@ -7580,17 +8344,26 @@
       if (!ai.alive) return;
 
       if (ai.fireCooldown > 0) ai.fireCooldown -= dt;
-      if (ai.fireCooldown <= 0 && horizDist < 75 && canSee) {
+      // Shoot with clear LOS, or briefly after LOS (peeking / dune flicker)
+      const canFire =
+        nearestTarget &&
+        horizDist < 75 &&
+        (canSee || (ai.recentLosTimer > 0 && horizDist < 40));
+      if (ai.fireCooldown <= 0 && canFire) {
         const muzzlePos = getMuzzleWorldPosition(ai);
-        const spread = ai.team === "green" ? 1.2 : 1.5;
+        const spread = (ai.team === "green" ? 1.2 : 1.5) * profile.spreadMul;
+        // Hitscan (instant ray) — aim at current hitbox, no travel-time lead
         const aimPos = new BABYLON.Vector3(
           nearestTarget.position.x + (Math.random() - 0.5) * spread,
-          nearestTarget.position.y + 1.25 + (Math.random() - 0.5) * 0.6,
+          nearestTarget.position.y + 1.25 + (Math.random() - 0.5) * 0.6 * profile.spreadMul,
           nearestTarget.position.z + (Math.random() - 0.5) * spread
         );
-        const shotDir = aimPos.subtract(muzzlePos).normalize();
-        const dmg = isHardcoreActive() ? 100 : ai.team === "green" ? 20 : 12;
-        fireWeapon(ai, shotDir, dmg);
+        const shotDir = aimPos.subtract(muzzlePos);
+        if (shotDir.lengthSquared() > 1e-6) {
+          shotDir.normalize();
+          const dmg = isHardcoreActive() ? 100 : ai.team === "green" ? 20 : 12;
+          fireWeapon(ai, shotDir, dmg);
+        }
       }
     }
 
@@ -7792,8 +8565,15 @@
 
       // ----- REMOTE PLAYERS & AI SQUADS UPDATE (WITH AUTO-RESPAWN) -----
       const tAiLoopStart = performance.now();
+      navPathBudget = soldiers.length > 80 ? 5 : soldiers.length > 40 ? 8 : 12;
+      // Rotate start index so path-search budget is not always eaten by early slots
+      const soldierCount = soldiers.length;
+      const aiStart =
+        soldierCount > 0 ? navPathFairOffset % soldierCount : 0;
+      navPathFairOffset = soldierCount > 0 ? (aiStart + 1) % soldierCount : 0;
       const isHost = isMultiplayerAuthority();
-      for (const s of soldiers) {
+      for (let si = 0; si < soldierCount; si++) {
+        const s = soldiers[(aiStart + si) % soldierCount];
         if (s.isPlayer) continue;
 
         // Remote human player OR non-host AI soldier: interpolate smoothly from network state
@@ -7844,7 +8624,12 @@
           updateSoldierPhysicsAndCollisions(s, dt);
           animateSoldier(s, dt, false);
         } else {
-          updateAISoldier(s, dt);
+          try {
+            updateAISoldier(s, dt);
+          } catch (err) {
+            updateSoldierPhysicsAndCollisions(s, dt);
+            animateSoldier(s, dt, false);
+          }
         }
       }
       perfTelemetry._aiAccum += performance.now() - tAiLoopStart;

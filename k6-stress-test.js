@@ -305,6 +305,7 @@ export function runPlayerSession(data) {
         mapType,
         worldLimit,
         hardcoreMode: roomIndex % 3 === 0,
+        aiSkill: "intermediate",
         // Long enough to outlive the run, short enough that empty rooms are cleaned up soon after
         durationSec: Math.min(1800, totalRampDurationSec + 60)
       };

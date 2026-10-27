@@ -373,6 +373,7 @@ function buildPerfApiPayload() {
       mapType: room.mapType || "sandbox",
       worldLimit: room.worldLimit,
       hardcoreMode: Boolean(room.hardcoreMode),
+      aiSkill: normalizeAiSkill(room.aiSkill),
       hasPassword: Boolean(room.password),
       playersOnline: pCount,
       greenTotal: room.greenTotal,
@@ -1232,6 +1233,12 @@ function resolveMapType(mapType, limit) {
   return mapType === "shoebox" || Number(limit) <= 50 ? "shoebox" : "sandbox";
 }
 
+function normalizeAiSkill(raw) {
+  const v = String(raw || "intermediate").toLowerCase();
+  if (v === "beginner" || v === "expert") return v;
+  return "intermediate";
+}
+
 function resolveWorldLimit(mapType, limit) {
   return mapType === "kitchen" ? 64 : mapType === "shoebox" ? 28
     : Math.max(50, Math.min(130, Number(limit) || 80));
@@ -1387,7 +1394,8 @@ function getOrCreateRoom(
   mapType,
   hardcoreMode,
   password,
-  hostToken = null
+  hostToken = null,
+  aiSkill = "intermediate"
 ) {
   let room = rooms.get(roomCode);
   if (!room) {
@@ -1408,6 +1416,7 @@ function getOrCreateRoom(
       mapType: resolvedMap,
       worldLimit: lim,
       hardcoreMode: Boolean(hardcoreMode),
+      aiSkill: normalizeAiSkill(aiSkill),
       durationSec: dur,
       matchEndTime: Date.now() + dur * 1000,
       matchEnded: false,
@@ -1463,6 +1472,7 @@ function serializeRoster(room) {
     mapType: room.mapType || "sandbox",
     worldLimit: room.worldLimit,
     hardcoreMode: Boolean(room.hardcoreMode),
+    aiSkill: normalizeAiSkill(room.aiSkill),
     durationSec: room.durationSec,
     remainingSec,
     matchEnded: room.matchEnded,
@@ -1642,6 +1652,7 @@ wss.on("connection", (ws, req) => {
         const requestedTan = Number(msg.tanTotal) || 4;
         const requestedLimit = resolveWorldLimit(requestedMapType, msg.worldLimit);
         const requestedHardcore = Boolean(msg.hardcoreMode);
+        const requestedAiSkill = normalizeAiSkill(msg.aiSkill);
         const requestedDuration = Number(msg.durationSec) || 300;
 
         if (isHosting) {
@@ -1723,6 +1734,7 @@ wss.on("connection", (ws, req) => {
             existingHostRoom.mapType = requestedMapType;
             existingHostRoom.worldLimit = requestedLimit;
             existingHostRoom.hardcoreMode = requestedHardcore;
+            existingHostRoom.aiSkill = requestedAiSkill;
             existingHostRoom.durationSec = Math.max(60, Math.min(1800, requestedDuration));
 
             const { maxX: spawnMaxX, minZ: spawnMinZ, maxZ: spawnMaxZ } = getSpawnBounds(existingHostRoom);
@@ -1834,7 +1846,8 @@ wss.on("connection", (ws, req) => {
             requestedMapType,
             requestedHardcore,
             suppliedPassword,
-            clientToken
+            clientToken,
+            requestedAiSkill
           );
 
           room.hostId = clientId;
@@ -1854,6 +1867,7 @@ wss.on("connection", (ws, req) => {
           room.mapType = requestedMapType;
           room.worldLimit = requestedLimit;
           room.hardcoreMode = requestedHardcore;
+          room.aiSkill = requestedAiSkill;
           room.durationSec = Math.max(60, Math.min(1800, requestedDuration));
           resetRoomMatchState(room);
 
@@ -1962,7 +1976,9 @@ wss.on("connection", (ws, req) => {
             requestedDuration,
             requestedMapType,
             requestedHardcore,
-            ""
+            "",
+            null,
+            requestedAiSkill
           );
 
         // Check if this clientToken had an existing/stale socket or saved disconnected slot in this room
@@ -2442,6 +2458,9 @@ wss.on("connection", (ws, req) => {
           currentRoom.worldLimit = resolveWorldLimit(currentRoom.mapType, currentRoom.worldLimit);
           if (typeof msg.hardcoreMode === "boolean") {
             currentRoom.hardcoreMode = msg.hardcoreMode;
+          }
+          if (msg.aiSkill) {
+            currentRoom.aiSkill = normalizeAiSkill(msg.aiSkill);
           }
           if (msg.durationSec) {
             currentRoom.durationSec = Math.max(60, Math.min(1800, Number(msg.durationSec)));
