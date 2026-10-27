@@ -82,9 +82,12 @@ const GRAPH_ROUTES = [
 // ============================================================================
 // 0. BUILD VERSION & CONTENT-HASHED ASSET MANIFEST (CACHE BUSTING)
 // ============================================================================
-// Every versioned asset gets a short content hash; the build id is a hash of all of
-// them (index.html included), so any deployed change bumps it. The manifest is
-// injected into index.html so the client requests assets as `<path>?v=<hash>`:
+// Every versioned asset is read and hashed ONCE at server startup; the build id is
+// a hash of all of them (index.html included), so any deploy (which restarts the
+// service) bumps it. Contents are kept in memory alongside their hashes so the
+// bytes served always match the advertised hash, even if files change on disk
+// before the next restart. The manifest is injected into index.html so the client
+// requests assets as `<path>?v=<hash>`:
 //   - matching ?v=<hash>  -> cached forever (immutable), a new deploy changes the URL
 //   - anything else       -> no-cache + ETag revalidation (cheap 304s)
 // Clients check /api/version once each time the Match Setup page shows and reload
@@ -97,64 +100,56 @@ for (const route of GRAPH_ROUTES) {
   for (const f of route.files) ASSET_PATHS.set(route.prefix + f, path.join(route.dir, f));
 }
 
-const assetEntries = new Map(); // Map<relPath, { mtimeMs, size, hash }>
-let buildVersion = "";
-let buildManifest = { build: "", assets: {} };
-let buildManifestScript = "";
-
 function hashContent(buf) {
   return crypto.createHash("sha1").update(buf).digest("hex").slice(0, 12);
 }
 
-// Re-hashes an asset only when its mtime/size changed; returns true if the hash changed
-function refreshAssetEntry(relPath) {
-  const absPath = ASSET_PATHS.get(relPath);
-  let st;
+// Startup-only snapshot: Map<relPath, { hash, content: Buffer }>
+const assetEntries = new Map();
+for (const [relPath, absPath] of ASSET_PATHS) {
   try {
-    st = fs.statSync(absPath);
-  } catch {
-    return assetEntries.delete(relPath);
+    const content = fs.readFileSync(absPath);
+    assetEntries.set(relPath, { hash: hashContent(content), content });
+  } catch (err) {
+    console.warn(`[build] Missing asset ${relPath}: ${err.message}`);
   }
-  const prev = assetEntries.get(relPath);
-  if (prev && prev.mtimeMs === st.mtimeMs && prev.size === st.size) return false;
-  let buf;
-  try {
-    buf = fs.readFileSync(absPath);
-  } catch {
-    return false;
-  }
-  const hash = hashContent(buf);
-  assetEntries.set(relPath, { mtimeMs: st.mtimeMs, size: st.size, hash });
-  return !prev || prev.hash !== hash;
 }
 
-function rebuildManifest() {
-  const assets = {};
-  const buildHash = crypto.createHash("sha1");
-  for (const relPath of Array.from(ASSET_PATHS.keys()).sort()) {
-    const entry = assetEntries.get(relPath);
-    if (!entry) continue;
-    assets[relPath] = entry.hash;
-    buildHash.update(relPath + ":" + entry.hash + "\n");
+const buildVersion = (() => {
+  const h = crypto.createHash("sha1");
+  for (const relPath of Array.from(assetEntries.keys()).sort()) {
+    h.update(relPath + ":" + assetEntries.get(relPath).hash + "\n");
   }
-  buildVersion = buildHash.digest("hex").slice(0, 12);
-  buildManifest = { build: buildVersion, assets };
-  buildManifestScript =
-    "<script>window.__TS_BUILD__=" +
-    JSON.stringify(buildManifest).replace(/</g, "\\u003c") +
-    ";</script>";
-}
+  return h.digest("hex").slice(0, 12);
+})();
 
-// Cheap stat-only pass; also picks up `git reset` deploys that skip a restart
-function refreshAssetManifest() {
-  let changed = !buildVersion;
-  for (const relPath of ASSET_PATHS.keys()) {
-    if (refreshAssetEntry(relPath)) changed = true;
-  }
-  if (changed) rebuildManifest();
-}
+const buildManifest = {
+  build: buildVersion,
+  assets: Object.fromEntries(
+    Array.from(assetEntries.keys())
+      .sort()
+      .map((relPath) => [relPath, assetEntries.get(relPath).hash])
+  )
+};
+const buildVersionJson = JSON.stringify({ ok: true, ...buildManifest });
 
-refreshAssetManifest();
+// index.html is pre-rendered once with the manifest injected
+const indexEntry = assetEntries.get("index.html");
+const renderedIndexHtml = indexEntry
+  ? Buffer.from(
+      indexEntry.content
+        .toString("utf8")
+        .replace(
+          BUILD_MANIFEST_MARKER,
+          "<script>window.__TS_BUILD__=" +
+            JSON.stringify(buildManifest).replace(/</g, "\\u003c") +
+            ";</script>"
+        ),
+      "utf8"
+    )
+  : null;
+
+console.log(`[build] ${buildVersion} (${assetEntries.size} assets hashed at startup)`);
 
 function getQueryParam(req, name) {
   const qIdx = (req.url || "").indexOf("?");
@@ -166,9 +161,8 @@ function getQueryParam(req, name) {
   }
 }
 
-// Serves a manifest asset with content-hash caching (immutable when ?v matches, else ETag revalidation)
+// Serves a startup-snapshotted asset (immutable when ?v matches its hash, else ETag revalidation)
 function sendVersionedAsset(req, res, relPath, contentType) {
-  if (refreshAssetEntry(relPath)) rebuildManifest();
   const entry = assetEntries.get(relPath);
   if (!entry) {
     res.writeHead(404, { "Content-Type": "text/plain" });
@@ -186,15 +180,8 @@ function sendVersionedAsset(req, res, relPath, contentType) {
     res.end();
     return;
   }
-  fs.readFile(ASSET_PATHS.get(relPath), (err, content) => {
-    if (err) {
-      res.writeHead(404, { "Content-Type": "text/plain" });
-      res.end("Not Found");
-      return;
-    }
-    res.writeHead(200, headers);
-    res.end(content);
-  });
+  res.writeHead(200, headers);
+  res.end(entry.content);
 }
 
 // ============================================================================
@@ -968,12 +955,11 @@ const server = http.createServer((req, res) => {
 
   // Current build id + per-asset content hashes (deploy verification & client update checks)
   if (cleanUrl === "/api/version") {
-    refreshAssetManifest();
     res.writeHead(200, {
       "Content-Type": "application/json",
       "Cache-Control": "no-store"
     });
-    res.end(JSON.stringify({ ok: true, ...buildManifest }));
+    res.end(buildVersionJson);
     return;
   }
 
@@ -1097,7 +1083,11 @@ const server = http.createServer((req, res) => {
   }
 
   if (cleanUrl === "/" || cleanUrl === "/index.html") {
-    refreshAssetManifest();
+    if (!renderedIndexHtml) {
+      res.writeHead(500, { "Content-Type": "text/plain" });
+      res.end("Error loading index.html");
+      return;
+    }
     // The build id covers index.html + every asset hash injected into it
     const etag = `"${buildVersion}"`;
     const headers = {
@@ -1110,15 +1100,8 @@ const server = http.createServer((req, res) => {
       res.end();
       return;
     }
-    fs.readFile(INDEX_PATH, "utf8", (err, content) => {
-      if (err) {
-        res.writeHead(500, { "Content-Type": "text/plain" });
-        res.end("Error loading index.html");
-        return;
-      }
-      res.writeHead(200, headers);
-      res.end(content.replace(BUILD_MANIFEST_MARKER, buildManifestScript));
-    });
+    res.writeHead(200, headers);
+    res.end(renderedIndexHtml);
     return;
   }
 
