@@ -39,8 +39,8 @@ const MAX_BOTS_PER_TEAM = 64;           // Practical max bot cap per team (64v64
 const MAX_CONN_PER_IP = Number(process.env.MAX_CONN_PER_IP) || 128;
 const MAX_WS_MSGS_PER_SEC = Number(process.env.MAX_WS_MSGS_PER_SEC) || 180;
 const MAX_WS_BYTES_PER_SEC = Number(process.env.MAX_WS_BYTES_PER_SEC) || 128 * 1024;
-const MAX_ROOM_ACTIONS_PER_10S = 10;
-const MAX_HTTP_REQ_PER_10S = 120;
+const MAX_ROOM_ACTIONS_PER_10S = 20;
+const MAX_HTTP_REQ_PER_10S = 600;
 const IP_BAN_DURATION_MS = 30 * 1000;
 
 // Cached process memory telemetry (updated once per second to avoid synchronous OS syscalls on every ping)
@@ -161,10 +161,22 @@ function percentile(arr, p) {
   return sorted[idx];
 }
 
-function getRoomsSummary() {
+function getRoomsSummary(requestClientToken = null) {
+  const now = Date.now();
   const summary = [];
   for (const room of rooms.values()) {
-    summary.push(serializeRoster(room));
+    if (room.matchEnded || room.endedByHost || now >= room.matchEndTime) {
+      continue;
+    }
+    const roster = serializeRoster(room);
+    if (
+      requestClientToken &&
+      room.originalHostToken &&
+      room.originalHostToken === requestClientToken
+    ) {
+      roster.isHostRoom = true;
+    }
+    summary.push(roster);
   }
   return summary;
 }
@@ -742,15 +754,57 @@ const server = http.createServer((req, res) => {
   const cleanUrl = (req.url || "/").split("?")[0];
 
   if (cleanUrl === "/health" || cleanUrl === "/rooms") {
-    res.writeHead(200, { "Content-Type": "application/json" });
+    let reqClientToken = null;
+    const qIdx = (req.url || "").indexOf("?");
+    if (qIdx !== -1) {
+      try {
+        const params = new URLSearchParams(req.url.slice(qIdx + 1));
+        const tok = params.get("clientToken");
+        if (tok) reqClientToken = String(tok).trim().slice(0, 64);
+      } catch {}
+    }
+    const activeRooms = getRoomsSummary(reqClientToken);
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      "Pragma": "no-cache",
+      "Expires": "0"
+    });
     res.end(
       JSON.stringify({
         ok: true,
-        roomCount: rooms.size,
+        roomCount: activeRooms.length,
         takenNames: getTakenPlayerNames(),
-        rooms: getRoomsSummary()
+        rooms: activeRooms
       })
     );
+    return;
+  }
+
+  if (cleanUrl === "/rooms/end" && req.method === "POST") {
+    let body = "";
+    req.on("data", (chunk) => {
+      if (body.length < 4096) body += chunk;
+    });
+    req.on("end", () => {
+      try {
+        const data = JSON.parse(body || "{}");
+        const code = String(data.roomCode || "").toUpperCase().trim();
+        const tok = String(data.clientToken || "").trim().slice(0, 64);
+        const room = rooms.get(code);
+        if (!room || !tok || room.originalHostToken !== tok) {
+          res.writeHead(403, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "Not authorized to end this match." }));
+          return;
+        }
+        endRoomByHost(room);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true, roomCode: code }));
+      } catch {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false }));
+      }
+    });
     return;
   }
 
@@ -1002,6 +1056,11 @@ function serializeUnitStats(room) {
 function resetRoomMatchState(room) {
   room.matchEndTime = Date.now() + room.durationSec * 1000;
   room.matchEnded = false;
+  room.endedByHost = false;
+  room.lastWorldState = null;
+  if (room.disconnectedPlayers) {
+    room.disconnectedPlayers.clear();
+  }
   room.unitStats.clear();
   for (let i = 0; i < room.greenTotal; i++) {
     room.unitStats.set(`green_${i}`, { kills: 0, deaths: 0, health: 100, alive: true });
@@ -1017,6 +1076,37 @@ function resetRoomMatchState(room) {
   room.statsDirtyForSync = true;
 }
 
+function endRoomByHost(room) {
+  if (!room) return;
+  room.matchEnded = true;
+  room.endedByHost = true;
+  room.matchEndTime = Date.now();
+  room.pendingWorldState = null;
+  if (room.dirtyPlayers) room.dirtyPlayers.clear();
+  if (room.pendingShots) room.pendingShots.length = 0;
+  if (room.pendingDamages) room.pendingDamages.length = 0;
+  if (room.pendingRespawns) room.pendingRespawns.length = 0;
+
+  const hostName = room.originalHostName || room.hostName || "Host";
+  if (room.clients.size > 0) {
+    broadcastToRoom(
+      room,
+      {
+        type: "match_ended",
+        endedByHost: true,
+        hostName,
+        roomCode: room.code,
+        remainingSec: 0,
+        unitStats: serializeUnitStats(room),
+        roster: serializeRoster(room)
+      },
+      null
+    );
+  } else {
+    rooms.delete(room.code);
+  }
+}
+
 function getOrCreateRoom(
   roomCode,
   greenTotal,
@@ -1026,7 +1116,8 @@ function getOrCreateRoom(
   durationSec,
   mapType,
   hardcoreMode,
-  password
+  password,
+  hostToken = null
 ) {
   let room = rooms.get(roomCode);
   if (!room) {
@@ -1040,6 +1131,9 @@ function getOrCreateRoom(
       syncSlot: nextRoomSyncSlot++ & 7, // Stagger timer_sync across 8 x 250ms ticks (2.0s cycle)
       hostId: null,
       hostName: hostName || "Host",
+      originalHostToken: hostToken || null,
+      originalHostName: hostName || "Host",
+      originalHostClientId: null,
       password: String(password || "").trim().slice(0, 32),
       greenTotal: Math.max(1, Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(Number(greenTotal) || 4))),
       tanTotal: Math.max(1, Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(Number(tanTotal) || 4))),
@@ -1049,6 +1143,8 @@ function getOrCreateRoom(
       durationSec: dur,
       matchEndTime: Date.now() + dur * 1000,
       matchEnded: false,
+      endedByHost: false,
+      lastWorldState: null,
       unitStats: new Map(),
       statsDirty: true,
       statsDirtyForSync: true,
@@ -1059,6 +1155,7 @@ function getOrCreateRoom(
       pendingRespawns: [],     // Array<RespawnEvent> coalesced at 25 Hz
       pendingWorldState: null, // Latest host_world_state coalesced at 25 Hz
       clients: new Map(), // Map<clientId, ClientInfo>
+      disconnectedPlayers: new Map(), // Map<clientToken, SavedPlayerSlot>
       matchId: 1
     };
     resetRoomMatchState(room);
@@ -1089,7 +1186,9 @@ function serializeRoster(room) {
   return {
     roomCode: room.code,
     hostId: room.hostId,
-    hostName: room.hostName || "Host",
+    originalHostClientId: room.originalHostClientId || null,
+    hostName: room.originalHostName || room.hostName || "Host",
+    isHostOnline: Boolean(room.originalHostClientId && room.clients.has(room.originalHostClientId)),
     hasPassword: Boolean(room.password),
     greenTotal: room.greenTotal,
     tanTotal: room.tanTotal,
@@ -1099,6 +1198,7 @@ function serializeRoster(room) {
     durationSec: room.durationSec,
     remainingSec,
     matchEnded: room.matchEnded,
+    endedByHost: Boolean(room.endedByHost),
     unitStats: serializeUnitStats(room),
     matchId: room.matchId,
     players
@@ -1234,33 +1334,12 @@ wss.on("connection", (ws, req) => {
         }
 
         const isHosting = msg.type === "host_room";
+        const clientToken = msg.clientToken
+          ? String(msg.clientToken).trim().slice(0, 64)
+          : null;
         const requestedMapType =
           msg.mapType === "shoebox" || Number(msg.worldLimit) <= 50 ? "shoebox" : "sandbox";
         const suppliedPassword = String(msg.password || "").trim().slice(0, 32);
-
-        // If joining an existing room, verify password BEFORE leaving currentRoom or mutating state
-        if (!isHosting) {
-          const targetCode = sanitizeCode(msg.roomCode, requestedMapType);
-          const existingRoom = rooms.get(targetCode);
-          if (existingRoom && existingRoom.password && existingRoom.password !== suppliedPassword) {
-            safeSend(ws, {
-              type: "join_error",
-              reason: "bad_password",
-              roomCode: targetCode,
-              message: `Incorrect password for room ${targetCode}.`
-            });
-            break;
-          }
-        }
-
-        if (currentRoom) {
-          removeClientFromRoom(currentRoom, clientId);
-          currentRoom = null;
-        }
-
-        const roomCode = isHosting
-          ? allocateUniqueRoomCode(msg.roomCode, requestedMapType)
-          : sanitizeCode(msg.roomCode, requestedMapType);
         const team = msg.team === "tan" ? "tan" : "green";
         const name = String(msg.name || "Washington").slice(0, 18);
         const requestedGreen = Number(msg.greenTotal) || 4;
@@ -1270,27 +1349,229 @@ wss.on("connection", (ws, req) => {
         const requestedHardcore = Boolean(msg.hardcoreMode);
         const requestedDuration = Number(msg.durationSec) || 300;
 
-        const room = getOrCreateRoom(
-          roomCode,
-          requestedGreen,
-          requestedTan,
-          name,
-          requestedLimit,
-          requestedDuration,
-          requestedMapType,
-          requestedHardcore,
-          isHosting ? suppliedPassword : ""
-        );
-
-        // If this device clicked Host (or room had no host), apply their match settings & reset round
-        if (isHosting || !room.hostId) {
-          room.hostId = clientId;
-          room.hostName = name;
-          if (isHosting) {
-            room.password = suppliedPassword;
+        if (isHosting) {
+          // Check if this host already has an existing room (active or waiting on end screen)
+          // so that starting a new match pulls all connected players in their room into the new match!
+          let existingHostRoom = null;
+          if (
+            currentRoom &&
+            (currentRoom.hostId === clientId ||
+              (clientToken && currentRoom.originalHostToken === clientToken))
+          ) {
+            existingHostRoom = currentRoom;
+          } else if (clientToken) {
+            for (const r of rooms.values()) {
+              if (r.originalHostToken === clientToken) {
+                existingHostRoom = r;
+                break;
+              }
+            }
           }
-          room.greenTotal = Math.max(1, Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(requestedGreen)));
-          room.tanTotal = Math.max(1, Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(requestedTan)));
+
+          if (currentRoom && currentRoom !== existingHostRoom) {
+            removeClientFromRoom(currentRoom, clientId);
+            currentRoom = null;
+          }
+
+          if (existingHostRoom) {
+            // Evict any stale socket belonging to the same clientToken
+            if (clientToken) {
+              for (const [cid, c] of existingHostRoom.clients.entries()) {
+                if (cid !== clientId && c.clientToken === clientToken) {
+                  existingHostRoom.clients.delete(cid);
+                  try {
+                    c.ws.close();
+                  } catch {}
+                }
+              }
+            }
+
+            // Update room code if map prefix changed between SAND and SHOE
+            const prefix = requestedMapType === "shoebox" ? "SHOE" : "SAND";
+            const cleanedReq = sanitizeCode(msg.roomCode, requestedMapType);
+            let nextRoomCode = existingHostRoom.code;
+            if (
+              (existingHostRoom.code.startsWith("SAND") ||
+                existingHostRoom.code.startsWith("SHOE")) &&
+              !existingHostRoom.code.startsWith(prefix)
+            ) {
+              nextRoomCode = allocateUniqueRoomCode(cleanedReq, requestedMapType);
+            } else if (
+              cleanedReq &&
+              cleanedReq !== existingHostRoom.code &&
+              !cleanedReq.startsWith("SAND") &&
+              !cleanedReq.startsWith("SHOE") &&
+              !rooms.has(cleanedReq)
+            ) {
+              nextRoomCode = cleanedReq;
+            }
+            if (nextRoomCode !== existingHostRoom.code) {
+              rooms.delete(existingHostRoom.code);
+              existingHostRoom.code = nextRoomCode;
+              rooms.set(nextRoomCode, existingHostRoom);
+            }
+
+            existingHostRoom.hostId = clientId;
+            existingHostRoom.originalHostClientId = clientId;
+            if (clientToken) {
+              existingHostRoom.originalHostToken = clientToken;
+            }
+            existingHostRoom.hostName = name;
+            existingHostRoom.originalHostName = name;
+            existingHostRoom.password = suppliedPassword;
+            existingHostRoom.greenTotal = Math.max(
+              1,
+              Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(requestedGreen))
+            );
+            existingHostRoom.tanTotal = Math.max(
+              1,
+              Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(requestedTan))
+            );
+            existingHostRoom.mapType = requestedMapType;
+            existingHostRoom.worldLimit =
+              requestedMapType === "shoebox"
+                ? 28
+                : Math.max(50, Math.min(130, requestedLimit));
+            existingHostRoom.hardcoreMode = requestedHardcore;
+            existingHostRoom.durationSec = Math.max(60, Math.min(1800, requestedDuration));
+
+            const spawnMaxX =
+              existingHostRoom.mapType === "shoebox"
+                ? 18
+                : Math.max(30, existingHostRoom.worldLimit - 10);
+            const spawnMinZ =
+              existingHostRoom.mapType === "shoebox"
+                ? 10
+                : Math.max(18, existingHostRoom.worldLimit * 0.35);
+            const spawnMaxZ =
+              existingHostRoom.mapType === "shoebox"
+                ? 25
+                : Math.max(28, existingHostRoom.worldLimit - 8);
+
+            // Upsert host client in existingHostRoom.clients
+            let hostClient = existingHostRoom.clients.get(clientId);
+            if (!hostClient) {
+              hostClient = {
+                id: clientId,
+                clientToken,
+                ws,
+                name,
+                team,
+                slotIndex: 0,
+                unitId: `${team}_0`,
+                x: 0,
+                y: 0,
+                z: 0,
+                yaw: team === "green" ? 0 : Math.PI,
+                pitch: 0,
+                health: 100,
+                alive: true
+              };
+              existingHostRoom.clients.set(clientId, hostClient);
+            } else {
+              hostClient.ws = ws;
+              hostClient.clientToken = clientToken || hostClient.clientToken;
+              hostClient.name = name;
+              hostClient.team = team;
+            }
+
+            // Reassign non-colliding slot indices per team (host gets slot 0 on their chosen team)
+            let greenSlotCounter = team === "green" ? 1 : 0;
+            let tanSlotCounter = team === "tan" ? 1 : 0;
+            hostClient.slotIndex = 0;
+            hostClient.unitId = `${team}_0`;
+
+            for (const c of existingHostRoom.clients.values()) {
+              if (c.id !== clientId) {
+                if (c.team === "green") {
+                  c.slotIndex = greenSlotCounter++;
+                } else {
+                  c.slotIndex = tanSlotCounter++;
+                }
+                c.unitId = `${c.team}_${c.slotIndex}`;
+              }
+              const rX = Math.round((Math.random() * 2 - 1) * spawnMaxX * 100) / 100;
+              const rZMag =
+                Math.round((spawnMinZ + Math.random() * (spawnMaxZ - spawnMinZ)) * 100) / 100;
+              c.x = rX;
+              c.y = 0;
+              c.z = c.team === "green" ? -rZMag : rZMag;
+              c.yaw = c.team === "green" ? 0 : Math.PI;
+              c.pitch = 0;
+              c.health = 100;
+              c.alive = true;
+            }
+
+            const totalGreenHumans = team === "green" ? greenSlotCounter : greenSlotCounter;
+            const totalTanHumans = team === "tan" ? tanSlotCounter : tanSlotCounter;
+            if (totalGreenHumans > existingHostRoom.greenTotal) {
+              existingHostRoom.greenTotal = Math.min(MAX_BOTS_PER_TEAM + 1, totalGreenHumans);
+            }
+            if (totalTanHumans > existingHostRoom.tanTotal) {
+              existingHostRoom.tanTotal = Math.min(MAX_BOTS_PER_TEAM + 1, totalTanHumans);
+            }
+
+            resetRoomMatchState(existingHostRoom);
+            existingHostRoom.matchId++;
+            currentRoom = existingHostRoom;
+
+            const rosterSnapshot = serializeRoster(existingHostRoom);
+
+            safeSend(ws, {
+              type: "room_joined",
+              clientId,
+              unitId: hostClient.unitId,
+              team: hostClient.team,
+              slotIndex: hostClient.slotIndex,
+              isHost: true,
+              isHostOwner: true,
+              roster: rosterSnapshot
+            });
+
+            if (existingHostRoom.clients.size > 1) {
+              broadcastToRoom(
+                existingHostRoom,
+                {
+                  type: "match_restarted",
+                  startedByHost: true,
+                  hostName: name,
+                  roster: rosterSnapshot
+                },
+                clientId
+              );
+            }
+            break;
+          }
+
+          // Brand-new hosted room
+          const roomCode = allocateUniqueRoomCode(msg.roomCode, requestedMapType);
+          const room = getOrCreateRoom(
+            roomCode,
+            requestedGreen,
+            requestedTan,
+            name,
+            requestedLimit,
+            requestedDuration,
+            requestedMapType,
+            requestedHardcore,
+            suppliedPassword,
+            clientToken
+          );
+
+          room.hostId = clientId;
+          room.originalHostClientId = clientId;
+          room.originalHostToken = clientToken;
+          room.hostName = name;
+          room.originalHostName = name;
+          room.password = suppliedPassword;
+          room.greenTotal = Math.max(
+            1,
+            Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(requestedGreen))
+          );
+          room.tanTotal = Math.max(
+            1,
+            Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(requestedTan))
+          );
           room.mapType = requestedMapType;
           room.worldLimit =
             requestedMapType === "shoebox"
@@ -1299,54 +1580,265 @@ wss.on("connection", (ws, req) => {
           room.hardcoreMode = requestedHardcore;
           room.durationSec = Math.max(60, Math.min(1800, requestedDuration));
           resetRoomMatchState(room);
+
+          const slotIndex = assignSlotForPlayer(room, team);
+          const unitId = `${team}_${slotIndex}`;
+          getUnitStat(room, unitId);
+          const spawnMaxX = room.mapType === "shoebox" ? 18 : Math.max(30, room.worldLimit - 10);
+          const spawnMinZ = room.mapType === "shoebox" ? 10 : Math.max(18, room.worldLimit * 0.35);
+          const spawnMaxZ = room.mapType === "shoebox" ? 25 : Math.max(28, room.worldLimit - 8);
+          const randX = Math.round((Math.random() * 2 - 1) * spawnMaxX * 100) / 100;
+          const randZMag =
+            Math.round((spawnMinZ + Math.random() * (spawnMaxZ - spawnMinZ)) * 100) / 100;
+
+          const clientInfo = {
+            id: clientId,
+            clientToken,
+            ws,
+            name,
+            team,
+            slotIndex,
+            unitId,
+            x: randX,
+            y: 0,
+            z: team === "green" ? -randZMag : randZMag,
+            yaw: team === "green" ? 0 : Math.PI,
+            pitch: 0,
+            health: 100,
+            alive: true
+          };
+
+          room.clients.set(clientId, clientInfo);
+          currentRoom = room;
+
+          const rosterSnapshot = serializeRoster(room);
+
+          safeSend(ws, {
+            type: "room_joined",
+            clientId,
+            unitId,
+            team,
+            slotIndex,
+            isHost: true,
+            isHostOwner: true,
+            roster: rosterSnapshot
+          });
+          break;
         }
 
-        const slotIndex = assignSlotForPlayer(room, team);
+        // ----- JOIN EXISTING ROOM (OR RECONNECT AS HOST / PLAYER) -----
+        const targetCode = sanitizeCode(msg.roomCode, requestedMapType);
+        const existingRoom = rooms.get(targetCode);
+        const isReturningHost = Boolean(
+          existingRoom &&
+            clientToken &&
+            existingRoom.originalHostToken &&
+            existingRoom.originalHostToken === clientToken
+        );
+
+        if (existingRoom && (existingRoom.endedByHost || existingRoom.matchEnded)) {
+          safeSend(ws, {
+            type: "join_error",
+            reason: "match_ended",
+            roomCode: targetCode,
+            message: `Match ${targetCode} has already ended.`
+          });
+          break;
+        }
+
+        if (!existingRoom && (msg.isReconnect || clientToken)) {
+          safeSend(ws, {
+            type: "join_error",
+            reason: "room_not_found",
+            roomCode: targetCode,
+            message: `Match ${targetCode} is no longer active.`
+          });
+          break;
+        }
+
+        if (
+          existingRoom &&
+          existingRoom.password &&
+          !isReturningHost &&
+          existingRoom.password !== suppliedPassword
+        ) {
+          safeSend(ws, {
+            type: "join_error",
+            reason: "bad_password",
+            roomCode: targetCode,
+            message: `Incorrect password for room ${targetCode}.`
+          });
+          break;
+        }
+
+        if (currentRoom && currentRoom !== existingRoom) {
+          removeClientFromRoom(currentRoom, clientId);
+          currentRoom = null;
+        }
+
+        const roomExisted = Boolean(existingRoom);
+        const room =
+          existingRoom ||
+          getOrCreateRoom(
+            targetCode,
+            requestedGreen,
+            requestedTan,
+            name,
+            requestedLimit,
+            requestedDuration,
+            requestedMapType,
+            requestedHardcore,
+            ""
+          );
+
+        // Check if this clientToken had an existing/stale socket or saved disconnected slot in this room
+        let restoredSlot = null;
+        if (clientToken) {
+          for (const [cid, c] of room.clients.entries()) {
+            if (cid !== clientId && c.clientToken === clientToken) {
+              restoredSlot = {
+                slotIndex: c.slotIndex,
+                team: c.team,
+                unitId: c.unitId,
+                x: c.x,
+                y: c.y,
+                z: c.z,
+                yaw: c.yaw
+              };
+              room.clients.delete(cid);
+              if (room.dirtyPlayers) room.dirtyPlayers.delete(cid);
+              try {
+                c.ws.close();
+              } catch {}
+            }
+          }
+          if (!restoredSlot && room.disconnectedPlayers && room.disconnectedPlayers.has(clientToken)) {
+            restoredSlot = room.disconnectedPlayers.get(clientToken);
+            room.disconnectedPlayers.delete(clientToken);
+          }
+        }
+
+        if (room.clients.has(clientId)) {
+          room.clients.delete(clientId);
+        }
+
+        if (!roomExisted) {
+          room.hostId = clientId;
+          room.hostName = name;
+          room.originalHostName = name;
+        } else if (isReturningHost) {
+          room.hostId = clientId;
+          room.originalHostClientId = clientId;
+          room.hostName = name;
+          room.originalHostName = name;
+        } else if (!room.hostId || !room.clients.has(room.hostId)) {
+          // Original host is temporarily offline; let this connected client simulate AI until original host returns
+          room.hostId = clientId;
+        }
+
+        const finalTeam =
+          msg.isReconnect && restoredSlot && (restoredSlot.team === "green" || restoredSlot.team === "tan")
+            ? restoredSlot.team
+            : team;
+
+        let slotIndex = -1;
+        if (restoredSlot && restoredSlot.team === finalTeam) {
+          let slotTaken = false;
+          for (const c of room.clients.values()) {
+            if (c.team === finalTeam && c.slotIndex === restoredSlot.slotIndex) {
+              slotTaken = true;
+              break;
+            }
+          }
+          if (!slotTaken) {
+            slotIndex = restoredSlot.slotIndex;
+          }
+        }
+        if (slotIndex < 0) {
+          slotIndex = assignSlotForPlayer(room, finalTeam);
+        }
+
         // Expand team total only if more humans join than current total (capped at MAX_BOTS_PER_TEAM + 1)
-        if (team === "green" && slotIndex + 1 > room.greenTotal) {
+        if (finalTeam === "green" && slotIndex + 1 > room.greenTotal) {
           room.greenTotal = Math.min(MAX_BOTS_PER_TEAM + 1, slotIndex + 1);
-        } else if (team === "tan" && slotIndex + 1 > room.tanTotal) {
+        } else if (finalTeam === "tan" && slotIndex + 1 > room.tanTotal) {
           room.tanTotal = Math.min(MAX_BOTS_PER_TEAM + 1, slotIndex + 1);
         }
 
-        const unitId = `${team}_${slotIndex}`;
-        getUnitStat(room, unitId);
+        const unitId = `${finalTeam}_${slotIndex}`;
+        const unitStat = getUnitStat(room, unitId);
+        if (!unitStat.alive || unitStat.health <= 0) {
+          unitStat.health = 100;
+          unitStat.alive = true;
+          room.statsDirty = true;
+          room.statsDirtyForSync = true;
+        }
+
         const spawnMaxX = room.mapType === "shoebox" ? 18 : Math.max(30, room.worldLimit - 10);
         const spawnMinZ = room.mapType === "shoebox" ? 10 : Math.max(18, room.worldLimit * 0.35);
         const spawnMaxZ = room.mapType === "shoebox" ? 25 : Math.max(28, room.worldLimit - 8);
         const randX = Math.round((Math.random() * 2 - 1) * spawnMaxX * 100) / 100;
         const randZMag =
           Math.round((spawnMinZ + Math.random() * (spawnMaxZ - spawnMinZ)) * 100) / 100;
+
+        const spawnX =
+          restoredSlot && restoredSlot.team === finalTeam && typeof restoredSlot.x === "number"
+            ? restoredSlot.x
+            : randX;
+        const spawnY =
+          restoredSlot && restoredSlot.team === finalTeam && typeof restoredSlot.y === "number"
+            ? restoredSlot.y
+            : 0;
+        const spawnZ =
+          restoredSlot && restoredSlot.team === finalTeam && typeof restoredSlot.z === "number"
+            ? restoredSlot.z
+            : finalTeam === "green"
+            ? -randZMag
+            : randZMag;
+        const spawnYaw =
+          restoredSlot && restoredSlot.team === finalTeam && typeof restoredSlot.yaw === "number"
+            ? restoredSlot.yaw
+            : finalTeam === "green"
+            ? 0
+            : Math.PI;
+
         const clientInfo = {
           id: clientId,
+          clientToken,
           ws,
           name,
-          team,
+          team: finalTeam,
           slotIndex,
           unitId,
-          x: randX,
-          y: 0,
-          z: team === "green" ? -randZMag : randZMag,
-          yaw: team === "green" ? 0 : Math.PI,
+          x: spawnX,
+          y: spawnY,
+          z: spawnZ,
+          yaw: spawnYaw,
           pitch: 0,
-          health: 100,
-          alive: true
+          health: unitStat.health,
+          alive: unitStat.alive
         };
 
         room.clients.set(clientId, clientInfo);
         currentRoom = room;
 
         const rosterSnapshot = serializeRoster(room);
+        const isHostOwner = Boolean(
+          isReturningHost || (!room.originalHostToken && room.hostId === clientId)
+        );
 
-        // Send welcome packet to joining/hosting client
+        // Send welcome packet to joining/reconnecting client
         safeSend(ws, {
           type: "room_joined",
           clientId,
           unitId,
-          team,
+          team: finalTeam,
           slotIndex,
           isHost: room.hostId === clientId,
-          roster: rosterSnapshot
+          isHostOwner,
+          rejoined: Boolean(restoredSlot || isReturningHost),
+          roster: rosterSnapshot,
+          world: room.lastWorldState || null
         });
 
         // Notify everyone else in the room (skip serialization if solo host)
@@ -1355,8 +1847,8 @@ wss.on("connection", (ws, req) => {
             room,
             {
               type: "roster_update",
-              event: "player_joined",
-              player: { id: clientId, name, team, unitId },
+              event: isReturningHost ? "host_rejoined" : "player_joined",
+              player: { id: clientId, name, team: finalTeam, unitId },
               roster: rosterSnapshot
             },
             clientId
@@ -1400,17 +1892,19 @@ wss.on("connection", (ws, req) => {
       // Room Host broadcasts AI soldier states & dynamic beach ball state (~12-20 Hz)
       case "host_world_state": {
         if (!currentRoom || currentRoom.hostId !== clientId) break;
-        if (currentRoom.clients.size <= 1) break; // Skip if host is the only player in room
         const remainingSec =
           Math.round(Math.max(0, (currentRoom.matchEndTime - now) / 1000) * 10) / 10;
         const maxAiCount = MAX_BOTS_PER_TEAM * 2;
-        currentRoom.pendingWorldState = {
+        const worldSnap = {
           remainingSec,
           matchEnded: currentRoom.matchEnded,
           aiPacked: Array.isArray(msg.aiPacked) ? msg.aiPacked.slice(0, maxAiCount) : null,
           aiUnits: Array.isArray(msg.aiUnits) ? msg.aiUnits.slice(0, maxAiCount) : null,
           ball: msg.ball || null
         };
+        currentRoom.lastWorldState = worldSnap;
+        if (currentRoom.clients.size <= 1) break; // Skip broadcast flush if host is the only player in room
+        currentRoom.pendingWorldState = worldSnap;
         break;
       }
 
@@ -1588,11 +2082,38 @@ wss.on("connection", (ws, req) => {
         break;
       }
 
+      // Host explicitly ends the match from the menu, notifying all players in the room
+      case "end_match": {
+        const clientToken = msg.clientToken
+          ? String(msg.clientToken).trim().slice(0, 64)
+          : null;
+        let targetRoom = currentRoom;
+        if (!targetRoom && msg.roomCode) {
+          targetRoom = rooms.get(String(msg.roomCode).toUpperCase().trim()) || null;
+        }
+        if (!targetRoom) break;
+
+        const isAuthorizedHost =
+          targetRoom.hostId === clientId ||
+          targetRoom.originalHostClientId === clientId ||
+          Boolean(clientToken && targetRoom.originalHostToken === clientToken);
+        if (!isAuthorizedHost) break;
+
+        endRoomByHost(targetRoom);
+        break;
+      }
+
       // Restart match for everyone in the room (only the room Host can alter room settings)
       case "restart_match": {
         if (!currentRoom) break;
-        const isRoomHost = currentRoom.hostId === clientId;
-        if (!isRoomHost && !currentRoom.matchEnded) break;
+        const clientToken = msg.clientToken
+          ? String(msg.clientToken).trim().slice(0, 64)
+          : null;
+        const isRoomHost =
+          currentRoom.hostId === clientId ||
+          currentRoom.originalHostClientId === clientId ||
+          Boolean(clientToken && currentRoom.originalHostToken === clientToken);
+        if (!isRoomHost) break;
 
         if (isRoomHost) {
           if (msg.greenTotal) {
@@ -1624,6 +2145,8 @@ wss.on("connection", (ws, req) => {
 
         broadcastToRoom(currentRoom, {
           type: "match_restarted",
+          startedByHost: true,
+          hostName: currentRoom.originalHostName || currentRoom.hostName || "Host",
           roster: serializeRoster(currentRoom)
         });
         break;
@@ -1654,17 +2177,50 @@ function removeClientFromRoom(room, clientId) {
   if (room.dirtyPlayers) {
     room.dirtyPlayers.delete(clientId);
   }
+  if (leaving && leaving.clientToken && !room.matchEnded && !room.endedByHost) {
+    if (!room.disconnectedPlayers) room.disconnectedPlayers = new Map();
+    room.disconnectedPlayers.set(leaving.clientToken, {
+      slotIndex: leaving.slotIndex,
+      team: leaving.team,
+      unitId: leaving.unitId,
+      name: leaving.name,
+      x: leaving.x,
+      y: leaving.y,
+      z: leaving.z,
+      yaw: leaving.yaw
+    });
+  }
+  if (room.originalHostClientId === clientId) {
+    room.originalHostClientId = null;
+  }
+
+  const isMatchStillRunning =
+    !room.matchEnded && !room.endedByHost && Date.now() < room.matchEndTime;
 
   if (room.clients.size === 0) {
-    rooms.delete(room.code);
+    room.hostId = null;
+    room.hostName = room.originalHostName || room.hostName || "Host";
+    // Persist the match until it is over or explicitly ended by the host!
+    if (!isMatchStillRunning) {
+      rooms.delete(room.code);
+    }
     return;
   }
 
-  // Reassign host if the previous host left
+  // If the simulation authority left while other players remain, assign temporary simulation authority
+  // so the match stays going until the original host reconnects
   if (room.hostId === clientId) {
-    const nextEntry = room.clients.values().next().value;
-    room.hostId = nextEntry ? nextEntry.id : null;
-    room.hostName = nextEntry ? nextEntry.name : "Host";
+    if (room.originalHostClientId && room.clients.has(room.originalHostClientId)) {
+      const orig = room.clients.get(room.originalHostClientId);
+      room.hostId = orig.id;
+      room.hostName = orig.name;
+    } else {
+      const nextEntry = room.clients.values().next().value;
+      room.hostId = nextEntry ? nextEntry.id : null;
+      if (!room.originalHostName && nextEntry) {
+        room.hostName = nextEntry.name;
+      }
+    }
   }
 
   broadcastToRoom(room, {
@@ -1773,13 +2329,15 @@ setInterval(() => {
   const currentSyncSlot = tickCounter & 7;
 
   for (const room of rooms.values()) {
-    if (room.clients.size === 0) continue;
-
     const remainingSec = Math.max(0, (room.matchEndTime - now) / 1000);
 
     // Trigger simultaneous match end for all players when the server clock hits 0
     if (remainingSec <= 0 && !room.matchEnded) {
       room.matchEnded = true;
+      if (room.clients.size === 0) {
+        rooms.delete(room.code);
+        continue;
+      }
       broadcastToRoom(
         room,
         {
@@ -1790,6 +2348,13 @@ setInterval(() => {
         },
         null
       );
+      continue;
+    }
+
+    if (room.clients.size === 0) {
+      if (room.matchEnded || room.endedByHost) {
+        rooms.delete(room.code);
+      }
       continue;
     }
 
