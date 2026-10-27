@@ -1208,6 +1208,44 @@
       return Math.abs(x) > WORLD_LIMIT_X || Math.abs(z) > WORLD_LIMIT_Z;
     }
 
+    // Kitchen colliders are shaped ("box" | "circle" | "ring" | "ellipsoid") and have solid tops,
+    // so soldiers can step onto low props (utensils, runner, tray) and jump onto taller ones (plates).
+    const SOLDIER_HEIGHT = 2.05;
+    const SOLDIER_STEP_HEIGHT = 1.05;
+    const SUPPORT_EDGE_PAD = 0.36;
+
+    function getEllipsoidRadiusAt(obs, feetY) {
+      const dy = obs.cy < feetY ? feetY - obs.cy
+        : obs.cy > feetY + SOLDIER_HEIGHT ? obs.cy - feetY - SOLDIER_HEIGHT : 0;
+      if (dy >= obs.ry) return 0;
+      return obs.shapeRadius * Math.sqrt(1 - (dy / obs.ry) * (dy / obs.ry));
+    }
+
+    function obstacleSupportsPoint(obs, x, z, pad) {
+      if (obs.shape === "circle") {
+        return Math.hypot(x - obs.cx, z - obs.cz) <= obs.shapeRadius + pad;
+      }
+      if (obs.shape === "ring") {
+        const d = Math.hypot(x - obs.cx, z - obs.cz);
+        return d >= obs.innerRadius - pad && d <= obs.shapeRadius + pad;
+      }
+      if (obs.shape === "ellipsoid") return false;
+      return x >= obs.minX - pad && x <= obs.maxX + pad && z >= obs.minZ - pad && z <= obs.maxZ + pad;
+    }
+
+    // Highest walkable surface at (x, z) whose top is at or below maxTop.
+    function getSupportHeight(x, z, maxTop) {
+      let h = getSandHeight(x, z);
+      if (builtMapType !== "kitchen" || isOutsideTable(x, z)) return h;
+      for (let i = 0; i < obstacles.length; i++) {
+        const obs = obstacles[i];
+        if (obs.maxY > h && obs.maxY <= maxTop && obstacleSupportsPoint(obs, x, z, SUPPORT_EDGE_PAD)) {
+          h = obs.maxY;
+        }
+      }
+      return h;
+    }
+
     // Analytical height function for sculpted sand dunes, hills, and hollows (flat cardboard floor in Shoe Box)
     function getSandHeight(x, z) {
       if (builtMapType === "kitchen") {
@@ -2306,6 +2344,16 @@
         kitchenMaterials.linen.clearCoat.isEnabled = false;
       }
       const m = kitchenMaterials;
+      function addCollider(collider) {
+        collider.walkable = collider.maxY <= SOLDIER_STEP_HEIGHT;
+        obstacles.push(collider);
+      }
+      function addRoundCollider(shape, cx, cz, radius, minY, maxY, innerRadius = 0) {
+        addCollider({
+          shape, cx, cz, radius, shapeRadius: radius, innerRadius,
+          minX: cx - radius, maxX: cx + radius, minZ: cz - radius, maxZ: cz + radius, minY, maxY
+        });
+      }
       function finish(mesh, x, y, z, material, cover = false) {
         mesh.position.set(x, y, z);
         mesh.material = material;
@@ -2356,7 +2404,10 @@
             graph: "kitchenPlate", root: plateRoot, materials: m.porcelain,
             castShadows: true, metadata: { isEnvironment: true, isToy: true }
           });
-          registerToyObstacle(plateRoot, cx, z, 17.2, 17.2, 1.5);
+          plateRoot.parent = envRootNode;
+          // kitchenPlate.json: 16-wide base 0.8 tall, rolled rim torus (radius 8, tube 1.2) topping out at 1.5.
+          addRoundCollider("circle", cx, z, 8, 0, 0.8);
+          addRoundCollider("ring", cx, z, 8.6, 0.3, 1.5, 7.4);
           place(box("foldedNapkin", 6, 2.4, 8, 0, 1.2, 0, m.linen, true), -12, -1);
           place(box("napkinFold", 5.4, 0.5, 3, 0, 2.55, 0, m.linen, true), -12, 1);
           for (const forkX of [-12, -17]) {
@@ -2384,7 +2435,7 @@
         }
       }
 
-      box("centerpieceRunner", 18, 0.12, 67, 0, 0.06, 0, m.linen);
+      box("centerpieceRunner", 18, 0.12, 67, 0, 0.06, 0, m.linen, true);
       cylinder("centerpieceTray", 20, 0.8, 0, 0.4, 0, m.metal, true);
       sphere("flowerVaseBody", 11, 12, 11, 0, 6.6, 0, m.glass, true);
       cylinder("flowerVaseNeck", 5, 7, 0, 13, 0, m.glass, true);
@@ -2409,17 +2460,34 @@
       }
 
       // Match the analytical collision/raycast bounds to the final transformed meshes.
-      envRootNode.getChildMeshes().filter((mesh) =>
-        mesh.metadata?.isToy && mesh.parent.name !== "dinnerPlate").forEach((mesh) => {
+      const roundColliders = new Set(["waterGlass", "coffeeCup", "centerpieceTray",
+        "flowerVaseNeck", "flowerStem", "saltPepperShaker", "shakerCap"]);
+      const ellipsoidColliders = new Set(["flowerVaseBody", "flowerLeaf", "flowerCenter", "flowerPetal"]);
+      const containedMeshes = new Set(["glassWaterSurface", "coffeeSurface"]);
+      envRootNode.getChildMeshes().filter((mesh) => mesh.metadata?.isToy &&
+        mesh.parent.name !== "dinnerPlate" && !containedMeshes.has(mesh.name)).forEach((mesh) => {
         mesh.computeWorldMatrix(true);
         const bounds = mesh.getBoundingInfo().boundingBox;
         const lo = bounds.minimumWorld;
         const hi = bounds.maximumWorld;
-        obstacles.push({
-          cx: (lo.x + hi.x) / 2, cz: (lo.z + hi.z) / 2,
-          radius: Math.hypot(hi.x - lo.x, hi.z - lo.z) / 2,
-          minX: lo.x, maxX: hi.x, minZ: lo.z, maxZ: hi.z, minY: lo.y, maxY: hi.y
-        });
+        const cx = (lo.x + hi.x) / 2;
+        const cz = (lo.z + hi.z) / 2;
+        if (roundColliders.has(mesh.name)) {
+          addRoundCollider("circle", cx, cz, (hi.x - lo.x) / 2, lo.y, hi.y);
+        } else if (ellipsoidColliders.has(mesh.name)) {
+          const radius = Math.max(hi.x - lo.x, hi.z - lo.z) / 2;
+          addCollider({
+            shape: "ellipsoid", cx, cz, cy: (lo.y + hi.y) / 2, ry: (hi.y - lo.y) / 2,
+            radius, shapeRadius: radius,
+            minX: lo.x, maxX: hi.x, minZ: lo.z, maxZ: hi.z, minY: lo.y, maxY: hi.y
+          });
+        } else {
+          addCollider({
+            shape: "box", cx, cz,
+            radius: Math.hypot(hi.x - lo.x, hi.z - lo.z) / 2,
+            minX: lo.x, maxX: hi.x, minZ: lo.z, maxZ: hi.z, minY: lo.y, maxY: hi.y
+          });
+        }
       });
 
       for (let x = -168; x < 168; x += 28) {
@@ -2919,7 +2987,8 @@
         model.rifleDropRotation, model.rifleRestRotation,
         Math.min(1, time / 0.45), model.weaponMount.rotationQuaternion
       );
-      const ground = getSandHeight(model.weaponMount.position.x, model.weaponMount.position.z) + 0.12;
+      const ground = getSupportHeight(model.weaponMount.position.x, model.weaponMount.position.z,
+        model.rifleDropStart.y) + 0.12;
       if (model.weaponMount.position.y <= ground) {
         model.weaponMount.position.y = ground;
         model.weaponMount.rotationQuaternion.copyFrom(model.rifleRestRotation);
@@ -3275,12 +3344,15 @@
         return;
       }
       if (model.deathStarted) resetSoldierDeath(model);
-      model.visualRoot.position.y = 0;
+      model.visualRoot.position.y = soldier.stepSmoothY || 0;
       model.visualRoot.rotation.x = soldier.pitch * 0.3 - model.recoilTimer * 0.05;
       model.visualRoot.rotation.z = model.flinchTimer * 0.07;
       const networkDriven = soldier.isRemotePlayer || (mpState.active && !isMultiplayerAuthority());
+      const surfaceY = networkDriven
+        ? getSupportHeight(soldier.position.x, soldier.position.z, soldier.position.y + 0.15)
+        : 0;
       const grounded = networkDriven
-        ? soldier.position.y <= getSandHeight(soldier.position.x, soldier.position.z) + 0.15
+        ? soldier.position.y <= surfaceY + 0.15
         : soldier.isGrounded;
       if (forceFullPose) {
         model.stopAnimation();
@@ -3289,7 +3361,7 @@
       if (model.manualAnimation) return;
       // Walking off a terrain ripple is not a jump and must not interrupt the run clip.
       const jumping = !grounded && (networkDriven
-        ? soldier.position.y - getSandHeight(soldier.position.x, soldier.position.z) > 0.5
+        ? soldier.position.y - surfaceY > 0.5
         : soldier.velocity.y > 1);
       if (jumping && model.wasGrounded) {
         setSoldierClip(model, SOLDIER_CLIPS.vault, true);
@@ -3566,6 +3638,7 @@
       for (let attempt = 0; attempt < 28; attempt++) {
         let blocked = false;
         for (const obs of obstacles) {
+          if (obs.walkable) continue;
           if (
             x > obs.minX - pad &&
             x < obs.maxX + pad &&
@@ -4898,10 +4971,38 @@
       }
 
       // Push out of static sandbox toys
+      const isKitchen = builtMapType === "kitchen";
+      // While rising, only props fully below the feet are passable; once falling, low ledges can be mantled.
+      const stepAllowance = isKitchen && soldier.velocity.y <= 0 ? SOLDIER_STEP_HEIGHT : 0;
       for (let i = 0; i < obstacles.length; i++) {
         const obs = obstacles[i];
-        if (builtMapType === "kitchen" &&
-            (soldier.fellFromTable || pos.y >= obs.maxY || pos.y + 2.05 < (obs.minY ?? -1.5))) continue;
+        if (isKitchen) {
+          if (soldier.fellFromTable || obs.maxY <= pos.y + stepAllowance ||
+              pos.y + SOLDIER_HEIGHT <= obs.minY) continue;
+          if (obs.shape !== "box") {
+            const dx = pos.x - obs.cx;
+            const dz = pos.z - obs.cz;
+            const d = Math.hypot(dx, dz);
+            const nx = d > 1e-4 ? dx / d : 1;
+            const nz = d > 1e-4 ? dz / d : 0;
+            if (obs.shape === "ring") {
+              const inner = obs.innerRadius - r;
+              const outer = obs.shapeRadius + r;
+              if (d > inner && d < outer) {
+                const target = inner > 0 && d - inner < outer - d ? inner : outer;
+                pos.x = obs.cx + nx * target;
+                pos.z = obs.cz + nz * target;
+              }
+            } else {
+              const shapeR = obs.shape === "ellipsoid" ? getEllipsoidRadiusAt(obs, pos.y) : obs.shapeRadius;
+              if (shapeR > 0 && d < shapeR + r) {
+                pos.x = obs.cx + nx * (shapeR + r);
+                pos.z = obs.cz + nz * (shapeR + r);
+              }
+            }
+            continue;
+          }
+        }
         const minX = obs.minX - r;
         const maxX = obs.maxX + r;
         const minZ = obs.minZ - r;
@@ -4987,13 +5088,30 @@
           }
         }
       }
-      const sandY = soldier.fellFromTable ? -58 : getSandHeight(pos.x, pos.z);
+      const sandY = soldier.fellFromTable ? -58
+        : isKitchen ? getSupportHeight(pos.x, pos.z, pos.y + stepAllowance)
+        : getSandHeight(pos.x, pos.z);
+      const wasGrounded = soldier.isGrounded;
       if (pos.y <= sandY) {
+        // Ease the visual body over step-ups so walking onto utensils doesn't pop.
+        if (isKitchen && wasGrounded && sandY - pos.y > 0.05) {
+          soldier.stepSmoothY = Math.max(-SOLDIER_STEP_HEIGHT, (soldier.stepSmoothY || 0) - (sandY - pos.y));
+        }
+        pos.y = sandY;
+        soldier.velocity.y = 0;
+        soldier.isGrounded = true;
+      } else if (isKitchen && wasGrounded && !soldier.fellFromTable && soldier.velocity.y <= 0 &&
+          pos.y - sandY <= SOLDIER_STEP_HEIGHT) {
+        soldier.stepSmoothY = Math.min(SOLDIER_STEP_HEIGHT, (soldier.stepSmoothY || 0) + (pos.y - sandY));
         pos.y = sandY;
         soldier.velocity.y = 0;
         soldier.isGrounded = true;
       } else {
         soldier.isGrounded = false;
+      }
+      if (soldier.stepSmoothY) {
+        soldier.stepSmoothY *= Math.exp(-16 * dt);
+        if (Math.abs(soldier.stepSmoothY) < 0.005) soldier.stepSmoothY = 0;
       }
     }
 
@@ -6018,6 +6136,7 @@
     function respawnSingleSoldier(unit, x, y, z, yaw) {
       if (!unit) return;
       unit.fellFromTable = false;
+      unit.stepSmoothY = 0;
       unit.health = unit.maxHealth;
       unit.alive = true;
       unit.respawnTimer = 0;
@@ -7083,6 +7202,7 @@
       let steerZ = 0;
 
       for (const obs of obstacles) {
+        if (obs.walkable) continue;
         const dx = ai.position.x - obs.cx;
         const dz = ai.position.z - obs.cz;
         const dist = Math.max(0.01, Math.hypot(dx, dz));
@@ -7573,16 +7693,17 @@
           -Math.sin(player.yaw)
         );
 
+        const visualY = player.position.y + (player.stepSmoothY || 0);
         const headOrigin = new BABYLON.Vector3(
           player.position.x,
-          player.position.y + 1.65,
+          visualY + 1.65,
           player.position.z
         );
 
         const idealCamPos = player.position
           .subtract(forward.scale(camDistance))
           .add(right.scale(shoulderOffset));
-        idealCamPos.y = player.position.y + camHeight + Math.sin(player.pitch) * 2.2;
+        idealCamPos.y = visualY + camHeight + Math.sin(player.pitch) * 2.2;
 
         // Prevent camera from clipping outside the wooden sandbox / shoe box walls or inside toys
         const camVec = idealCamPos.subtract(headOrigin);
