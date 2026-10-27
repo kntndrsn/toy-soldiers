@@ -1,31 +1,56 @@
 /**
- * Toy Soldiers — Ramping k6 WebSocket & Server Profiler Stress Test
+ * Toy Soldiers — Aggressive Step-Ramp k6 Capacity / Regression Test
  *
  * Simulates concurrent multiplayer rooms (both Sandbox and Shoebox maps),
  * 25 Hz player movement updates, ~15 Hz host AI world-state broadcasts,
- * weapon fire / damage / respawn events, and continuous /api/perf polling
- * to identify the server's scaling breaking point.
+ * weapon fire / damage / respawn events, and continuous /api/perf polling.
+ *
+ * Load is added in fast steps (short ramp + short hold per step). Each step's
+ * hold window is tagged `step:N`, so the end-of-test report shows game
+ * responsiveness (WS ping RTT p95, server tick p95, connect success) per
+ * load level and reports the MAX number of simulated units (bots) the server
+ * sustained before the game slowed down too much.
+ *
+ * A step is "healthy" when ALL of these hold during its measurement window:
+ *   - WS ping RTT p95   <= RTT_LIMIT_MS   (default 150)
+ *   - Server tick p95   <= TICK_LIMIT_MS  (default 40)
+ *   - WS connect rate   >= 98%
+ *
+ * Once a step's RTT p95 exceeds ABORT_RTT_MS (default 4x RTT_LIMIT_MS) the
+ * test aborts early so we stop hammering a server that is clearly past its
+ * breaking point. k6 exits with code 99 in that case; the capacity report is
+ * still written.
  *
  * Usage:
- *   1. Start the server:
- *        node server.js
- *
- *   2. Run the default ramping breaking-point test:
+ *   1. Run the default capacity test (12 steps, 1 → 128 rooms of 64v64 bots, ~4 min):
  *        k6 run k6-stress-test.js
  *
- *   3. Customize target URL, scale, or room density:
- *        k6 run -e BASE_URL=http://localhost:3000 -e WS_URL=ws://localhost:3000 -e SCALE=1.0 -e PLAYERS_PER_ROOM=8 k6-stress-test.js
+ *   2. Regression gate — fail (non-zero exit) if the server can no longer
+ *      sustain at least N units within the limits:
+ *        k6 run -e MIN_UNITS=4096 k6-stress-test.js
  *
- *   4. Quick smoke test (30 seconds, lower VUs):
- *        k6 run -e SCALE=0.2 -e QUICK=1 k6-stress-test.js
+ *   3. Customize target, room density, steps, and limits:
+ *        k6 run -e BASE_URL=http://localhost:3000 -e PLAYERS_PER_ROOM=8 -e BOTS_PER_TEAM=64 \
+ *               -e STEP_ROOMS=4,8,16,32,64 -e STEP_RAMP_SEC=5 -e STEP_HOLD_SEC=15 \
+ *               -e RTT_LIMIT_MS=150 -e TICK_LIMIT_MS=40 -e ABORT_RTT_MS=0 k6-stress-test.js
+ *      (ABORT_RTT_MS=0 disables the early abort; SCALE multiplies the room count of every step.)
+ *
+ *   4. Quick smoke test (~45 seconds, 1 → 8 rooms):
+ *        k6 run -e QUICK=1 k6-stress-test.js
+ *
+ * Note: at high step counts the k6 machine itself must send/receive a lot of
+ * traffic (every VU receives the 25 Hz room_tick with all bots). If the load
+ * generator saturates its CPU or network first, RTT rises for reasons that are
+ * not the server's fault — watch the k6 host's resources during big runs.
  *
  * Outputs after completion:
- *   - perf-report.json : Combined k6 metrics + /api/perf server profiler JSON (ready for AI review)
- *   - perf-summary.txt : Human-readable breaking-point & bottleneck summary
+ *   - perf-report.json : Combined k6 metrics, per-step capacity results + /api/perf snapshot
+ *   - perf-summary.txt : Human-readable capacity / breaking-point summary
  */
 
 import http from "k6/http";
 import ws from "k6/ws";
+import exec from "k6/execution";
 import { check, sleep } from "k6";
 import { Counter, Gauge, Rate, Trend } from "k6/metrics";
 
@@ -38,7 +63,20 @@ const WS_URL = (
 const SCALE = Math.max(0.05, Number(__ENV.SCALE) || 1.0);
 const QUICK = Boolean(__ENV.QUICK);
 const PLAYERS_PER_ROOM = Math.max(2, Math.min(24, Number(__ENV.PLAYERS_PER_ROOM) || 8));
-const BOTS_PER_TEAM = Math.max(2, Math.min(64, Number(__ENV.BOTS_PER_TEAM) || 8));
+const BOTS_PER_TEAM = Math.max(2, Math.min(64, Number(__ENV.BOTS_PER_TEAM) || 64));
+
+// Health limits that define "the game has slowed down too much"
+const RTT_LIMIT_MS = Number(__ENV.RTT_LIMIT_MS) || 150;
+const TICK_LIMIT_MS = Number(__ENV.TICK_LIMIT_MS) || 40;
+const MIN_CONNECT_RATE = 0.98;
+const ABORT_RTT_MS =
+  __ENV.ABORT_RTT_MS !== undefined && __ENV.ABORT_RTT_MS !== ""
+    ? Math.max(0, Number(__ENV.ABORT_RTT_MS) || 0)
+    : RTT_LIMIT_MS * 4;
+const MIN_UNITS = Math.max(0, Number(__ENV.MIN_UNITS) || 0);
+
+// Server counts greenTotal + tanTotal per room; a team expands if more humans join than bots requested
+const UNITS_PER_ROOM = 2 * Math.max(BOTS_PER_TEAM, Math.ceil(PLAYERS_PER_ROOM / 2));
 
 // Custom k6 Metrics for Pinpointing the Breaking Point
 const wsConnectSuccess = new Rate("ws_connect_success");
@@ -57,29 +95,107 @@ const profInboundKBps = new Trend("profiler_inbound_kbps");
 const profActiveRooms = new Gauge("profiler_active_rooms");
 const profOnlinePlayers = new Gauge("profiler_online_players");
 const profDroppedMsgs = new Gauge("profiler_ddos_dropped_msgs");
+const profUnits = new Trend("profiler_units");
 
-const rampStages = QUICK
-  ? [
-      { duration: "10s", target: Math.max(4, Math.round(40 * SCALE)) },
-      { duration: "15s", target: Math.max(8, Math.round(100 * SCALE)) },
-      { duration: "15s", target: Math.max(16, Math.round(200 * SCALE)) },
-      { duration: "5s", target: 0 }
-    ]
-  : [
-      { duration: "20s", target: Math.max(8, Math.round(32 * SCALE)) },   // Warmup: ~4 rooms
-      { duration: "30s", target: Math.max(16, Math.round(80 * SCALE)) },  // Light load: ~10 rooms
-      { duration: "35s", target: Math.max(32, Math.round(160 * SCALE)) }, // Medium load: ~20 rooms
-      { duration: "35s", target: Math.max(48, Math.round(280 * SCALE)) }, // Heavy load: ~35 rooms
-      { duration: "35s", target: Math.max(64, Math.round(420 * SCALE)) }, // Stress / breaking point: ~52 rooms
-      { duration: "15s", target: 0 }                                      // Cooldown
-    ];
+// ============================================================================
+// AGGRESSIVE STEP RAMP PLAN
+// ============================================================================
+const DEFAULT_STEP_ROOMS = QUICK
+  ? [1, 2, 4, 8]
+  : [1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128];
+const STEP_RAMP_SEC = Math.max(1, Math.floor(Number(__ENV.STEP_RAMP_SEC) || (QUICK ? 3 : 5)));
+const STEP_HOLD_SEC = Math.max(2, Math.floor(Number(__ENV.STEP_HOLD_SEC) || (QUICK ? 7 : 15)));
+// Ignore the start of each hold while new rooms finish joining
+const STEP_SETTLE_SEC = Math.min(5, Math.floor(STEP_HOLD_SEC / 2));
+const COOLDOWN_SEC = QUICK ? 5 : 10;
 
-const totalRampDurationSec = rampStages.reduce((acc, s) => {
-  const n = parseInt(s.duration, 10) || 0;
-  return acc + n;
-}, 0);
+const requestedStepRooms = __ENV.STEP_ROOMS
+  ? String(__ENV.STEP_ROOMS)
+      .split(",")
+      .map((v) => Number(v.trim()))
+      .filter((v) => Number.isFinite(v) && v > 0)
+  : DEFAULT_STEP_ROOMS;
+
+const stepRooms = [];
+for (const r of requestedStepRooms) {
+  const rooms = Math.max(1, Math.round(r * SCALE));
+  if (stepRooms.length === 0 || rooms > stepRooms[stepRooms.length - 1]) {
+    stepRooms.push(rooms);
+  }
+}
+if (stepRooms.length === 0) {
+  throw new Error("STEP_ROOMS produced no valid load steps");
+}
+
+const STEP_SPAN_SEC = STEP_RAMP_SEC + STEP_HOLD_SEC;
+const loadSteps = stepRooms.map((rooms, i) => {
+  const startSec = i * STEP_SPAN_SEC;
+  return {
+    step: i + 1,
+    rooms,
+    vus: rooms * PLAYERS_PER_ROOM,
+    expectedUnits: rooms * UNITS_PER_ROOM,
+    startSec,
+    measureFromSec: startSec + STEP_RAMP_SEC + STEP_SETTLE_SEC,
+    measureToSec: startSec + STEP_SPAN_SEC
+  };
+});
+
+const rampStages = [];
+for (const s of loadSteps) {
+  rampStages.push({ duration: `${STEP_RAMP_SEC}s`, target: s.vus });
+  rampStages.push({ duration: `${STEP_HOLD_SEC}s`, target: s.vus });
+}
+rampStages.push({ duration: `${COOLDOWN_SEC}s`, target: 0 });
+
+const totalRampDurationSec = loadSteps.length * STEP_SPAN_SEC + COOLDOWN_SEC;
+
+function elapsedSec() {
+  return (Date.now() - exec.scenario.startTime) / 1000;
+}
+
+// Returns { step: "N" } tags for the load step active at `sec`.
+// measureOnly = true restricts to the steady-state measurement window of each step.
+function stepTagsAt(sec, measureOnly) {
+  for (const s of loadSteps) {
+    const from = measureOnly ? s.measureFromSec : s.startSec;
+    if (sec >= from && sec < s.measureToSec) {
+      return { step: String(s.step) };
+    }
+  }
+  return undefined;
+}
+
+// Per-step submetric thresholds: these expose per-step stats to handleSummary,
+// abort once a step is clearly broken, and optionally enforce the MIN_UNITS regression gate.
+const thresholds = {};
+for (const s of loadSteps) {
+  const tag = `{step:${s.step}}`;
+  thresholds[`ws_ping_rtt_ms${tag}`] =
+    ABORT_RTT_MS > 0
+      ? [{ threshold: `p(95)<${ABORT_RTT_MS}`, abortOnFail: true, delayAbortEval: "5s" }]
+      : ["p(95)>=0"];
+  thresholds[`ws_server_tick_ms${tag}`] = ["p(95)>=0"];
+  thresholds[`ws_connect_success${tag}`] = ["rate>=0"];
+  thresholds[`profiler_units${tag}`] = ["max>=0"];
+  thresholds[`profiler_outbound_kbps${tag}`] = ["max>=0"];
+}
+
+const gateStep = MIN_UNITS > 0 ? loadSteps.find((s) => s.expectedUnits >= MIN_UNITS) : null;
+if (MIN_UNITS > 0) {
+  if (!gateStep) {
+    throw new Error(
+      `MIN_UNITS=${MIN_UNITS} exceeds the largest step (${loadSteps[loadSteps.length - 1].expectedUnits} units); add bigger STEP_ROOMS`
+    );
+  }
+  const tag = `{step:${gateStep.step}}`;
+  thresholds[`ws_ping_rtt_ms${tag}`].push(`p(95)<${RTT_LIMIT_MS}`);
+  thresholds[`ws_server_tick_ms${tag}`].push(`p(95)<${TICK_LIMIT_MS}`);
+  thresholds[`ws_connect_success${tag}`].push(`rate>=${MIN_CONNECT_RATE}`);
+}
 
 export const options = {
+  summaryTrendStats: ["avg", "min", "med", "max", "p(90)", "p(95)", "p(99)", "count"],
   scenarios: {
     // Scenario 1: Ramping WebSocket Players & Room Hosts
     ramping_players: {
@@ -97,11 +213,7 @@ export const options = {
       exec: "pollServerProfiler"
     }
   },
-  thresholds: {
-    ws_connect_success: ["rate>0.98"],
-    ws_ping_rtt_ms: ["p(95)<150", "p(99)<300"],
-    profiler_tick_p95_ms: ["p(95)<15"]
-  }
+  thresholds
 };
 
 // Generates a distinct synthetic IP per VU so single-machine load tests
@@ -142,6 +254,7 @@ export function runPlayerSession() {
   };
 
   const sessionStart = Date.now();
+  const connectTags = stepTagsAt(elapsedSec(), false);
   const wsTarget = `${WS_URL}/?k6vu=${vuId}`;
   const res = ws.connect(wsTarget, params, function (socket) {
     let myUnitId = `${team}_0`;
@@ -276,10 +389,10 @@ export function runPlayerSession() {
         wsMessagesSent.add(1);
       }, 1200);
 
-      // Keep each VU session open across the full ramp so rooms stay populated
+      // Keep each VU session open until the end of the ramp so rooms stay populated
       socket.setTimeout(function () {
         socket.close();
-      }, totalRampDurationSec * 1000);
+      }, Math.max(1, totalRampDurationSec - elapsedSec()) * 1000);
     });
 
     socket.on("message", function (raw) {
@@ -298,12 +411,13 @@ export function runPlayerSession() {
           activeRoomCode = msg.roster.roomCode;
         }
       } else if (msg.type === "pong") {
+        const tags = stepTagsAt(elapsedSec(), true);
         if (typeof msg.clientTime === "number") {
           const rtt = Math.max(0, Date.now() - msg.clientTime);
-          wsPingRttMs.add(rtt);
+          wsPingRttMs.add(rtt, tags);
         }
         if (typeof msg.serverTickMs === "number") {
-          wsServerTickMs.add(msg.serverTickMs);
+          wsServerTickMs.add(msg.serverTickMs, tags);
         }
         if (typeof msg.serverMemMB === "number") {
           wsServerMemMb.add(msg.serverMemMB);
@@ -354,7 +468,7 @@ export function runPlayerSession() {
   const ok = check(res, {
     "WebSocket handshake status is 101": (r) => r && r.status === 101
   });
-  wsConnectSuccess.add(ok);
+  wsConnectSuccess.add(ok, connectTags);
 
   // Prevent 0ms tight reconnect spin if the server or proxy closes the socket early
   if (Date.now() - sessionStart < 1000) {
@@ -378,11 +492,13 @@ export function pollServerProfiler() {
     try {
       const p = JSON.parse(res.body);
       if (p && p.server && p.network && p.scalingSummary) {
+        const tags = stepTagsAt(elapsedSec(), true);
         profTickAvgMs.add(p.server.tickAvgMs || 0);
         profTickP95Ms.add(p.server.tickP95Ms || 0);
         profTickMaxMs.add(p.server.tickMaxMs || 0);
-        profOutboundKBps.add(p.network.outboundKBPerSec || 0);
+        profOutboundKBps.add(p.network.outboundKBPerSec || 0, tags);
         profInboundKBps.add(p.network.inboundKBPerSec || 0);
+        profUnits.add(p.scalingSummary.totalSimulatedUnits || 0, tags);
         profActiveRooms.add(p.scalingSummary.activeRooms || 0);
         profOnlinePlayers.add(p.scalingSummary.totalOnlinePlayers || 0);
         profDroppedMsgs.add(
@@ -397,7 +513,8 @@ export function pollServerProfiler() {
             : "";
 
         console.log(
-          `[PROFILER] Rooms: ${p.scalingSummary.activeRooms} | ` +
+          `[PROFILER] Step: ${tags ? tags.step : "-"}/${loadSteps.length} | ` +
+            `Rooms: ${p.scalingSummary.activeRooms} | ` +
             `Players: ${p.scalingSummary.totalOnlinePlayers} | ` +
             `Units: ${p.scalingSummary.totalSimulatedUnits} | ` +
             `Tick avg/p95/max: ${p.server.tickAvgMs}/${p.server.tickP95Ms}/${p.server.tickMaxMs} ms | ` +
@@ -411,7 +528,7 @@ export function pollServerProfiler() {
     }
   }
 
-  sleep(5);
+  sleep(3);
 }
 
 // ============================================================================
@@ -421,6 +538,92 @@ function numMetric(data, name, stat) {
   const m = data && data.metrics && data.metrics[name];
   if (!m || !m.values || typeof m.values[stat] !== "number") return null;
   return Number(m.values[stat].toFixed(2));
+}
+
+function analyzeCapacity(data) {
+  const steps = [];
+  let maxHealthy = null;
+  let breaking = null;
+
+  for (const s of loadSteps) {
+    const sub = (name, stat) => numMetric(data, `${name}{step:${s.step}}`, stat);
+    const rttCount = sub("ws_ping_rtt_ms", "count") || 0;
+    const connectPasses = sub("ws_connect_success", "passes") || 0;
+    const connectFails = sub("ws_connect_success", "fails") || 0;
+    const connectRate =
+      connectPasses + connectFails > 0 ? connectPasses / (connectPasses + connectFails) : null;
+    const measuredUnits = sub("profiler_units", "max");
+
+    const result = {
+      step: s.step,
+      rooms: s.rooms,
+      vus: s.vus,
+      expectedUnits: s.expectedUnits,
+      measuredUnits: measuredUnits || null,
+      rttSamples: rttCount,
+      rttAvgMs: sub("ws_ping_rtt_ms", "avg"),
+      rttP95Ms: sub("ws_ping_rtt_ms", "p(95)"),
+      rttP99Ms: sub("ws_ping_rtt_ms", "p(99)"),
+      serverTickP95Ms: sub("ws_server_tick_ms", "p(95)"),
+      connectRate: connectRate === null ? null : Number(connectRate.toFixed(4)),
+      outboundKBpsMax: sub("profiler_outbound_kbps", "max"),
+      status: "not reached",
+      reasons: []
+    };
+
+    if (rttCount > 0) {
+      if (result.rttP95Ms > RTT_LIMIT_MS) {
+        result.reasons.push(`RTT p95 ${result.rttP95Ms}ms > ${RTT_LIMIT_MS}ms`);
+      }
+      if (result.serverTickP95Ms !== null && result.serverTickP95Ms > TICK_LIMIT_MS) {
+        result.reasons.push(`tick p95 ${result.serverTickP95Ms}ms > ${TICK_LIMIT_MS}ms`);
+      }
+      if (connectRate !== null && connectRate < MIN_CONNECT_RATE) {
+        result.reasons.push(`connect ${(connectRate * 100).toFixed(1)}% < ${MIN_CONNECT_RATE * 100}%`);
+      }
+      result.status = result.reasons.length === 0 ? "healthy" : "degraded";
+    } else if (connectPasses + connectFails > 0) {
+      result.status = "no data";
+      result.reasons.push("no pong samples in measurement window");
+    }
+
+    if (!breaking) {
+      if (result.status === "healthy") {
+        maxHealthy = result;
+      } else if (result.status !== "not reached") {
+        breaking = result;
+      }
+    }
+    steps.push(result);
+  }
+
+  const unitsOf = (r) => (r ? r.measuredUnits || r.expectedUnits : 0);
+  return {
+    limits: {
+      rttP95Ms: RTT_LIMIT_MS,
+      serverTickP95Ms: TICK_LIMIT_MS,
+      minConnectRate: MIN_CONNECT_RATE,
+      abortRttP95Ms: ABORT_RTT_MS || null
+    },
+    unitsPerRoom: UNITS_PER_ROOM,
+    maxSustainedUnits: unitsOf(maxHealthy),
+    maxSustainedStep: maxHealthy,
+    breakingStep: breaking,
+    breakingPointReached: Boolean(breaking),
+    regressionGate:
+      MIN_UNITS > 0
+        ? {
+            minUnits: MIN_UNITS,
+            gateStep: gateStep.step,
+            passed: unitsOf(maxHealthy) >= gateStep.expectedUnits
+          }
+        : null,
+    steps
+  };
+}
+
+function fmt(v, suffix) {
+  return v === null || v === undefined ? "-" : `${v}${suffix || ""}`;
 }
 
 export function handleSummary(data) {
@@ -456,9 +659,20 @@ export function handleSummary(data) {
     if ((h.rssMB || 0) > peakRssMB) peakRssMB = h.rssMB;
   }
 
+  const capacity = analyzeCapacity(data);
+
   const combinedReport = {
     generatedAt: new Date().toISOString(),
-    target: { baseUrl: BASE_URL, wsUrl: WS_URL, scale: SCALE, playersPerRoom: PLAYERS_PER_ROOM, botsPerTeam: BOTS_PER_TEAM },
+    target: {
+      baseUrl: BASE_URL,
+      wsUrl: WS_URL,
+      scale: SCALE,
+      playersPerRoom: PLAYERS_PER_ROOM,
+      botsPerTeam: BOTS_PER_TEAM,
+      stepRampSec: STEP_RAMP_SEC,
+      stepHoldSec: STEP_HOLD_SEC
+    },
+    capacity,
     k6Summary: {
       wsConnectSuccessRate: numMetric(data, "ws_connect_success", "rate"),
       wsPingRttAvgMs: numMetric(data, "ws_ping_rtt_ms", "avg"),
@@ -500,12 +714,44 @@ export function handleSummary(data) {
     // Ignore if server is unreachable
   }
 
+  const ms = capacity.maxSustainedStep;
+  const bp = capacity.breakingStep;
+  const stepLines = capacity.steps.map(
+    (r) =>
+      `   ${String(r.step).padStart(4)} ${String(r.rooms).padStart(6)} ${String(r.vus).padStart(6)} ` +
+      `${String(r.measuredUnits || r.expectedUnits).padStart(7)} ${fmt(r.rttP95Ms).padStart(9)} ` +
+      `${fmt(r.serverTickP95Ms).padStart(9)} ` +
+      `${(r.connectRate === null ? "-" : (r.connectRate * 100).toFixed(1) + "%").padStart(8)} ` +
+      `${fmt(r.outboundKBpsMax).padStart(10)}  ${r.status}${r.reasons.length ? " (" + r.reasons.join("; ") + ")" : ""}`
+  );
+
   const lines = [
     "================================================================================",
-    " TOY SOLDIERS — K6 RAMPING STRESS TEST & PROFILER REPORT",
+    " TOY SOLDIERS — K6 AGGRESSIVE STEP-RAMP CAPACITY REPORT",
     "================================================================================",
     ` Target Server          : ${BASE_URL} (${WS_URL})`,
-    ` Room Config            : ${PLAYERS_PER_ROOM} human VUs/room, ${BOTS_PER_TEAM}v${BOTS_PER_TEAM} units/room`,
+    ` Room Config            : ${PLAYERS_PER_ROOM} human VUs/room, ${BOTS_PER_TEAM}v${BOTS_PER_TEAM} bots/room (${UNITS_PER_ROOM} units/room)`,
+    ` Health Limits          : RTT p95 <= ${RTT_LIMIT_MS}ms, server tick p95 <= ${TICK_LIMIT_MS}ms, connect >= ${MIN_CONNECT_RATE * 100}%`,
+    "--------------------------------------------------------------------------------",
+    ` MAX SUSTAINED LOAD     : ${
+      ms
+        ? `${capacity.maxSustainedUnits} units (${ms.rooms} rooms, ${ms.vus} VUs) at step ${ms.step}`
+        : "none — the very first step was already degraded"
+    }`,
+    ` BREAKING POINT         : ${
+      bp
+        ? `step ${bp.step} — ${bp.measuredUnits || bp.expectedUnits} units (${bp.rooms} rooms): ${bp.reasons.join("; ")}`
+        : "not reached — server stayed healthy at every step; add bigger STEP_ROOMS to push further"
+    }`,
+    ...(capacity.regressionGate
+      ? [
+          ` REGRESSION GATE        : ${capacity.regressionGate.passed ? "PASS" : "FAIL"} (need >= ${MIN_UNITS} units, gate step ${capacity.regressionGate.gateStep})`
+        ]
+      : []),
+    "--------------------------------------------------------------------------------",
+    "   Step  Rooms    VUs   Units   RTT p95  Tick p95  Connect   Out KB/s  Status",
+    ...stepLines,
+    "--------------------------------------------------------------------------------",
     ` WS Connect Success     : ${((combinedReport.k6Summary.wsConnectSuccessRate || 0) * 100).toFixed(1)}%`,
     ` WS Ping RTT (avg/p95)  : ${combinedReport.k6Summary.wsPingRttAvgMs} ms / ${combinedReport.k6Summary.wsPingRttP95Ms} ms (max ${combinedReport.k6Summary.wsPingRttMaxMs} ms)`,
     ` Server Tick (avg/p95)  : ${combinedReport.k6Summary.serverTickAvgMs} ms / ${combinedReport.k6Summary.serverTickP95Ms} ms (max ${combinedReport.k6Summary.serverTickMaxMs} ms)`,

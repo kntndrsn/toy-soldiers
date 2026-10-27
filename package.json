@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "stress": "k6 run k6-stress-test.js",
-    "stress:quick": "k6 run -e SCALE=0.2 -e QUICK=1 k6-stress-test.js",
+    "stress:quick": "k6 run -e QUICK=1 k6-stress-test.js",
     "perf": "curl -s https://toy-soldiers.duckdns.org/api/perf"
   },
   "dependencies": {
