@@ -898,6 +898,7 @@
         <button id="toggle-sound-btn" class="hud-chip-btn" type="button">🔊 Sound</button>
         <button id="toggle-touch-btn" class="hud-chip-btn" type="button">Touch UI</button>
         <button id="open-teams-btn" class="hud-chip-btn" type="button">Match Setup (M)</button>
+        <button id="end-match-btn" class="hud-chip-btn" type="button" style="display: none; border-color: rgba(255, 115, 95, 0.75); color: #ffb8ad; background: rgba(120, 24, 18, 0.85);">⏹ End Match</button>
       </div>
     </div>
 
@@ -1013,6 +1014,16 @@
         </button>
       </div>
 
+      <!-- Host Active Match Controls (Rejoin / End Match) -->
+      <div id="setup-host-actions" style="display: none; gap: 6px; margin-bottom: 8px; align-items: center;">
+        <button class="primary-btn" id="rejoin-host-btn" type="button" style="display: none; flex: 1; background: #1d6fd8;">
+          ↩ Rejoin Match
+        </button>
+        <button class="primary-btn" id="setup-end-match-btn" type="button" style="display: none; flex: 1; background: #b82c22;">
+          ⏹ End Match
+        </button>
+      </div>
+
       <!-- Row 5: Active Matches Browser -->
       <div class="setup-field" style="flex-direction: column; align-items: stretch; gap: 6px; margin-bottom: 0;">
         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -1052,6 +1063,7 @@
       <div>
         <button id="restart-btn" type="button">New Round (R)</button>
         <button id="setup-again-btn" class="secondary-btn" type="button">Match Setup (M)</button>
+        <button id="end-match-modal-btn" class="secondary-btn" type="button" style="display: none; background: #b82c22; border-color: rgba(255, 140, 125, 0.5);">⏹ End Match</button>
       </div>
     </div>
   </div>
@@ -4100,11 +4112,19 @@
     const mpState = {
       active: false,
       ws: null,
+      wsUrl: "",
       clientId: null,
+      clientToken: "",
       myUnitId: "green_0",
       myTeam: "green",
       roomCode: "SAND1",
       hostId: null,
+      isHostOwner: false,
+      persistedHostRoomCode: null,
+      lastActiveRoomCode: null,
+      lastJoinedPassword: "",
+      intentionalDisconnect: false,
+      reconnectTimer: null,
       roster: null,
       serverOnlineCount: 0,
       localMatchEndTimestamp: 0,
@@ -4499,13 +4519,27 @@
         for (let i = 0; i < count; i++) {
           const unitId = `${team}_${i}`;
           const isLocalPlayer = unitId === myUnitId;
-          const remotePlayerInfo = !isLocalPlayer ? humanByUnitId.get(unitId) : null;
+          const rosterPlayerInfo = humanByUnitId.get(unitId) || null;
+          const remotePlayerInfo = !isLocalPlayer ? rosterPlayerInfo : null;
           const isRemotePlayer = Boolean(remotePlayerInfo);
 
-          const pt = getFormationPoint(team, i, count);
+          const hasSavedCoords =
+            mpState.active &&
+            rosterPlayerInfo &&
+            typeof rosterPlayerInfo.x === "number" &&
+            typeof rosterPlayerInfo.z === "number" &&
+            (rosterPlayerInfo.x !== 0 || rosterPlayerInfo.z !== 0);
+          const pt = hasSavedCoords
+            ? findSafeSpawnPoint(rosterPlayerInfo.x, rosterPlayerInfo.z)
+            : getFormationPoint(team, i, count);
           const model = createPlasticSoldier(team, i, !isLocalPlayer);
           model.root.position.set(pt.x, getSandHeight(pt.x, pt.z), pt.z);
-          const initialYaw = team === "green" ? 0 : Math.PI;
+          const initialYaw =
+            hasSavedCoords && typeof rosterPlayerInfo.yaw === "number"
+              ? rosterPlayerInfo.yaw
+              : team === "green"
+              ? 0
+              : Math.PI;
           model.root.rotation.y = initialYaw;
 
           const botHistoricalName = pickUniqueHistoricalSoldierName(matchUsedNames);
@@ -5788,6 +5822,7 @@
     const finalScoreboardBodyEl = document.getElementById("final-scoreboard-body");
     const restartBtn = document.getElementById("restart-btn");
     const setupAgainBtn = document.getElementById("setup-again-btn");
+    const endMatchModalBtnEl = document.getElementById("end-match-modal-btn");
 
     // Setup modal & Multiplayer UI elements
     const setupModalEl = document.getElementById("setup-modal");
@@ -5800,6 +5835,10 @@
     const startMatchBtn = document.getElementById("start-match-btn");
     const hostMpBtn = document.getElementById("host-mp-btn");
     const joinMpBtn = document.getElementById("join-mp-btn");
+    const endMatchBtnEl = document.getElementById("end-match-btn");
+    const setupHostActionsEl = document.getElementById("setup-host-actions");
+    const rejoinHostBtnEl = document.getElementById("rejoin-host-btn");
+    const setupEndMatchBtnEl = document.getElementById("setup-end-match-btn");
     const mpNameInputEl = document.getElementById("mp-name-input");
     const mpRoomInputEl = document.getElementById("mp-room-input");
     const mpPasswordInputEl = document.getElementById("mp-password-input");
@@ -5860,39 +5899,179 @@
       }
     }
 
-    // Restore user's custom saved name if they previously renamed themselves;
-    // otherwise assign a random unique historically themed soldier name
+    function clampInt(val, min, max, fallback) {
+      const n = parseInt(val, 10);
+      if (Number.isNaN(n)) return fallback;
+      return Math.max(min, Math.min(max, n));
+    }
+
+    // Persistent storage keys for all Match Setup settings & host identity
     const NAME_STORAGE_KEY = "toy_soldiers_player_name";
     const CUSTOM_NAME_FLAG_KEY = "toy_soldiers_custom_name_set";
     const TEAM_STORAGE_KEY = "toy_soldiers_player_team";
+    const MAP_STORAGE_KEY = "toy_soldiers_map_type";
+    const MAP_SIZE_STORAGE_KEY = "toy_soldiers_map_size";
+    const SANDBOX_SIZE_STORAGE_KEY = "toy_soldiers_sandbox_map_size";
+    const HARDCORE_STORAGE_KEY = "toy_soldiers_hardcore_mode";
+    const PASSWORD_STORAGE_KEY = "toy_soldiers_room_password";
+    const FRIENDLY_BOTS_STORAGE_KEY = "toy_soldiers_friendly_bots";
+    const ENEMY_BOTS_STORAGE_KEY = "toy_soldiers_enemy_bots";
+    const TIME_LIMIT_STORAGE_KEY = "toy_soldiers_time_limit";
+    const CLIENT_TOKEN_STORAGE_KEY = "toy_soldiers_client_token";
+
     try {
+      let savedToken = localStorage.getItem(CLIENT_TOKEN_STORAGE_KEY);
+      if (!savedToken) {
+        savedToken =
+          "tok_" +
+          Math.random().toString(36).slice(2, 10) +
+          "_" +
+          Date.now().toString(36);
+        localStorage.setItem(CLIENT_TOKEN_STORAGE_KEY, savedToken);
+      }
+      mpState.clientToken = savedToken;
+
       const savedTeam = localStorage.getItem(TEAM_STORAGE_KEY);
-      if (savedTeam === "green" || savedTeam === "tan") {
+      if ((savedTeam === "green" || savedTeam === "tan") && mpTeamSelectEl) {
         mpTeamSelectEl.value = savedTeam;
       }
-      const savedCustomName = (localStorage.getItem(NAME_STORAGE_KEY) || "").trim();
-      const wasCustomRenamed = localStorage.getItem(CUSTOM_NAME_FLAG_KEY) === "1";
-      if (savedCustomName && savedCustomName !== "Soldier" && wasCustomRenamed && mpNameInputEl) {
-        mpNameInputEl.value = savedCustomName.slice(0, 18);
-        userCustomizedPlayerName = true;
-      }
-    } catch (err) {}
 
-    if (mpNameInputEl && !userCustomizedPlayerName) {
-      mpNameInputEl.value = pickUniqueHistoricalSoldierName();
+      const savedName = localStorage.getItem(NAME_STORAGE_KEY);
+      const wasCustomRenamed = localStorage.getItem(CUSTOM_NAME_FLAG_KEY) === "1";
+      if (mpNameInputEl) {
+        if (wasCustomRenamed || (savedName !== null && savedName !== "")) {
+          mpNameInputEl.value = (savedName !== null ? savedName : "").slice(0, 18);
+          userCustomizedPlayerName = true;
+        } else {
+          const initialName = pickUniqueHistoricalSoldierName();
+          mpNameInputEl.value = initialName;
+          localStorage.setItem(NAME_STORAGE_KEY, initialName);
+        }
+      }
+
+      const savedFriendly = localStorage.getItem(FRIENDLY_BOTS_STORAGE_KEY);
+      if (savedFriendly !== null && friendlyInputEl) {
+        friendlyInputEl.value = String(clampInt(savedFriendly, 0, MAX_BOTS_PER_TEAM, 3));
+      }
+
+      const savedEnemy = localStorage.getItem(ENEMY_BOTS_STORAGE_KEY);
+      if (savedEnemy !== null && enemyInputEl) {
+        enemyInputEl.value = String(clampInt(savedEnemy, 1, MAX_BOTS_PER_TEAM, 4));
+      }
+
+      const savedMap = localStorage.getItem(MAP_STORAGE_KEY);
+      const savedMapSize = localStorage.getItem(MAP_SIZE_STORAGE_KEY);
+      const savedSandboxSize = localStorage.getItem(SANDBOX_SIZE_STORAGE_KEY);
+      if (savedMap === "shoebox" || savedMapSize === "28") {
+        configuredMapType = "shoebox";
+        configuredMapLimit = 28;
+        if (mapSelectEl) mapSelectEl.value = "shoebox";
+        if (mapSizeSelectEl) mapSizeSelectEl.value = "28";
+      } else if (savedMap === "sandbox" || savedMapSize !== null) {
+        configuredMapType = "sandbox";
+        const rawSize = clampInt(savedMapSize || savedSandboxSize || 80, 60, 130, 80);
+        configuredMapLimit = [60, 80, 105].includes(rawSize) ? rawSize : 80;
+        if (mapSelectEl) mapSelectEl.value = "sandbox";
+        if (mapSizeSelectEl) mapSizeSelectEl.value = String(configuredMapLimit);
+      }
+
+      const savedTimeLimit = localStorage.getItem(TIME_LIMIT_STORAGE_KEY);
+      if (savedTimeLimit !== null && timeLimitSelectEl) {
+        const parsedTime = clampInt(savedTimeLimit, 60, 1800, 300);
+        if ([120, 180, 300, 600, 900].includes(parsedTime)) {
+          timeLimitSelectEl.value = String(parsedTime);
+          configuredDurationSec = parsedTime;
+        }
+      }
+
+      const savedHardcore = localStorage.getItem(HARDCORE_STORAGE_KEY);
+      if ((savedHardcore === "1" || savedHardcore === "0") && hardcoreCheckboxEl) {
+        configuredHardcoreMode = savedHardcore === "1";
+        hardcoreCheckboxEl.checked = configuredHardcoreMode;
+      }
+
+      const savedPassword = localStorage.getItem(PASSWORD_STORAGE_KEY);
+      if (savedPassword !== null && mpPasswordInputEl) {
+        mpPasswordInputEl.value = savedPassword.slice(0, 32);
+      }
+    } catch (err) {
+      if (!mpState.clientToken) {
+        mpState.clientToken = "tok_" + Math.random().toString(36).slice(2, 10);
+      }
+      if (mpNameInputEl && !userCustomizedPlayerName) {
+        mpNameInputEl.value = pickUniqueHistoricalSoldierName();
+      }
+    }
+
+    function isLocalPlayerHost() {
+      return Boolean(mpState.active && mpState.isHostOwner);
+    }
+
+    function updateHostControlsVisibility() {
+      const activeHost = isLocalPlayerHost();
+      const canEndActiveMatch = activeHost && !gameEnded;
+      const persistedRoom = mpState.persistedHostRoomCode;
+      const hasPersistedRoomWhileDisconnected = Boolean(!mpState.active && persistedRoom);
+
+      if (endMatchBtnEl) {
+        endMatchBtnEl.style.display = canEndActiveMatch ? "" : "none";
+      }
+      if (endMatchModalBtnEl) {
+        endMatchModalBtnEl.style.display = canEndActiveMatch ? "" : "none";
+      }
+      if (setupHostActionsEl) {
+        const showRow = canEndActiveMatch || hasPersistedRoomWhileDisconnected;
+        setupHostActionsEl.style.display = showRow ? "flex" : "none";
+      }
+      if (rejoinHostBtnEl) {
+        if (hasPersistedRoomWhileDisconnected) {
+          rejoinHostBtnEl.style.display = "";
+          rejoinHostBtnEl.textContent = `↩ Rejoin Match (${persistedRoom})`;
+        } else {
+          rejoinHostBtnEl.style.display = "none";
+        }
+      }
+      if (setupEndMatchBtnEl) {
+        if (canEndActiveMatch) {
+          setupEndMatchBtnEl.style.display = "";
+          setupEndMatchBtnEl.textContent = `⏹ End Match (${mpState.roomCode})`;
+        } else if (hasPersistedRoomWhileDisconnected) {
+          setupEndMatchBtnEl.style.display = "";
+          setupEndMatchBtnEl.textContent = `⏹ End Match (${persistedRoom})`;
+        } else {
+          setupEndMatchBtnEl.style.display = "none";
+        }
+      }
     }
 
     function updateRoomCodeForSelectedMap(mapType, forceUpdate = false) {
       if (!mpRoomInputEl) return;
+      if (mpState.active && mpState.roomCode && !userCustomizedRoomCode && !forceUpdate) {
+        mpRoomInputEl.value = mpState.roomCode;
+        return;
+      }
+      if (
+        !mpState.active &&
+        mpState.persistedHostRoomCode &&
+        !userCustomizedRoomCode &&
+        !forceUpdate
+      ) {
+        mpRoomInputEl.value = mpState.persistedHostRoomCode;
+        return;
+      }
       const prefix = mapType === "shoebox" ? "SHOE" : "SAND";
       const currentVal = (mpRoomInputEl.value || "").trim().toUpperCase();
+      const isTakenByOtherRoom =
+        activeServerRoomCodes.has(currentVal) &&
+        currentVal !== mpState.roomCode &&
+        currentVal !== mpState.persistedHostRoomCode;
       if (
         forceUpdate ||
-        !userCustomizedRoomCode ||
-        !currentVal.startsWith(prefix) ||
+        !currentVal ||
         currentVal === "SAND1" ||
         currentVal === "SHOE1" ||
-        activeServerRoomCodes.has(currentVal)
+        (!userCustomizedRoomCode && !currentVal.startsWith(prefix)) ||
+        (!userCustomizedRoomCode && isTakenByOtherRoom)
       ) {
         const nextCode = generateUniqueRoomCode(mapType);
         mpRoomInputEl.value = nextCode;
@@ -5902,40 +6081,91 @@
       }
     }
 
-    updateRoomCodeForSelectedMap(configuredMapType, true);
-
-    function savePlayerProfileToStorage() {
+    function saveSetupSettingsToStorage() {
       try {
-        const cleanName = (mpNameInputEl.value || "").trim().slice(0, 18);
-        if (userCustomizedPlayerName && cleanName) {
-          localStorage.setItem(NAME_STORAGE_KEY, cleanName);
-          localStorage.setItem(CUSTOM_NAME_FLAG_KEY, "1");
+        if (mpNameInputEl) {
+          const rawName = mpNameInputEl.value.slice(0, 18);
+          localStorage.setItem(NAME_STORAGE_KEY, rawName);
+          if (userCustomizedPlayerName) {
+            localStorage.setItem(CUSTOM_NAME_FLAG_KEY, "1");
+          }
         }
-        localStorage.setItem(TEAM_STORAGE_KEY, mpTeamSelectEl.value);
+        if (mpTeamSelectEl) {
+          localStorage.setItem(
+            TEAM_STORAGE_KEY,
+            mpTeamSelectEl.value === "tan" ? "tan" : "green"
+          );
+        }
+        if (mapSelectEl) {
+          localStorage.setItem(
+            MAP_STORAGE_KEY,
+            mapSelectEl.value === "shoebox" ? "shoebox" : "sandbox"
+          );
+        }
+        if (mapSizeSelectEl) {
+          localStorage.setItem(MAP_SIZE_STORAGE_KEY, String(mapSizeSelectEl.value));
+          if (Number(mapSizeSelectEl.value) > 50) {
+            localStorage.setItem(SANDBOX_SIZE_STORAGE_KEY, String(mapSizeSelectEl.value));
+          }
+        }
+        if (hardcoreCheckboxEl) {
+          localStorage.setItem(
+            HARDCORE_STORAGE_KEY,
+            hardcoreCheckboxEl.checked ? "1" : "0"
+          );
+        }
+        if (mpPasswordInputEl) {
+          localStorage.setItem(
+            PASSWORD_STORAGE_KEY,
+            mpPasswordInputEl.value.slice(0, 32)
+          );
+        }
+        if (friendlyInputEl) {
+          localStorage.setItem(
+            FRIENDLY_BOTS_STORAGE_KEY,
+            String(clampInt(friendlyInputEl.value, 0, MAX_BOTS_PER_TEAM, 3))
+          );
+        }
+        if (enemyInputEl) {
+          localStorage.setItem(
+            ENEMY_BOTS_STORAGE_KEY,
+            String(clampInt(enemyInputEl.value, 1, MAX_BOTS_PER_TEAM, 4))
+          );
+        }
+        if (timeLimitSelectEl) {
+          localStorage.setItem(
+            TIME_LIMIT_STORAGE_KEY,
+            String(clampInt(timeLimitSelectEl.value, 60, 1800, 300))
+          );
+        }
       } catch (err) {}
     }
 
+    function savePlayerProfileToStorage() {
+      saveSetupSettingsToStorage();
+    }
+
     function handleUserRenamedSelf() {
-      const cleanName = (mpNameInputEl.value || "").trim().slice(0, 18);
-      if (cleanName) {
-        userCustomizedPlayerName = true;
-        savePlayerProfileToStorage();
-        if (player) {
-          player.rawPlayerName = cleanName;
-          player.name = `${cleanName} (You)`;
-        }
-      } else {
-        userCustomizedPlayerName = false;
-        try {
-          localStorage.removeItem(NAME_STORAGE_KEY);
-          localStorage.removeItem(CUSTOM_NAME_FLAG_KEY);
-        } catch (err) {}
+      userCustomizedPlayerName = true;
+      if (mpNameInputEl && mpNameInputEl.value.length > 18) {
+        mpNameInputEl.value = mpNameInputEl.value.slice(0, 18);
+      }
+      saveSetupSettingsToStorage();
+      const cleanName = (mpNameInputEl ? mpNameInputEl.value : "").trim().slice(0, 18);
+      if (player) {
+        player.rawPlayerName = cleanName || "Soldier";
+        player.name = `${player.rawPlayerName} (You)`;
+        updateSoldierOverheadName(player);
       }
     }
 
     mpNameInputEl.addEventListener("input", handleUserRenamedSelf);
     mpNameInputEl.addEventListener("change", handleUserRenamedSelf);
-    mpTeamSelectEl.addEventListener("change", savePlayerProfileToStorage);
+    mpTeamSelectEl.addEventListener("change", saveSetupSettingsToStorage);
+    if (mpPasswordInputEl) {
+      mpPasswordInputEl.addEventListener("input", saveSetupSettingsToStorage);
+      mpPasswordInputEl.addEventListener("change", saveSetupSettingsToStorage);
+    }
     if (mpRoomInputEl) {
       mpRoomInputEl.addEventListener("input", () => {
         userCustomizedRoomCode = true;
@@ -5977,18 +6207,40 @@
       return "Sandbox (Large)";
     }
 
+    function getServerHttpBase() {
+      const defaultWs =
+        window.location.host && !window.location.host.endsWith("github.io")
+          ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`
+          : "wss://toy-soldiers.duckdns.org";
+      const rawWs = ((mpUrlInputEl && mpUrlInputEl.value) || defaultWs).trim();
+      return rawWs
+        .replace(/^wss:/i, "https:")
+        .replace(/^ws:/i, "http:")
+        .replace(/\/+$/, "");
+    }
+
+    // Pre-fill WebSocket URL based on current page location (or default to toy-soldiers.duckdns.org)
+    if (window.location.host && !window.location.host.endsWith("github.io")) {
+      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      mpUrlInputEl.value = `${proto}//${window.location.host}`;
+    } else {
+      mpUrlInputEl.value = "wss://toy-soldiers.duckdns.org";
+    }
+    if (mpUrlInputEl) {
+      mpUrlInputEl.addEventListener("change", () => pollServerRoomsPreview());
+    }
+
     function pollServerRoomsPreview() {
       // Do not poll server during solo gameplay when Setup Modal is closed
       if (!isSetupOpen && !mpState.active) return;
 
-      const rawWs = (mpUrlInputEl.value || "wss://toy-soldiers.duckdns.org").trim();
-      const httpBase = rawWs
-        .replace(/^wss:/i, "https:")
-        .replace(/^ws:/i, "http:")
-        .replace(/\/+$/, "");
+      const httpBase = getServerHttpBase();
+      const tokenParam = mpState.clientToken
+        ? `?clientToken=${encodeURIComponent(mpState.clientToken)}`
+        : "";
 
       const fetchStart = performance.now();
-      fetch(`${httpBase}/rooms`)
+      fetch(`${httpBase}/rooms${tokenParam}`, { cache: "no-store" })
         .then((r) => r.json())
         .then((data) => {
           if (!mpState.active) {
@@ -6005,11 +6257,14 @@
             });
           }
 
-          // Count total online players across all server rooms for upper-right badge
+          let foundHostRoomCode = null;
           let totalOnline = 0;
           data.rooms.forEach((rm) => {
             if (rm.roomCode) {
               activeServerRoomCodes.add(String(rm.roomCode).toUpperCase());
+            }
+            if (rm.isHostRoom && rm.roomCode) {
+              foundHostRoomCode = String(rm.roomCode).toUpperCase();
             }
             if (Array.isArray(rm.players)) {
               totalOnline += rm.players.length;
@@ -6020,20 +6275,19 @@
               });
             }
           });
+          mpState.persistedHostRoomCode = foundHostRoomCode;
           mpState.serverOnlineCount = totalOnline;
           updateMpStatusBadge();
+          updateHostControlsVisibility();
 
           if (!mpState.active) {
-            const currentNameLower = (mpNameInputEl.value || "").trim().toLowerCase();
-            if (
-              !userCustomizedPlayerName &&
-              (!currentNameLower || activeOnlinePlayerNames.has(currentNameLower))
-            ) {
-              mpNameInputEl.value = pickUniqueHistoricalSoldierName();
-            }
-            const currentRoomUpper = (mpRoomInputEl.value || "").trim().toUpperCase();
-            if (!userCustomizedRoomCode && activeServerRoomCodes.has(currentRoomUpper)) {
-              updateRoomCodeForSelectedMap(configuredMapType, true);
+            if (foundHostRoomCode && !userCustomizedRoomCode && mpRoomInputEl) {
+              mpRoomInputEl.value = foundHostRoomCode;
+            } else {
+              const currentRoomUpper = (mpRoomInputEl.value || "").trim().toUpperCase();
+              if (!userCustomizedRoomCode && activeServerRoomCodes.has(currentRoomUpper)) {
+                updateRoomCodeForSelectedMap(configuredMapType, true);
+              }
             }
           }
 
@@ -6048,34 +6302,63 @@
             mpModalStatusEl.textContent = `${data.rooms.length} active (${totalOnline} online)`;
             mpModalStatusEl.style.color = "#7ad7ff";
 
-            activeMatchesListEl.innerHTML = data.rooms
+            // Sort user's own hosted match to the top of the list
+            const sortedRooms = [...data.rooms].sort((a, b) => {
+              const aOwn = a.isHostRoom ? 1 : 0;
+              const bOwn = b.isHostRoom ? 1 : 0;
+              return bOwn - aOwn;
+            });
+
+            activeMatchesListEl.innerHTML = sortedRooms
               .map((rm) => {
                 const code = escapeHtml(rm.roomCode);
                 const host = escapeHtml(rm.hostName || "Host");
-                const pCount = Array.isArray(rm.players) ? rm.players.length : 1;
+                const pCount = Array.isArray(rm.players) ? rm.players.length : 0;
                 const mapLbl = getMapSizeLabel(rm.worldLimit || 80, rm.mapType);
                 const hcLbl = rm.hardcoreMode ? " &bull; ⚡ Hardcore" : "";
                 const lockBadge = rm.hasPassword ? "🔒 " : "";
+                const hostBadge = rm.isHostRoom ? " &bull; ★ Your Match" : "";
                 const remStr =
                   typeof rm.remainingSec === "number"
                     ? formatTimeMMSS(rm.remainingSec)
                     : "5:00";
+                const isCurrentlyInThisRoom =
+                  mpState.active && mpState.roomCode === rm.roomCode;
+                const joinLabel = isCurrentlyInThisRoom
+                  ? "Resume"
+                  : rm.isHostRoom
+                  ? "Rejoin"
+                  : "Join";
+                const endBtnHtml = rm.isHostRoom
+                  ? `<button type="button" class="join-row-btn end-row-btn" data-end-room="${code}" style="background:#b82c22; margin-left:4px;">End</button>`
+                  : "";
                 return `
                   <div class="match-row">
                     <div class="match-info">
-                      <span class="match-title">${lockBadge}${code} &bull; Host: ${host}</span>
+                      <span class="match-title">${lockBadge}${code} &bull; Host: ${host}${hostBadge}</span>
                       <span class="match-meta">${rm.greenTotal}v${rm.tanTotal} &bull; ${mapLbl}${hcLbl} &bull; ${remStr} left &bull; ${pCount} Online</span>
                     </div>
-                    <button type="button" class="join-row-btn" data-room="${code}" data-locked="${rm.hasPassword ? "1" : "0"}">Join</button>
+                    <div style="display:flex; align-items:center;">
+                      <button type="button" class="join-row-btn" data-room="${code}" data-locked="${rm.hasPassword && !rm.isHostRoom ? "1" : "0"}" data-resume="${isCurrentlyInThisRoom ? "1" : "0"}">${joinLabel}</button>
+                      ${endBtnHtml}
+                    </div>
                   </div>
                 `;
               })
               .join("");
 
-            activeMatchesListEl.querySelectorAll(".join-row-btn").forEach((btn) => {
+            activeMatchesListEl.querySelectorAll(".join-row-btn:not(.end-row-btn)").forEach((btn) => {
               btn.addEventListener("click", () => {
                 const selectedRoom = btn.getAttribute("data-room");
                 const isLocked = btn.getAttribute("data-locked") === "1";
+                const isResume = btn.getAttribute("data-resume") === "1";
+                if (isResume && mpState.active && mpState.roomCode === selectedRoom) {
+                  setupModalEl.style.display = "none";
+                  isSetupOpen = false;
+                  document.body.classList.remove("modal-open");
+                  tryLockPointer();
+                  return;
+                }
                 if (selectedRoom) {
                   mpRoomInputEl.value = selectedRoom;
                   let overridePassword = null;
@@ -6084,6 +6367,7 @@
                       const entered = window.prompt(`Enter password for room ${selectedRoom}:`);
                       if (entered === null) return;
                       mpPasswordInputEl.value = entered.trim();
+                      saveSetupSettingsToStorage();
                       overridePassword = entered.trim();
                     } else {
                       mpModalStatusEl.textContent = `🔒 Enter password for ${selectedRoom}`;
@@ -6096,6 +6380,15 @@
                 }
               });
             });
+
+            activeMatchesListEl.querySelectorAll(".end-row-btn").forEach((btn) => {
+              btn.addEventListener("click", () => {
+                const targetRoom = btn.getAttribute("data-end-room");
+                if (targetRoom) {
+                  endHostedMatch(targetRoom);
+                }
+              });
+            });
           }
         })
         .catch(() => {
@@ -6105,19 +6398,14 @@
           }
         });
     }
-    setInterval(pollServerRoomsPreview, 2500);
-    setTimeout(pollServerRoomsPreview, 250);
-
-    // Pre-fill WebSocket URL based on current page location (or default to toy-soldiers.duckdns.org)
-    if (window.location.host && !window.location.host.endsWith("github.io")) {
-      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      mpUrlInputEl.value = `${proto}//${window.location.host}`;
-    } else {
-      mpUrlInputEl.value = "wss://toy-soldiers.duckdns.org";
-    }
 
     function updateMpStatusBadge() {
       if (!mpState.active || !mpState.roster) {
+        if (mpState.reconnectTimer && mpState.lastActiveRoomCode) {
+          mpStatusBadgeEl.textContent = `🔄 Reconnecting (${mpState.lastActiveRoomCode})...`;
+          mpStatusBadgeEl.style.color = "#ffd584";
+          return;
+        }
         const count = mpState.serverOnlineCount || 0;
         mpStatusBadgeEl.textContent = `Online: ${count}`;
         mpStatusBadgeEl.style.color = count > 0 ? "#84ff78" : "#b8ffb0";
@@ -6128,20 +6416,139 @@
       mpStatusBadgeEl.style.color = "#7ad7ff";
     }
 
-    function disconnectMultiplayer() {
+    function cancelAutoReconnect() {
+      if (mpState.reconnectTimer) {
+        clearTimeout(mpState.reconnectTimer);
+        mpState.reconnectTimer = null;
+      }
+    }
+
+    function disconnectMultiplayer(intentional = true) {
+      if (intentional) {
+        mpState.intentionalDisconnect = true;
+        mpState.lastActiveRoomCode = null;
+        cancelAutoReconnect();
+      }
       if (mpState.ws) {
+        const oldWs = mpState.ws;
+        mpState.ws = null;
         try {
-          mpState.ws.close();
+          oldWs.close();
         } catch (err) {}
       }
       mpState.active = false;
-      mpState.ws = null;
       mpState.roster = null;
+      if (intentional) {
+        mpState.isHostOwner = false;
+      }
       updateMpStatusBadge();
+      updateHostControlsVisibility();
       updatePerfHudDOM();
     }
 
-    function readHostSetupInputs() {
+    function scheduleAutoReconnect() {
+      if (mpState.intentionalDisconnect || gameEnded || !mpState.lastActiveRoomCode) {
+        return;
+      }
+      cancelAutoReconnect();
+      updateMpStatusBadge();
+      mpState.reconnectTimer = setTimeout(() => {
+        mpState.reconnectTimer = null;
+        if (
+          !mpState.active &&
+          !mpState.intentionalDisconnect &&
+          !gameEnded &&
+          mpState.lastActiveRoomCode
+        ) {
+          connectToMultiplayerRoom(
+            "join_room",
+            mpState.lastActiveRoomCode,
+            mpState.lastJoinedPassword,
+            true
+          );
+        }
+      }, 1500);
+    }
+
+    window.addEventListener("online", () => {
+      pollServerRoomsPreview();
+      if (
+        !mpState.active &&
+        !mpState.intentionalDisconnect &&
+        !gameEnded &&
+        mpState.lastActiveRoomCode
+      ) {
+        scheduleAutoReconnect();
+      }
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        pollServerRoomsPreview();
+        if (
+          !mpState.active &&
+          !mpState.intentionalDisconnect &&
+          !gameEnded &&
+          mpState.lastActiveRoomCode
+        ) {
+          scheduleAutoReconnect();
+        }
+      }
+    });
+
+    function endHostedMatch(targetRoomCode) {
+      closeTopRightMenu();
+      const codeToEnd = (
+        targetRoomCode ||
+        (mpState.active ? mpState.roomCode : mpState.persistedHostRoomCode || mpState.roomCode) ||
+        ""
+      )
+        .trim()
+        .toUpperCase();
+      if (!codeToEnd) return;
+
+      mpState.lastActiveRoomCode = null;
+      cancelAutoReconnect();
+
+      if (
+        mpState.active &&
+        mpState.ws &&
+        mpState.ws.readyState === WebSocket.OPEN &&
+        (!targetRoomCode || targetRoomCode === mpState.roomCode)
+      ) {
+        sendNetMessage({
+          type: "end_match",
+          roomCode: codeToEnd,
+          clientToken: mpState.clientToken
+        });
+        return;
+      }
+
+      // Fallback HTTP end request if the host is not currently connected via WebSocket
+      const httpBase = getServerHttpBase();
+      fetch(`${httpBase}/rooms/end`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roomCode: codeToEnd,
+          clientToken: mpState.clientToken
+        })
+      })
+        .then((r) => r.json())
+        .then((res) => {
+          if (res && res.ok) {
+            if (mpState.persistedHostRoomCode === codeToEnd) {
+              mpState.persistedHostRoomCode = null;
+            }
+            showMpToast(`🛑 Ended match ${codeToEnd}. All players notified.`, "#ff856b");
+            updateHostControlsVisibility();
+            pollServerRoomsPreview();
+          }
+        })
+        .catch(() => {});
+    }
+
+    function readHostSetupInputs(shouldSave = true) {
       const prevMapType = configuredMapType;
       configuredFriendlyCount = clampInt(friendlyInputEl.value, 0, MAX_BOTS_PER_TEAM, 3);
       configuredEnemyCount = clampInt(enemyInputEl.value, 1, MAX_BOTS_PER_TEAM, 4);
@@ -6167,19 +6574,35 @@
       }
       configuredHardcoreMode = Boolean(hardcoreCheckboxEl && hardcoreCheckboxEl.checked);
       configuredDurationSec = clampInt(timeLimitSelectEl.value, 60, 1800, 300);
+      if (shouldSave) {
+        saveSetupSettingsToStorage();
+      }
     }
 
-    function connectToMultiplayerRoom(mode, customRoomCode, customPassword) {
-      savePlayerProfileToStorage();
-      readHostSetupInputs();
+    readHostSetupInputs(false);
+    updateRoomCodeForSelectedMap(configuredMapType, true);
+    setInterval(pollServerRoomsPreview, 2000);
+    setTimeout(pollServerRoomsPreview, 50);
+
+    function connectToMultiplayerRoom(
+      mode,
+      customRoomCode,
+      customPassword,
+      isAutoReconnect = false
+    ) {
+      cancelAutoReconnect();
+      if (!isAutoReconnect) {
+        readHostSetupInputs(true);
+      }
 
       const wsUrl = (mpUrlInputEl.value || "wss://toy-soldiers.duckdns.org").trim();
       const playerName =
-        (mpNameInputEl.value || "").trim() || pickUniqueHistoricalSoldierName();
-      mpNameInputEl.value = playerName;
+        (mpNameInputEl ? mpNameInputEl.value : "").trim().slice(0, 18) || "Soldier";
 
-      // If hosting a new match and the user didn't type a custom code, ensure we don't collide with an active room
-      if (mode === "host_room" && !userCustomizedRoomCode) {
+      // If hosting a new match and not already hosting an existing room, ensure room code doesn't collide
+      const alreadyHostingRoom =
+        (mpState.active && isLocalPlayerHost()) || Boolean(mpState.persistedHostRoomCode);
+      if (mode === "host_room" && !userCustomizedRoomCode && !alreadyHostingRoom) {
         const cur = (mpRoomInputEl.value || "").trim().toUpperCase();
         if (!cur || activeServerRoomCodes.has(cur)) {
           updateRoomCodeForSelectedMap(configuredMapType, true);
@@ -6193,16 +6616,52 @@
       )
         .trim()
         .toUpperCase();
-      mpRoomInputEl.value = roomCode;
+      if (mpRoomInputEl && !isAutoReconnect) {
+        mpRoomInputEl.value = roomCode;
+      }
       const roomPassword =
         typeof customPassword === "string"
           ? customPassword
           : mpPasswordInputEl
           ? (mpPasswordInputEl.value || "").trim()
           : "";
+      mpState.lastJoinedPassword = roomPassword;
       const chosenTeam = mpTeamSelectEl.value === "tan" ? "tan" : "green";
 
-      disconnectMultiplayer();
+      const actionPayload = {
+        type: mode === "host_room" ? "host_room" : "join_room",
+        roomCode,
+        clientToken: mpState.clientToken,
+        isReconnect: Boolean(isAutoReconnect),
+        password: roomPassword,
+        name: playerName,
+        team: chosenTeam,
+        greenTotal: configuredFriendlyCount + 1,
+        tanTotal: configuredEnemyCount,
+        mapType: configuredMapType,
+        worldLimit: configuredMapType === "shoebox" ? 28 : configuredMapLimit,
+        hardcoreMode: configuredHardcoreMode,
+        durationSec: configuredDurationSec
+      };
+
+      // If we already have an open WebSocket to the same server URL, send the room action directly
+      // so the host never drops from their room when starting a new match!
+      if (
+        mpState.ws &&
+        mpState.ws.readyState === WebSocket.OPEN &&
+        mpState.wsUrl === wsUrl
+      ) {
+        mpState.intentionalDisconnect = false;
+        mpModalStatusEl.textContent =
+          mode === "host_room" ? `Hosting ${roomCode}...` : `Joining ${roomCode}...`;
+        mpModalStatusEl.style.color = "#ffd584";
+        sendNetMessage(actionPayload);
+        return;
+      }
+
+      disconnectMultiplayer(false);
+      mpState.intentionalDisconnect = false;
+      mpState.wsUrl = wsUrl;
       mpModalStatusEl.textContent =
         mode === "host_room" ? `Hosting ${roomCode}...` : `Joining ${roomCode}...`;
       mpModalStatusEl.style.color = "#ffd584";
@@ -6221,21 +6680,7 @@
       ws.addEventListener("open", () => {
         mpModalStatusEl.textContent = "Connected!";
         mpModalStatusEl.style.color = "#84ff78";
-        ws.send(
-          JSON.stringify({
-            type: mode === "host_room" ? "host_room" : "join_room",
-            roomCode,
-            password: roomPassword,
-            name: playerName,
-            team: chosenTeam,
-            greenTotal: configuredFriendlyCount + 1,
-            tanTotal: configuredEnemyCount,
-            mapType: configuredMapType,
-            worldLimit: configuredMapType === "shoebox" ? 28 : configuredMapLimit,
-            hardcoreMode: configuredHardcoreMode,
-            durationSec: configuredDurationSec
-          })
-        );
+        ws.send(JSON.stringify(actionPayload));
       });
 
       ws.addEventListener("message", (event) => {
@@ -6250,13 +6695,33 @@
         handleNetworkMessage(msg);
       });
 
-      ws.addEventListener("close", () => {
+      ws.addEventListener("close", (event) => {
         if (mpState.ws === ws) {
           mpState.active = false;
           mpState.ws = null;
-          updateMpStatusBadge();
+          if (event && event.code === 4001) {
+            mpState.intentionalDisconnect = true;
+            mpState.lastActiveRoomCode = null;
+            cancelAutoReconnect();
+            mpModalStatusEl.textContent = "Session active in another tab";
+            mpModalStatusEl.style.color = "#ffd584";
+            showMpToast("ℹ️ Session moved to another window/tab.", "#ffd584");
+            updateMpStatusBadge();
+            updateHostControlsVisibility();
+            return;
+          }
           mpModalStatusEl.textContent = "Disconnected";
           mpModalStatusEl.style.color = "#ff9e7b";
+          if (!mpState.intentionalDisconnect && mpState.lastActiveRoomCode && !gameEnded) {
+            showMpToast(
+              `⚠️ Connection dropped — reconnecting to ${mpState.lastActiveRoomCode}...`,
+              "#ffd584"
+            );
+            scheduleAutoReconnect();
+          } else {
+            updateMpStatusBadge();
+            updateHostControlsVisibility();
+          }
         }
       });
 
@@ -6414,6 +6879,16 @@
           s.isRemotePlayer = true;
           s.rawPlayerName = info.name || "Player";
           s.name = s.rawPlayerName + " (Player)";
+          const st = roster.unitStats && roster.unitStats[s.unitId];
+          const shouldBeAlive =
+            (st && typeof st.alive === "boolean" ? st.alive : info.alive) !== false;
+          if (shouldBeAlive && !s.alive) {
+            const rx = typeof info.x === "number" ? info.x : s.position.x;
+            const rz = typeof info.z === "number" ? info.z : s.position.z;
+            const ry = getSandHeight(rx, rz);
+            const ryaw = typeof info.yaw === "number" ? info.yaw : s.yaw;
+            respawnSingleSoldier(s, rx, ry, rz, ryaw);
+          }
         } else {
           s.isPlayer = false;
           s.isRemotePlayer = false;
@@ -6431,58 +6906,106 @@
       }
     }
 
+    function applyWorldStateSnapshot(msg, snapPositions = false) {
+      if (!msg) return;
+      if (Array.isArray(msg.aiPacked)) {
+        for (let i = 0; i < msg.aiPacked.length; i++) {
+          const p = msg.aiPacked[i];
+          const unit = soldiersById.get(p[0]);
+          if (!unit || unit.isPlayer || unit.isRemotePlayer) continue;
+          const ux = p[1] * 0.01;
+          const uy = p[2] * 0.01;
+          const uz = p[3] * 0.01;
+          const uyaw = p[4] * 0.01;
+          unit.netTargetPos.set(ux, uy, uz);
+          if (snapPositions) {
+            unit.position.set(ux, uy, uz);
+            unit.lastProgressPos.set(ux, uy, uz);
+            unit.model.root.rotation.y = uyaw;
+          }
+          unit.yaw = uyaw;
+          unit.pitch = p[5] * 0.01;
+          unit.moveBlend = p[6] * 0.01;
+          unit.strideDir = p[7] * 0.01;
+          if (p[8] === 1 && !unit.alive) {
+            respawnSingleSoldier(unit, ux, uy, uz, uyaw);
+          }
+        }
+      } else if (Array.isArray(msg.aiUnits)) {
+        msg.aiUnits.forEach((u) => {
+          const unit = soldiersById.get(u.unitId);
+          if (!unit || unit.isPlayer || unit.isRemotePlayer) return;
+          unit.netTargetPos.set(u.x, u.y, u.z);
+          if (snapPositions) {
+            unit.position.set(u.x, u.y, u.z);
+            unit.lastProgressPos.set(u.x, u.y, u.z);
+            unit.model.root.rotation.y = u.yaw;
+          }
+          unit.yaw = u.yaw;
+          unit.pitch = u.pitch;
+          unit.moveBlend = u.moveBlend;
+          unit.strideDir = u.strideDir || 0;
+          if (u.alive && !unit.alive) {
+            respawnSingleSoldier(unit, u.x, u.y, u.z, u.yaw);
+          }
+        });
+      }
+      if (msg.ball && physicsBall) {
+        physicsBall.mesh.position.set(msg.ball.x, msg.ball.y, msg.ball.z);
+        physicsBall.velocity.set(msg.ball.vx, msg.ball.vy, msg.ball.vz);
+      }
+    }
+
     function handleNetworkMessage(msg) {
       switch (msg.type) {
         case "join_error": {
           mpModalStatusEl.textContent = msg.message || "Unable to join room";
           mpModalStatusEl.style.color = "#ff7b7b";
           showMpToast(`🔒 ${msg.message || "Unable to join room"}`, "#ff7b7b");
-          if (mpPasswordInputEl) {
+          if (msg.reason === "bad_password" && mpPasswordInputEl) {
             mpPasswordInputEl.focus();
           }
-          disconnectMultiplayer();
+          if (msg.reason === "room_not_found" || msg.reason === "match_ended") {
+            mpState.lastActiveRoomCode = null;
+            if (mpState.persistedHostRoomCode === msg.roomCode) {
+              mpState.persistedHostRoomCode = null;
+            }
+            pollServerRoomsPreview();
+          }
+          disconnectMultiplayer(true);
           break;
         }
 
         case "room_joined": {
+          cancelAutoReconnect();
           mpState.active = true;
+          mpState.intentionalDisconnect = false;
           mpState.clientId = msg.clientId;
           mpState.myUnitId = msg.unitId;
           mpState.myTeam = msg.team;
           mpState.roster = msg.roster;
           mpState.roomCode = msg.roster.roomCode;
+          mpState.lastActiveRoomCode = msg.roster.roomCode;
           mpState.hostId = msg.roster.hostId;
-          if (mpRoomInputEl && msg.roster.roomCode) {
+          mpState.isHostOwner = Boolean(
+            msg.isHostOwner ||
+              (msg.roster.originalHostClientId &&
+                msg.roster.originalHostClientId === msg.clientId)
+          );
+          if (mpState.isHostOwner) {
+            mpState.persistedHostRoomCode = msg.roster.roomCode;
+          }
+          if (mpRoomInputEl && msg.roster.roomCode && !userCustomizedRoomCode) {
             mpRoomInputEl.value = msg.roster.roomCode;
           }
           updatePerfHudDOM();
-
-          if (msg.roster.mapType === "shoebox" || Number(msg.roster.worldLimit) <= 50) {
-            configuredMapType = "shoebox";
-            configuredMapLimit = 28;
-            if (mapSelectEl) mapSelectEl.value = "shoebox";
-            if (mapSizeSelectEl) mapSizeSelectEl.value = "28";
-          } else {
-            configuredMapType = "sandbox";
-            if (msg.roster.worldLimit) {
-              configuredMapLimit = msg.roster.worldLimit;
-              if (mapSizeSelectEl) mapSizeSelectEl.value = String(configuredMapLimit);
-            }
-            if (mapSelectEl) mapSelectEl.value = "sandbox";
-          }
-          if (typeof msg.roster.hardcoreMode === "boolean") {
-            configuredHardcoreMode = msg.roster.hardcoreMode;
-            if (hardcoreCheckboxEl) hardcoreCheckboxEl.checked = configuredHardcoreMode;
-          }
-          if (msg.roster.durationSec) {
-            configuredDurationSec = msg.roster.durationSec;
-          }
 
           setupModalEl.style.display = "none";
           isSetupOpen = false;
           document.body.classList.remove("modal-open");
           updateMpStatusBadge();
           resetGame();
+          updateHostControlsVisibility();
 
           if (typeof msg.roster.remainingSec === "number") {
             syncMatchTimerFromServer(msg.roster.remainingSec);
@@ -6490,15 +7013,34 @@
           if (msg.roster.unitStats) {
             applyServerUnitStats(msg.roster.unitStats);
           }
+          if (msg.world) {
+            applyWorldStateSnapshot(msg.world, true);
+          }
           if (msg.roster.matchEnded) {
-            endMatchByTimeLimit();
+            endMatchByTimeLimit(
+              msg.roster.endedByHost
+                ? { endedByHost: true, hostName: msg.roster.hostName }
+                : null
+            );
           }
 
           const pCount = msg.roster.players ? msg.roster.players.length : 1;
-          showMpToast(
-            `Joined Room ${mpState.roomCode} as ${msg.team.toUpperCase()} (${pCount} online)`,
-            "#84ff78"
-          );
+          if (msg.rejoined && mpState.isHostOwner) {
+            showMpToast(
+              `👑 Rejoined Room ${mpState.roomCode} as Host (${pCount} online)`,
+              "#84ff78"
+            );
+          } else if (msg.rejoined) {
+            showMpToast(
+              `🔄 Rejoined Room ${mpState.roomCode} (${pCount} online)`,
+              "#84ff78"
+            );
+          } else {
+            showMpToast(
+              `Joined Room ${mpState.roomCode} as ${msg.team.toUpperCase()} (${pCount} online)`,
+              "#84ff78"
+            );
+          }
           tryLockPointer();
           break;
         }
@@ -6506,22 +7048,14 @@
         case "roster_update": {
           mpState.roster = msg.roster;
           mpState.hostId = msg.roster.hostId;
-          if (msg.roster.mapType === "shoebox" || Number(msg.roster.worldLimit) <= 50) {
-            configuredMapType = "shoebox";
-            configuredMapLimit = 28;
-            if (mapSelectEl) mapSelectEl.value = "shoebox";
-            if (mapSizeSelectEl) mapSizeSelectEl.value = "28";
-          } else if (msg.roster.worldLimit) {
-            configuredMapType = "sandbox";
-            configuredMapLimit = msg.roster.worldLimit;
-            if (mapSelectEl) mapSelectEl.value = "sandbox";
-            if (mapSizeSelectEl) mapSizeSelectEl.value = String(configuredMapLimit);
-          }
-          if (typeof msg.roster.hardcoreMode === "boolean") {
-            configuredHardcoreMode = msg.roster.hardcoreMode;
-            if (hardcoreCheckboxEl) hardcoreCheckboxEl.checked = configuredHardcoreMode;
+          if (
+            msg.roster.originalHostClientId &&
+            msg.roster.originalHostClientId === mpState.clientId
+          ) {
+            mpState.isHostOwner = true;
           }
           updateMpStatusBadge();
+          updateHostControlsVisibility();
 
           if (typeof msg.roster.remainingSec === "number") {
             syncMatchTimerFromServer(msg.roster.remainingSec);
@@ -6532,6 +7066,11 @@
             showMpToast(
               `🔔 ${msg.player.name} joined ${msg.player.team.toUpperCase()}! (${msg.roster.players.length} online)`,
               tColor
+            );
+          } else if (msg.event === "host_rejoined" && msg.player) {
+            showMpToast(
+              `👑 Host ${msg.player.name} rejoined! (${msg.roster.players.length} online)`,
+              "#84ff78"
             );
           } else if (msg.event === "player_left" && msg.player) {
             showMpToast(
@@ -6563,11 +7102,30 @@
         }
 
         case "match_ended": {
+          mpState.lastActiveRoomCode = null;
+          if (mpState.persistedHostRoomCode === mpState.roomCode) {
+            mpState.persistedHostRoomCode = null;
+          }
+          cancelAutoReconnect();
           syncMatchTimerFromServer(0);
           if (msg.unitStats) {
             applyServerUnitStats(msg.unitStats);
           }
-          endMatchByTimeLimit();
+          if (msg.roster) {
+            mpState.roster = msg.roster;
+          }
+          if (msg.endedByHost) {
+            const hName =
+              msg.hostName || (mpState.roster && mpState.roster.hostName) || "Host";
+            showMpToast(`🛑 Match ended by Host (${hName})!`, "#ff856b");
+            endMatchByTimeLimit({ endedByHost: true, hostName: hName });
+          } else {
+            endMatchByTimeLimit();
+          }
+          updateHostControlsVisibility();
+          if (isSetupOpen) {
+            pollServerRoomsPreview();
+          }
           break;
         }
 
@@ -6675,42 +7233,7 @@
             return;
           }
           if (isMultiplayerAuthority()) return;
-          if (Array.isArray(msg.aiPacked)) {
-            for (let i = 0; i < msg.aiPacked.length; i++) {
-              const p = msg.aiPacked[i];
-              const unit = soldiersById.get(p[0]);
-              if (!unit || unit.isPlayer || unit.isRemotePlayer) continue;
-              const ux = p[1] * 0.01;
-              const uy = p[2] * 0.01;
-              const uz = p[3] * 0.01;
-              const uyaw = p[4] * 0.01;
-              unit.netTargetPos.set(ux, uy, uz);
-              unit.yaw = uyaw;
-              unit.pitch = p[5] * 0.01;
-              unit.moveBlend = p[6] * 0.01;
-              unit.strideDir = p[7] * 0.01;
-              if (p[8] === 1 && !unit.alive) {
-                respawnSingleSoldier(unit, ux, uy, uz, uyaw);
-              }
-            }
-          } else if (Array.isArray(msg.aiUnits)) {
-            msg.aiUnits.forEach((u) => {
-              const unit = soldiersById.get(u.unitId);
-              if (!unit || unit.isPlayer || unit.isRemotePlayer) return;
-              unit.netTargetPos.set(u.x, u.y, u.z);
-              unit.yaw = u.yaw;
-              unit.pitch = u.pitch;
-              unit.moveBlend = u.moveBlend;
-              unit.strideDir = u.strideDir || 0;
-              if (u.alive && !unit.alive) {
-                respawnSingleSoldier(unit, u.x, u.y, u.z, u.yaw);
-              }
-            });
-          }
-          if (msg.ball && physicsBall) {
-            physicsBall.mesh.position.set(msg.ball.x, msg.ball.y, msg.ball.z);
-            physicsBall.velocity.set(msg.ball.vx, msg.ball.vy, msg.ball.vz);
-          }
+          applyWorldStateSnapshot(msg, false);
           break;
         }
 
@@ -6817,41 +7340,46 @@
         case "match_restarted": {
           mpState.roster = msg.roster;
           mpState.hostId = msg.roster.hostId;
-          if (msg.roster.mapType === "shoebox" || Number(msg.roster.worldLimit) <= 50) {
-            configuredMapType = "shoebox";
-            configuredMapLimit = 28;
-            if (mapSelectEl) mapSelectEl.value = "shoebox";
-            if (mapSizeSelectEl) mapSizeSelectEl.value = "28";
-          } else {
-            configuredMapType = "sandbox";
-            if (msg.roster.worldLimit) {
-              configuredMapLimit = msg.roster.worldLimit;
-              if (mapSizeSelectEl) mapSizeSelectEl.value = String(configuredMapLimit);
+          if (msg.roster.roomCode) {
+            mpState.roomCode = msg.roster.roomCode;
+            mpState.lastActiveRoomCode = msg.roster.roomCode;
+            if (mpState.isHostOwner) {
+              mpState.persistedHostRoomCode = msg.roster.roomCode;
             }
-            if (mapSelectEl) mapSelectEl.value = "sandbox";
+            if (mpRoomInputEl && !userCustomizedRoomCode) {
+              mpRoomInputEl.value = msg.roster.roomCode;
+            }
           }
-          if (typeof msg.roster.hardcoreMode === "boolean") {
-            configuredHardcoreMode = msg.roster.hardcoreMode;
-            if (hardcoreCheckboxEl) hardcoreCheckboxEl.checked = configuredHardcoreMode;
+          if (Array.isArray(msg.roster.players)) {
+            const me = msg.roster.players.find((p) => p.id === mpState.clientId);
+            if (me) {
+              mpState.myUnitId = me.unitId;
+              mpState.myTeam = me.team;
+            }
           }
-          if (msg.roster.durationSec) configuredDurationSec = msg.roster.durationSec;
           updateMpStatusBadge();
           isSetupOpen = false;
           setupModalEl.style.display = "none";
+          endMessageEl.style.display = "none";
+          document.body.classList.remove("modal-open");
           resetGame();
+          updateHostControlsVisibility();
           if (typeof msg.roster.remainingSec === "number") {
             syncMatchTimerFromServer(msg.roster.remainingSec);
           }
-          showMpToast("🔄 New round started! All soldiers respawned.", "#84ff78");
+          if (msg.roster.unitStats) {
+            applyServerUnitStats(msg.roster.unitStats);
+          }
+          if (msg.startedByHost && !isLocalPlayerHost()) {
+            const hName = msg.hostName || msg.roster.hostName || "Host";
+            showMpToast(`🔄 Host (${hName}) started a new match!`, "#84ff78");
+          } else {
+            showMpToast("🔄 New round started! All soldiers respawned.", "#84ff78");
+          }
+          tryLockPointer();
           break;
         }
       }
-    }
-
-    function clampInt(val, min, max, fallback) {
-      const n = parseInt(val, 10);
-      if (Number.isNaN(n)) return fallback;
-      return Math.max(min, Math.min(max, n));
     }
 
     document.getElementById("friendly-minus").addEventListener("click", () => {
@@ -6870,14 +7398,21 @@
       enemyInputEl.value = clampInt(enemyInputEl.value, 1, MAX_BOTS_PER_TEAM, 4) + 1;
       readHostSetupInputs();
     });
-    friendlyInputEl.addEventListener("change", readHostSetupInputs);
-    enemyInputEl.addEventListener("change", readHostSetupInputs);
+    friendlyInputEl.addEventListener("change", () => readHostSetupInputs());
+    friendlyInputEl.addEventListener("input", () => readHostSetupInputs());
+    enemyInputEl.addEventListener("change", () => readHostSetupInputs());
+    enemyInputEl.addEventListener("input", () => readHostSetupInputs());
     if (mapSelectEl) {
       mapSelectEl.addEventListener("change", () => {
         if (mapSelectEl.value === "shoebox") {
           mapSizeSelectEl.value = "28";
         } else if (Number(mapSizeSelectEl.value) <= 50) {
-          mapSizeSelectEl.value = "80";
+          let fallbackSandboxSize = "80";
+          try {
+            const savedSb = localStorage.getItem(SANDBOX_SIZE_STORAGE_KEY);
+            if (savedSb && Number(savedSb) > 50) fallbackSandboxSize = savedSb;
+          } catch (err) {}
+          mapSizeSelectEl.value = fallbackSandboxSize;
         }
         readHostSetupInputs();
       });
@@ -6890,9 +7425,9 @@
       }
       readHostSetupInputs();
     });
-    timeLimitSelectEl.addEventListener("change", readHostSetupInputs);
+    timeLimitSelectEl.addEventListener("change", () => readHostSetupInputs());
     if (hardcoreCheckboxEl) {
-      hardcoreCheckboxEl.addEventListener("change", readHostSetupInputs);
+      hardcoreCheckboxEl.addEventListener("change", () => readHostSetupInputs());
     }
 
     function tryLockPointer() {
@@ -6915,7 +7450,8 @@
       resetJoystick();
       endMessageEl.style.display = "none";
       setupModalEl.style.display = "block";
-      readHostSetupInputs();
+      readHostSetupInputs(false);
+      updateHostControlsVisibility();
       pollServerRoomsPreview();
       if (document.pointerLockElement && document.exitPointerLock) {
         document.exitPointerLock();
@@ -6923,13 +7459,14 @@
     }
 
     startMatchBtn.addEventListener("click", () => {
-      savePlayerProfileToStorage();
-      disconnectMultiplayer();
-      readHostSetupInputs();
+      saveSetupSettingsToStorage();
+      disconnectMultiplayer(true);
+      readHostSetupInputs(true);
       setupModalEl.style.display = "none";
       isSetupOpen = false;
       document.body.classList.remove("modal-open");
       resetGame();
+      updateHostControlsVisibility();
       tryLockPointer();
     });
 
@@ -6941,11 +7478,42 @@
       connectToMultiplayerRoom("join_room", mpRoomInputEl.value);
     });
 
+    if (endMatchBtnEl) {
+      endMatchBtnEl.addEventListener("click", () => {
+        endHostedMatch();
+      });
+    }
+
+    if (setupEndMatchBtnEl) {
+      setupEndMatchBtnEl.addEventListener("click", () => {
+        endHostedMatch();
+      });
+    }
+
+    if (endMatchModalBtnEl) {
+      endMatchModalBtnEl.addEventListener("click", () => {
+        endHostedMatch();
+      });
+    }
+
+    if (rejoinHostBtnEl) {
+      rejoinHostBtnEl.addEventListener("click", () => {
+        const targetCode = mpState.persistedHostRoomCode || mpRoomInputEl.value;
+        if (targetCode) {
+          connectToMultiplayerRoom("join_room", targetCode);
+        }
+      });
+    }
+
     function handleRetryAction() {
       // If the match is still running (timer > 0) and only the player was knocked down,
       // respawn ONLY this player at a safe spot far from enemies without resetting the match!
       if (!gameEnded && isPlayerKnockedDown) {
         respawnLocalPlayer();
+        return;
+      }
+
+      if (mpState.active && !isLocalPlayerHost()) {
         return;
       }
 
@@ -6958,15 +7526,20 @@
         const tTotal = mpState.roster ? mpState.roster.tanTotal : configuredEnemyCount;
         sendNetMessage({
           type: "restart_match",
+          clientToken: mpState.clientToken,
           greenTotal: gTotal,
           tanTotal: tTotal,
-          mapType: configuredMapType,
-          worldLimit: configuredMapType === "shoebox" ? 28 : configuredMapLimit,
-          hardcoreMode: configuredHardcoreMode,
-          durationSec: configuredDurationSec
+          mapType: getActiveMapType(),
+          worldLimit:
+            getActiveMapType() === "shoebox"
+              ? 28
+              : (mpState.roster && mpState.roster.worldLimit) || configuredMapLimit,
+          hardcoreMode: isHardcoreActive(),
+          durationSec: (mpState.roster && mpState.roster.durationSec) || configuredDurationSec
         });
       }
       resetGame();
+      updateHostControlsVisibility();
       tryLockPointer();
     }
 
@@ -7095,13 +7668,18 @@
       endSubtitleEl.textContent =
         "The battle is still raging — respawn at a safe location far from enemies.";
       finalScoreboardWrapEl.style.display = "none";
+      restartBtn.disabled = false;
+      restartBtn.style.opacity = "1";
+      restartBtn.style.cursor = "pointer";
       restartBtn.textContent = "Respawn Soldier (R)";
+      updateHostControlsVisibility();
       endMessageEl.style.display = "block";
     }
 
-    // Ends the match when the countdown timer hits 0:00 and displays the Kills & Deaths Scoreboard
-    function endMatchByTimeLimit() {
-      if (gameEnded) return;
+    // Ends the match when the countdown timer hits 0:00 (or when ended by the host) and displays the Kills & Deaths Scoreboard
+    function endMatchByTimeLimit(options = null) {
+      const endedByHost = Boolean(options && options.endedByHost);
+      if (gameEnded && !endedByHost) return;
       gameEnded = true;
       isPlayerKnockedDown = false;
       document.body.classList.add("modal-open");
@@ -7119,17 +7697,24 @@
         .filter((s) => s.team === "tan")
         .reduce((acc, s) => acc + (s.kills || 0), 0);
 
-      if (greenKills > tanKills) {
+      if (endedByHost) {
+        const hostName = (options && options.hostName) || "Host";
+        endTitleEl.textContent = "MATCH ENDED BY HOST";
+        endTitleEl.style.color = "#ff856b";
+        endSubtitleEl.textContent = `Host (${hostName}) ended the match — Green: ${greenKills} Kills  |  Tan: ${tanKills} Kills`;
+      } else if (greenKills > tanKills) {
         endTitleEl.textContent = "GREEN TEAM WINS!";
         endTitleEl.style.color = "#8df57e";
+        endSubtitleEl.textContent = `Final Score — Green: ${greenKills} Kills  |  Tan: ${tanKills} Kills`;
       } else if (tanKills > greenKills) {
         endTitleEl.textContent = "TAN TEAM WINS!";
         endTitleEl.style.color = "#ffd584";
+        endSubtitleEl.textContent = `Final Score — Green: ${greenKills} Kills  |  Tan: ${tanKills} Kills`;
       } else {
         endTitleEl.textContent = "DRAW MATCH!";
         endTitleEl.style.color = "#ffffff";
+        endSubtitleEl.textContent = `Final Score — Green: ${greenKills} Kills  |  Tan: ${tanKills} Kills`;
       }
-      endSubtitleEl.textContent = `Final Score — Green: ${greenKills} Kills  |  Tan: ${tanKills} Kills`;
 
       // Sort participants: Human players first, then by Kills desc, Deaths asc
       const sorted = [...soldiers].sort((a, b) => {
@@ -7160,8 +7745,25 @@
         .join("");
 
       finalScoreboardWrapEl.style.display = "block";
-      restartBtn.textContent = "New Round (R)";
-      endMessageEl.style.display = "block";
+      if (mpState.active && !isLocalPlayerHost()) {
+        restartBtn.textContent = "Waiting for Host...";
+        restartBtn.disabled = true;
+        restartBtn.style.opacity = "0.65";
+        restartBtn.style.cursor = "default";
+      } else {
+        restartBtn.textContent = "New Round (R)";
+        restartBtn.disabled = false;
+        restartBtn.style.opacity = "1";
+        restartBtn.style.cursor = "pointer";
+      }
+
+      updateHostControlsVisibility();
+      if (isSetupOpen) {
+        mpModalStatusEl.textContent = endedByHost ? "Match ended by host" : "Match ended";
+        mpModalStatusEl.style.color = "#ff9e7b";
+      } else {
+        endMessageEl.style.display = "block";
+      }
     }
 
     function resetGame() {
