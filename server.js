@@ -369,6 +369,7 @@ function buildPerfApiPayload() {
     scalingSummary: {
       activeRooms: rooms.size,
       totalOnlinePlayers,
+      appPresence: cachedPresence,
       totalSimulatedUnits,
       reportedClients: clientList.length,
       avgClientFps,
@@ -822,9 +823,29 @@ const server = http.createServer((req, res) => {
         ok: true,
         roomCount: activeRooms.length,
         takenNames: getTakenPlayerNames(),
+        presence: cachedPresence,
         rooms: activeRooms
       })
     );
+    return;
+  }
+
+  // Lightweight app-wide presence heartbeat (GET avoids CORS preflight for cross-origin clients)
+  if (cleanUrl === "/api/presence") {
+    const qIdx = (req.url || "").indexOf("?");
+    if (qIdx !== -1) {
+      try {
+        const params = new URLSearchParams(req.url.slice(qIdx + 1));
+        if (params.get("mode") === "solo") {
+          recordSoloPresence(params.get("clientToken"));
+        }
+      } catch {}
+    }
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store"
+    });
+    res.end(JSON.stringify({ ok: true, presence: cachedPresence }));
     return;
   }
 
@@ -1044,6 +1065,42 @@ const wss = new WebSocketServer({
 const rooms = new Map();
 let nextClientId = 1;
 let nextRoomSyncSlot = 0;
+
+// App-wide presence: solo clients heartbeat GET /api/presence (~5s); multiplayer
+// counts come from live room sockets. Totals are recomputed on a 5s cadence and
+// served from cache so /api/presence, /rooms and pong replies stay O(1).
+const PRESENCE_TTL_MS = 15000;
+const PRESENCE_REFRESH_TICKS = 20; // 20 x 250ms server tick = 5s
+const MAX_SOLO_PRESENCE_ENTRIES = 20000;
+const soloPresence = new Map(); // Map<clientToken, lastSeenMs>
+let cachedPresence = { solo: 0, multiplayer: 0, total: 0 };
+
+function refreshPresenceCounts(now = Date.now()) {
+  let multiplayer = 0;
+  const inMatchTokens = new Set();
+  for (const room of rooms.values()) {
+    multiplayer += room.clients.size;
+    for (const c of room.clients.values()) {
+      if (c.clientToken) inMatchTokens.add(c.clientToken);
+    }
+  }
+  let solo = 0;
+  for (const [tok, lastSeen] of soloPresence) {
+    if (now - lastSeen > PRESENCE_TTL_MS) {
+      soloPresence.delete(tok);
+    } else if (!inMatchTokens.has(tok)) {
+      solo++;
+    }
+  }
+  cachedPresence = { solo, multiplayer, total: solo + multiplayer };
+}
+
+function recordSoloPresence(clientToken) {
+  const tok = String(clientToken || "").trim().slice(0, 64);
+  if (!tok) return;
+  if (!soloPresence.has(tok) && soloPresence.size >= MAX_SOLO_PRESENCE_ENTRIES) return;
+  soloPresence.set(tok, Date.now());
+}
 
 function safeSend(ws, payload) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -2224,7 +2281,8 @@ wss.on("connection", (ws, req) => {
           type: "pong",
           clientTime: msg.clientTime,
           serverTickMs: Number(lastServerTickMs.toFixed(2)),
-          serverMemMB: Math.round(cachedRssMB)
+          serverMemMB: Math.round(cachedRssMB),
+          presence: cachedPresence
         });
         break;
       }
@@ -2514,6 +2572,10 @@ setInterval(() => {
   perfMetrics.tickHistoryMs.push(lastServerTickMs);
   if (perfMetrics.tickHistoryMs.length > 120) {
     perfMetrics.tickHistoryMs.shift();
+  }
+
+  if (tickCounter % PRESENCE_REFRESH_TICKS === 1) {
+    refreshPresenceCounts(now);
   }
 
   // Once per second: sample memory, packet/bandwidth rates & append to 60s rolling history

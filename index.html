@@ -411,6 +411,59 @@
       background: rgba(45, 58, 42, 0.85);
     }
 
+    /* Compact "Players in Match / Total Online" presence chip */
+    #mp-status-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 3px 11px;
+      cursor: default;
+      border-color: rgba(152, 255, 140, 0.45);
+      color: #b8ffb0;
+    }
+
+    #mp-status-badge:hover {
+      background: rgba(20, 25, 18, 0.72);
+    }
+
+    #mp-status-badge .presence-stat {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      line-height: 1;
+    }
+
+    #mp-status-badge .presence-stat b {
+      font-size: 13px;
+    }
+
+    #mp-status-badge .presence-stat small {
+      font-size: 8px;
+      letter-spacing: 0.5px;
+      opacity: 0.75;
+      margin-top: 2px;
+    }
+
+    #mp-status-badge #presence-match-stat {
+      color: #7ad7ff;
+      padding-right: 8px;
+      border-right: 1px solid rgba(255, 255, 255, 0.25);
+    }
+
+    #mp-status-badge.reconnecting {
+      color: #ffd584;
+      font-size: 12px;
+    }
+
+    #mp-status-badge.reconnecting .presence-stat {
+      display: none !important;
+    }
+
+    #mp-status-badge.reconnecting #presence-reconnect-text {
+      display: inline !important;
+    }
+
     /* =====================================================================
        CALL OF DUTY MOBILE-STYLE TOUCH CONTROLS (LEFT STICK + RIGHT AIM/FIRE)
        ===================================================================== */
@@ -894,7 +947,11 @@
     <div id="top-right-bar">
       <button id="hud-menu-toggle-btn" class="hud-chip-btn" type="button" aria-expanded="false" title="Toggle Menu">☰ Menu</button>
       <div id="top-right-menu-items">
-        <span id="mp-status-badge" class="hud-chip-btn" style="pointer-events: none; border-color: rgba(152, 255, 140, 0.45); color: #b8ffb0;">Online: 0</span>
+        <span id="mp-status-badge" class="hud-chip-btn" title="Total Online">
+          <span class="presence-stat" id="presence-match-stat" style="display: none;"><b id="presence-match-count">0</b><small>MATCH</small></span>
+          <span class="presence-stat"><b id="presence-online-count">0</b><small>ONLINE</small></span>
+          <span id="presence-reconnect-text" style="display: none;"></span>
+        </span>
         <button id="toggle-sound-btn" class="hud-chip-btn" type="button">🔊 Sound</button>
         <button id="toggle-touch-btn" class="hud-chip-btn" type="button">Touch UI</button>
         <button id="open-teams-btn" class="hud-chip-btn" type="button">Match Setup (M)</button>
@@ -3422,6 +3479,7 @@
       reconnectTimer: null,
       roster: null,
       serverOnlineCount: 0,
+      presence: null, // { solo, multiplayer, total } app-wide counts from server (refreshed ~5s)
       localMatchEndTimestamp: 0,
       sendTimer: 0,
       hostSendTimer: 0
@@ -5243,11 +5301,16 @@
     const mpTeamSelectEl = document.getElementById("mp-team-select");
     const mpUrlInputEl = document.getElementById("mp-url-input");
     const mpStatusBadgeEl = document.getElementById("mp-status-badge");
+    const presenceMatchStatEl = document.getElementById("presence-match-stat");
+    const presenceMatchCountEl = document.getElementById("presence-match-count");
+    const presenceOnlineCountEl = document.getElementById("presence-online-count");
+    const presenceReconnectTextEl = document.getElementById("presence-reconnect-text");
     const mpModalStatusEl = document.getElementById("mp-modal-status");
     const activeMatchesListEl = document.getElementById("active-matches-list");
     const mpToastContainerEl = document.getElementById("mp-toast-container");
     const onlineRosterPanelEl = document.getElementById("online-roster-panel");
     const onlineRosterListEl = document.getElementById("online-roster-list");
+    const onlineRosterTitleEl = document.getElementById("online-roster-title");
 
     // Performance & Server Telemetry DOM Elements
     const perfFpsEl = document.getElementById("perf-fps");
@@ -5677,7 +5740,11 @@
           });
           mpState.persistedHostRoomCode = foundHostRoomCode;
           mpState.serverOnlineCount = totalOnline;
-          updateMpStatusBadge();
+          if (data.presence) {
+            applyPresence(data.presence);
+          } else {
+            updateMpStatusBadge();
+          }
           updateHostControlsVisibility();
 
           if (!mpState.active) {
@@ -5693,13 +5760,16 @@
 
           if (!isSetupOpen) return;
 
+          const presenceSuffix = mpState.presence
+            ? ` · ${mpState.presence.total} online (${mpState.presence.solo} solo, ${mpState.presence.multiplayer} MP)`
+            : ` (${totalOnline} online)`;
           if (data.rooms.length === 0) {
-            mpModalStatusEl.textContent = "0 active";
+            mpModalStatusEl.textContent = `0 active${presenceSuffix}`;
             mpModalStatusEl.style.color = "#84ff78";
             activeMatchesListEl.innerHTML =
               'No active matches — click <strong>Host Match</strong> above.';
           } else {
-            mpModalStatusEl.textContent = `${data.rooms.length} active (${totalOnline} online)`;
+            mpModalStatusEl.textContent = `${data.rooms.length} active${presenceSuffix}`;
             mpModalStatusEl.style.color = "#7ad7ff";
 
             // Sort user's own hosted match to the top of the list
@@ -5797,21 +5867,63 @@
     }
 
     function updateMpStatusBadge() {
-      if (!mpState.active || !mpState.roster) {
-        if (mpState.reconnectTimer && mpState.lastActiveRoomCode) {
-          mpStatusBadgeEl.textContent = `🔄 Reconnecting (${mpState.lastActiveRoomCode})...`;
-          mpStatusBadgeEl.style.color = "#ffd584";
-          return;
-        }
-        const count = mpState.serverOnlineCount || 0;
-        mpStatusBadgeEl.textContent = `Online: ${count}`;
-        mpStatusBadgeEl.style.color = count > 0 ? "#84ff78" : "#b8ffb0";
+      const isReconnecting =
+        (!mpState.active || !mpState.roster) &&
+        mpState.reconnectTimer &&
+        mpState.lastActiveRoomCode;
+      mpStatusBadgeEl.classList.toggle("reconnecting", Boolean(isReconnecting));
+      if (isReconnecting) {
+        presenceReconnectTextEl.textContent = `🔄 Reconnecting (${mpState.lastActiveRoomCode})...`;
+        mpStatusBadgeEl.title = "Reconnecting to match";
         return;
       }
-      const pCount = mpState.roster.players ? mpState.roster.players.length : 1;
-      mpStatusBadgeEl.textContent = `🟢 ${pCount} Online (${mpState.roomCode})`;
-      mpStatusBadgeEl.style.color = "#7ad7ff";
+
+      const inMatch = Boolean(mpState.active && mpState.roster);
+      const matchCount = inMatch
+        ? (Array.isArray(mpState.roster.players) ? mpState.roster.players.length : 1)
+        : 0;
+      const p = mpState.presence;
+      const solo = p ? p.solo : 0;
+      const multiplayer = p ? Math.max(p.multiplayer, matchCount) : Math.max(mpState.serverOnlineCount || 0, matchCount);
+      // The local player is always online even if the cached server count hasn't caught up yet
+      const total = Math.max(p ? solo + multiplayer : multiplayer, inMatch ? matchCount : 1);
+
+      presenceMatchStatEl.style.display = inMatch ? "" : "none";
+      presenceMatchCountEl.textContent = matchCount;
+      presenceOnlineCountEl.textContent = total;
+      mpStatusBadgeEl.title =
+        (inMatch ? `Players in Match (${mpState.roomCode}): ${matchCount}\n` : "") +
+        `Total Online: ${total}` +
+        (p ? ` (${solo} solo · ${multiplayer} multiplayer)` : "");
     }
+
+    function applyPresence(presence) {
+      if (!presence || typeof presence !== "object") return;
+      const solo = Math.max(0, Number(presence.solo) || 0);
+      const multiplayer = Math.max(0, Number(presence.multiplayer) || 0);
+      mpState.presence = { solo, multiplayer, total: solo + multiplayer };
+      updateMpStatusBadge();
+    }
+
+    // Solo/menu clients heartbeat app-wide presence every 5s (multiplayer clients get it via pong)
+    const PRESENCE_HEARTBEAT_MS = 5000;
+    function sendPresenceHeartbeat() {
+      if (mpState.active || document.hidden || typeof fetch !== "function") return;
+      const tokenParam = mpState.clientToken
+        ? `&clientToken=${encodeURIComponent(mpState.clientToken)}`
+        : "";
+      fetch(`${getServerHttpBase()}/api/presence?mode=solo${tokenParam}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data && !mpState.active) applyPresence(data.presence);
+        })
+        .catch(() => {});
+    }
+    setInterval(sendPresenceHeartbeat, PRESENCE_HEARTBEAT_MS);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) sendPresenceHeartbeat();
+    });
+    setTimeout(sendPresenceHeartbeat, 0);
 
     function cancelAutoReconnect() {
       if (mpState.reconnectTimer) {
@@ -6694,10 +6806,6 @@
           const target = soldiersById.get(msg.unitId);
           if (!target) return;
           respawnSingleSoldier(target, msg.x, msg.y, msg.z, msg.yaw);
-          if (msg.playerName && !msg.isAI) {
-            const tColor = msg.team === "green" ? "#84ff78" : "#ffd584";
-            showMpToast(`🔄 ${msg.playerName} respawned!`, tColor);
-          }
           break;
         }
 
@@ -6716,6 +6824,9 @@
           }
           if (typeof msg.serverTickMs === "number") {
             perfTelemetry.serverTickMs = msg.serverTickMs;
+          }
+          if (msg.presence) {
+            applyPresence(msg.presence);
           }
           if (typeof msg.serverMemMB === "number") {
             perfTelemetry.serverMemMB = msg.serverMemMB;
@@ -7156,6 +7267,11 @@
 
       if (mpState.active && mpState.roster && Array.isArray(mpState.roster.players)) {
         onlineRosterPanelEl.style.display = "block";
+        if (onlineRosterTitleEl) {
+          onlineRosterTitleEl.textContent = mpState.roomCode
+            ? `PLAYERS IN ROOM ${mpState.roomCode}`
+            : "ONLINE PLAYERS IN ROOM";
+        }
         onlineRosterListEl.innerHTML = mpState.roster.players
           .map((p) => {
             const badgeColor = p.team === "green" ? "#7dff70" : "#ffd584";
