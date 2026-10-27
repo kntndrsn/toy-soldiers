@@ -225,26 +225,30 @@ function getSyntheticIpForVu(vuId) {
   return `10.42.${b2}.${b3}`;
 }
 
+// Unique per-run tag so room codes never collide with rooms left over from a
+// previous run (empty rooms live on the server until their match timer ends).
+export function setup() {
+  const runTag = Math.floor(Math.random() * 36 ** 3)
+    .toString(36)
+    .toUpperCase()
+    .padStart(3, "0");
+  return { runTag };
+}
+
 // ============================================================================
 // SCENARIO 1: RAMPING WEBSOCKET PLAYER / HOST SESSION
 // ============================================================================
-export function runPlayerSession() {
+export function runPlayerSession(data) {
   const vuId = __VU;
   const slotInRoom = (vuId - 1) % PLAYERS_PER_ROOM;
   const roomIndex = Math.floor((vuId - 1) / PLAYERS_PER_ROOM);
-  const isHostCandidate = slotInRoom === 0;
   const mapType = roomIndex % 2 === 0 ? "sandbox" : "shoebox";
   const worldLimit = mapType === "shoebox" ? 28 : 80;
   const prefix = mapType === "shoebox" ? "SHOE" : "SAND";
-  const roomCode = `${prefix}${100 + roomIndex}`;
+  const roomCode = `${prefix}${(data && data.runTag) || "K6"}${roomIndex}`;
   const team = slotInRoom % 2 === 0 ? "green" : "tan";
   const playerName = `K6_${vuId}`;
   const syntheticIp = getSyntheticIpForVu(vuId);
-
-  // Brief stagger on initial join when a room is spinning up so the host creates the room first
-  if (!isHostCandidate) {
-    sleep(0.15 + (slotInRoom % 4) * 0.05);
-  }
 
   const params = {
     headers: {
@@ -255,10 +259,12 @@ export function runPlayerSession() {
 
   const sessionStart = Date.now();
   const connectTags = stepTagsAt(elapsedSec(), false);
+  let opened = false;
   const wsTarget = `${WS_URL}/?k6vu=${vuId}`;
   const res = ws.connect(wsTarget, params, function (socket) {
     let myUnitId = `${team}_0`;
-    let isRoomHost = isHostCandidate;
+    // Whichever VU reaches the room first creates it and becomes host (confirmed via room_joined)
+    let isRoomHost = false;
     let activeRoomCode = roomCode;
     let tickStep = 0;
 
@@ -282,8 +288,14 @@ export function runPlayerSession() {
     }
 
     socket.on("open", function () {
+      // Record on open (not after ws.connect returns) so sessions cut short by an abort still count
+      opened = true;
+      wsConnectSuccess.add(true, connectTags);
+
+      // Every VU uses join_room: the server creates the room for the first arrival.
+      // host_room would allocate a random code if a joiner got there first, splitting the room in two.
       const joinPayload = {
-        type: isHostCandidate ? "host_room" : "join_room",
+        type: "join_room",
         roomCode,
         password: "",
         name: playerName,
@@ -293,7 +305,8 @@ export function runPlayerSession() {
         mapType,
         worldLimit,
         hardcoreMode: roomIndex % 3 === 0,
-        durationSec: 600
+        // Long enough to outlive the run, short enough that empty rooms are cleaned up soon after
+        durationSec: Math.min(1800, totalRampDurationSec + 60)
       };
       socket.send(JSON.stringify(joinPayload));
       wsMessagesSent.add(1);
@@ -465,10 +478,12 @@ export function runPlayerSession() {
     });
   });
 
-  const ok = check(res, {
+  check(res, {
     "WebSocket handshake status is 101": (r) => r && r.status === 101
   });
-  wsConnectSuccess.add(ok, connectTags);
+  if (!opened) {
+    wsConnectSuccess.add(false, connectTags);
+  }
 
   // Prevent 0ms tight reconnect spin if the server or proxy closes the socket early
   if (Date.now() - sessionStart < 1000) {
@@ -597,7 +612,9 @@ function analyzeCapacity(data) {
     steps.push(result);
   }
 
-  const unitsOf = (r) => (r ? r.measuredUnits || r.expectedUnits : 0);
+  // Headline uses the units this test drove; measuredUnits is the server-wide total and
+  // can include real players' rooms or empty rooms left over from earlier runs.
+  const unitsOf = (r) => (r ? r.expectedUnits : 0);
   return {
     limits: {
       rttP95Ms: RTT_LIMIT_MS,
@@ -719,7 +736,7 @@ export function handleSummary(data) {
   const stepLines = capacity.steps.map(
     (r) =>
       `   ${String(r.step).padStart(4)} ${String(r.rooms).padStart(6)} ${String(r.vus).padStart(6)} ` +
-      `${String(r.measuredUnits || r.expectedUnits).padStart(7)} ${fmt(r.rttP95Ms).padStart(9)} ` +
+      `${String(r.expectedUnits).padStart(7)} ${fmt(r.rttP95Ms).padStart(9)} ` +
       `${fmt(r.serverTickP95Ms).padStart(9)} ` +
       `${(r.connectRate === null ? "-" : (r.connectRate * 100).toFixed(1) + "%").padStart(8)} ` +
       `${fmt(r.outboundKBpsMax).padStart(10)}  ${r.status}${r.reasons.length ? " (" + r.reasons.join("; ") + ")" : ""}`
@@ -740,7 +757,7 @@ export function handleSummary(data) {
     }`,
     ` BREAKING POINT         : ${
       bp
-        ? `step ${bp.step} — ${bp.measuredUnits || bp.expectedUnits} units (${bp.rooms} rooms): ${bp.reasons.join("; ")}`
+        ? `step ${bp.step} — ${bp.expectedUnits} units (${bp.rooms} rooms): ${bp.reasons.join("; ")}`
         : "not reached — server stayed healthy at every step; add bigger STEP_ROOMS to push further"
     }`,
     ...(capacity.regressionGate
@@ -752,7 +769,11 @@ export function handleSummary(data) {
     "   Step  Rooms    VUs   Units   RTT p95  Tick p95  Connect   Out KB/s  Status",
     ...stepLines,
     "--------------------------------------------------------------------------------",
-    ` WS Connect Success     : ${((combinedReport.k6Summary.wsConnectSuccessRate || 0) * 100).toFixed(1)}%`,
+    ` WS Connect Success     : ${
+      combinedReport.k6Summary.wsConnectSuccessRate === null
+        ? "-"
+        : (combinedReport.k6Summary.wsConnectSuccessRate * 100).toFixed(1) + "%"
+    }`,
     ` WS Ping RTT (avg/p95)  : ${combinedReport.k6Summary.wsPingRttAvgMs} ms / ${combinedReport.k6Summary.wsPingRttP95Ms} ms (max ${combinedReport.k6Summary.wsPingRttMaxMs} ms)`,
     ` Server Tick (avg/p95)  : ${combinedReport.k6Summary.serverTickAvgMs} ms / ${combinedReport.k6Summary.serverTickP95Ms} ms (max ${combinedReport.k6Summary.serverTickMaxMs} ms)`,
     ` Peak Outbound Bandwidth: ${combinedReport.k6Summary.outboundKBpsMax} KB/s (avg ${combinedReport.k6Summary.outboundKBpsAvg} KB/s)`,
