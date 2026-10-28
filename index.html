@@ -134,6 +134,18 @@
       transition: width 0.15s ease, background-color 0.15s ease;
     }
 
+    #streak-label {
+      font-size: 12px;
+      font-weight: bold;
+      letter-spacing: 0.4px;
+      color: #ffe08a;
+      white-space: nowrap;
+    }
+
+    #streak-label[hidden] {
+      display: none !important;
+    }
+
     /* Center Crosshair */
     #crosshair {
       position: absolute;
@@ -627,6 +639,97 @@
       background: rgba(65, 145, 55, 0.88);
     }
 
+    /* Airstrike call-in. Gray until a charge is ready, then gold. */
+    #mobile-airstrike-btn {
+      position: absolute;
+      right: 61px;
+      bottom: 146px;
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      background: rgba(55, 55, 55, 0.72);
+      border: 2px solid rgba(170, 170, 170, 0.4);
+      color: rgba(210, 210, 210, 0.55);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+      pointer-events: none;
+      touch-action: none;
+      cursor: default;
+    }
+
+    #mobile-airstrike-btn.ready {
+      background: radial-gradient(circle at 35% 35%, rgba(255, 214, 120, 0.95), rgba(176, 96, 18, 0.92));
+      border-color: rgba(255, 236, 190, 0.95);
+      color: #fff8e8;
+      box-shadow: 0 0 16px rgba(255, 170, 40, 0.45);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    #mobile-airstrike-btn[hidden] {
+      display: none !important;
+    }
+
+    #mobile-airstrike-btn.inbound {
+      opacity: 0.7;
+    }
+
+    #mobile-airstrike-btn svg,
+    #airstrike-key-hint svg {
+      width: 26px;
+      height: 26px;
+      display: block;
+    }
+
+    #mobile-airstrike-btn small {
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.6px;
+      line-height: 1;
+    }
+
+    #airstrike-key-hint {
+      position: absolute;
+      bottom: 22px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px 6px 8px;
+      background: rgba(20, 25, 18, 0.78);
+      border: 1px solid rgba(255, 214, 120, 0.8);
+      border-radius: 999px;
+      color: #ffe7a8;
+      font-weight: 900;
+      letter-spacing: 0.6px;
+      pointer-events: none;
+      text-shadow: none;
+    }
+
+    #airstrike-key-hint[hidden] {
+      display: none !important;
+    }
+
+    body.touch-enabled #airstrike-key-hint {
+      display: none !important;
+    }
+
+    #airstrike-key-label {
+      min-width: 1.2em;
+      text-align: center;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.45);
+      border-bottom-width: 3px;
+      border-radius: 6px;
+      padding: 2px 7px;
+      color: #ffffff;
+    }
+
     /* Hide verbose online roster list when touch controls are enabled */
     body.touch-enabled #online-roster-panel {
       display: none !important;
@@ -860,6 +963,17 @@
         right: 26px;
         bottom: 120px;
       }
+
+      #mobile-airstrike-btn {
+        width: 52px;
+        height: 52px;
+        right: 36px;
+        bottom: 186px;
+      }
+
+      #streak-label {
+        font-size: 10px;
+      }
     }
 
     /* Mobile Landscape: keep controls & setup modal compact for short screen height */
@@ -883,6 +997,13 @@
         height: 54px;
         right: 116px;
         bottom: 24px;
+      }
+
+      #mobile-airstrike-btn {
+        width: 50px;
+        height: 50px;
+        right: 39px;
+        bottom: 108px;
       }
 
       #setup-modal {
@@ -925,6 +1046,10 @@
     <div id="right-touch-zone"></div>
 
     <div id="mobile-jump-btn">JUMP</div>
+    <div id="mobile-airstrike-btn" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>
+      <small>AIR</small>
+    </div>
     <div id="mobile-fire-btn">
       FIRE
       <span>AIM</span>
@@ -938,6 +1063,12 @@
       <div id="health-bar-bg">
         <div id="health-bar-fill"></div>
       </div>
+      <div id="streak-label" hidden>STREAK 0</div>
+    </div>
+
+    <div id="airstrike-key-hint" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>
+      <span id="airstrike-key-label">E</span>
     </div>
 
     <div id="online-roster-panel">
@@ -3246,6 +3377,843 @@
     });
 
     // =========================================================================
+    // AIRSTRIKE — P-51 strafing run earned at 10 kills without dying
+    // =========================================================================
+    const AIRSTRIKE_KILLS = 10;
+    const AIRSTRIKE_DURATION_MS = 6000;
+    const AIRSTRIKE_DIVE = 55 * Math.PI / 180;
+    const AIRSTRIKE_CLIMB = 34 * Math.PI / 180;
+    const AIRSTRIKE_CLUSTER_RADIUS = 18;
+    const AIRSTRIKE_DAMAGE = 22;
+    const AIRSTRIKE_WINGSPAN = 16;
+    const AIRSTRIKE_FIRE_INTERVAL = 0.09;
+    const AIRSTRIKE_PROP_SPIN = 70;
+    const AIRSTRIKE_TRACER = new BABYLON.Color3(1, 0.94, 0.62);
+
+    let mustang = null;
+    let activeStrike = null;
+    let killStreak = 0;
+    let airstrikeReady = false;
+    let airstrikePending = false;
+    let airstrikeUiKey = "";
+    let planeEngine = null;
+    let engineNoiseBuffer = null;
+    let mgNoiseBuffer = null;
+
+    const mobileAirstrikeBtnEl = document.getElementById("mobile-airstrike-btn");
+    const airstrikeKeyHintEl = document.getElementById("airstrike-key-hint");
+    const airstrikeKeyLabelEl = document.getElementById("airstrike-key-label");
+    const streakLabelEl = document.getElementById("streak-label");
+    const airstrikeBtnLabelEl = mobileAirstrikeBtnEl ? mobileAirstrikeBtnEl.querySelector("small") : null;
+
+    function findNamedNode(roots, needle) {
+      const stack = roots.slice();
+      const seen = new Set();
+      while (stack.length) {
+        const node = stack.pop();
+        if (!node || seen.has(node)) continue;
+        seen.add(node);
+        if (node.name === needle || node.id === needle) return node;
+        const children = node.getChildren ? node.getChildren() : [];
+        for (let i = 0; i < children.length; i++) stack.push(children[i]);
+      }
+      return null;
+    }
+
+    function mergedWorldBounds(rootNode) {
+      let minX = Infinity, minY = Infinity, minZ = Infinity;
+      let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+      const meshes = rootNode.getChildMeshes(false);
+      for (let i = 0; i < meshes.length; i++) {
+        const mesh = meshes[i];
+        mesh.computeWorldMatrix(true);
+        mesh.refreshBoundingInfo(true, true);
+        const bb = mesh.getBoundingInfo().boundingBox;
+        const wmin = bb.minimumWorld;
+        const wmax = bb.maximumWorld;
+        if (wmin.x < minX) minX = wmin.x;
+        if (wmin.y < minY) minY = wmin.y;
+        if (wmin.z < minZ) minZ = wmin.z;
+        if (wmax.x > maxX) maxX = wmax.x;
+        if (wmax.y > maxY) maxY = wmax.y;
+        if (wmax.z > maxZ) maxZ = wmax.z;
+      }
+      return { minX, minY, minZ, maxX, maxY, maxZ };
+    }
+
+    async function loadMustangAsset() {
+      const container = await BABYLON.LoadAssetContainerAsync(
+        assetUrl("models/Meshy_AI_p51_mustang.glb"),
+        scene,
+        { pluginExtension: ".glb" }
+      );
+      container.addAllToScene();
+      container.lights.slice().forEach((light) => light.dispose());
+      container.cameras.slice().forEach((cam) => cam.dispose());
+
+      const flightRoot = new BABYLON.TransformNode("mustangRoot", scene);
+      const align = new BABYLON.TransformNode("mustangAlign", scene);
+      align.parent = flightRoot;
+      flightRoot.rotationQuaternion = null;
+      align.rotationQuaternion = null;
+      container.rootNodes.forEach((node) => { node.parent = align; });
+
+      const prop = findNamedNode([align], "output_unwrapped.001");
+      const body = findNamedNode([align], "output_unwrapped");
+      if (!prop) console.warn("Airstrike plane is missing propeller node output_unwrapped.001");
+
+      align.rotation.set(0, 0, 0);
+      align.scaling.setAll(1);
+      flightRoot.position.set(0, 0, 0);
+      flightRoot.rotation.set(0, 0, 0);
+      align.computeWorldMatrix(true);
+      const unscaled = mergedWorldBounds(align);
+      const span = Math.max(unscaled.maxX - unscaled.minX, unscaled.maxZ - unscaled.minZ);
+      if (!(span > 0.01)) throw new Error("Mustang GLB has no measurable bounds");
+      align.scaling.setAll(AIRSTRIKE_WINGSPAN / span);
+      align.computeWorldMatrix(true);
+
+      const scaled = mergedWorldBounds(align);
+      let noseX = -1;
+      let noseZ = 0;
+      if (prop) {
+        const propPos = prop.getAbsolutePosition();
+        noseX = propPos.x - (scaled.minX + scaled.maxX) * 0.5;
+        noseZ = propPos.z - (scaled.minZ + scaled.maxZ) * 0.5;
+      }
+      const noseLen = Math.hypot(noseX, noseZ);
+      if (noseLen < 1e-4) {
+        noseX = -1;
+        noseZ = 0;
+      } else {
+        noseX /= noseLen;
+        noseZ /= noseLen;
+      }
+      // Soldier yaw maps local +Z to world forward, so turn the nose (prop shaft) onto +Z.
+      align.rotation.y = -Math.atan2(noseX, noseZ);
+      align.computeWorldMatrix(true);
+      const fitted = mergedWorldBounds(align);
+
+      const flashes = [0, 1].map((wing) => {
+        const flash = BABYLON.MeshBuilder.CreateSphere(
+          "airstrikeMuzzle" + wing,
+          { diameter: 0.42, segments: 5 },
+          scene
+        );
+        flash.parent = flightRoot;
+        flash.material = flashMat;
+        flash.isVisible = false;
+        flash.isPickable = false;
+        return flash;
+      });
+      const fullX = fitted.maxX - fitted.minX;
+      const midX = (fitted.minX + fitted.maxX) * 0.5;
+      const midY = (fitted.minY + fitted.maxY) * 0.5;
+      const midZ = (fitted.minZ + fitted.maxZ) * 0.5;
+      const gunX = fullX * 0.2;
+      const gunY = midY - (fitted.maxY - fitted.minY) * 0.2;
+      const gunZ = midZ + (fitted.maxZ - midZ) * 0.2;
+      flashes[0].position.set(midX - gunX, gunY, gunZ);
+      flashes[1].position.set(midX + gunX, gunY, gunZ);
+
+      align.getChildMeshes(false).forEach((mesh) => { mesh.isPickable = false; });
+      if (body && body.getTotalVertices && body.getTotalVertices() > 0) {
+        shadowGen.addShadowCaster(body, false);
+      }
+
+      let propBase = null;
+      if (prop) {
+        if (!prop.rotationQuaternion) {
+          prop.rotationQuaternion = BABYLON.Quaternion.FromEulerAngles(
+            prop.rotation.x, prop.rotation.y, prop.rotation.z
+          );
+        }
+        propBase = prop.rotationQuaternion.clone();
+      }
+
+      flightRoot.position.set(0, -200, 0);
+      flightRoot.setEnabled(false);
+      mustang = {
+        root: flightRoot,
+        prop,
+        propBase,
+        flashes,
+        spinQuat: new BABYLON.Quaternion(),
+        spinOut: new BABYLON.Quaternion()
+      };
+    }
+
+    loadMustangAsset().catch((error) => {
+      mustang = null;
+      console.error("Unable to load airstrike plane:", error);
+    });
+
+    function noteKillStreak() {
+      if (!player || !player.alive || gameEnded) return;
+      killStreak += 1;
+      if (killStreak >= AIRSTRIKE_KILLS && !airstrikeReady) airstrikeReady = true;
+      updateAirstrikeUI();
+    }
+
+    function spendAirstrikeCharge() {
+      airstrikeReady = false;
+      killStreak = 0;
+      updateAirstrikeUI();
+    }
+
+    function resetKillStreak() {
+      if (killStreak === 0 && !airstrikeReady) return;
+      killStreak = 0;
+      airstrikeReady = false;
+      updateAirstrikeUI();
+    }
+
+    function updateAirstrikeUI() {
+      const touch = document.body.classList.contains("touch-enabled");
+      const blocked = gameEnded || isSetupOpen || document.body.classList.contains("modal-open") || !player;
+      const mine = Boolean(activeStrike && player && activeStrike.callerUnitId === player.unitId);
+      const showCall = !blocked && (airstrikeReady || airstrikePending || mine);
+      const inbound = showCall && (Boolean(activeStrike) || airstrikePending);
+      const available = showCall && airstrikeReady && !inbound && player.alive && Boolean(mustang);
+      let streakText = "";
+      if (!blocked && player.alive) {
+        if (airstrikeReady) streakText = "AIRSTRIKE READY";
+        else if (killStreak > 0) streakText = "STREAK " + killStreak;
+      }
+      const key = (touch ? "t" : "k") + (available ? "a" : "g") + (showCall ? "1" : "0") + (inbound ? "i" : "c") + streakText;
+      if (key === airstrikeUiKey) return;
+      airstrikeUiKey = key;
+      if (mobileAirstrikeBtnEl) {
+        mobileAirstrikeBtnEl.hidden = !touch;
+        mobileAirstrikeBtnEl.classList.toggle("ready", available);
+        mobileAirstrikeBtnEl.classList.toggle("inbound", inbound);
+        mobileAirstrikeBtnEl.setAttribute("aria-disabled", available ? "false" : "true");
+        if (airstrikeBtnLabelEl) airstrikeBtnLabelEl.textContent = inbound ? "IN" : "AIR";
+      }
+      if (airstrikeKeyHintEl) {
+        airstrikeKeyHintEl.hidden = !(!touch && showCall);
+        if (airstrikeKeyLabelEl) airstrikeKeyLabelEl.textContent = inbound ? "INBOUND" : "E";
+      }
+      if (streakLabelEl) {
+        streakLabelEl.hidden = streakText === "";
+        if (streakText) streakLabelEl.textContent = streakText;
+      }
+    }
+
+    // Densest neighborhood of living enemies. Ties go to the tighter group.
+    function enemyClusterAim(team) {
+      const enemies = [];
+      for (let i = 0; i < soldiers.length; i++) {
+        const soldier = soldiers[i];
+        if (soldier.alive && soldier.team !== team) enemies.push(soldier);
+      }
+      if (!enemies.length) {
+        return { x: 0, y: getSandHeight(0, 0) + 1.15, z: 0 };
+      }
+      const radiusSq = AIRSTRIKE_CLUSTER_RADIUS * AIRSTRIKE_CLUSTER_RADIUS;
+      let best = null;
+      let bestCount = 0;
+      let bestSpread = Infinity;
+      for (let i = 0; i < enemies.length; i++) {
+        const origin = enemies[i];
+        const group = [];
+        let spread = 0;
+        for (let j = 0; j < enemies.length; j++) {
+          const dx = enemies[j].position.x - origin.position.x;
+          const dz = enemies[j].position.z - origin.position.z;
+          const d2 = dx * dx + dz * dz;
+          if (d2 <= radiusSq) {
+            group.push(enemies[j]);
+            spread += d2;
+          }
+        }
+        if (group.length > bestCount || (group.length === bestCount && spread < bestSpread)) {
+          best = group;
+          bestCount = group.length;
+          bestSpread = spread;
+        }
+      }
+      let x = 0;
+      let y = 0;
+      let z = 0;
+      const targets = [];
+      for (let i = 0; i < best.length; i++) {
+        const p = best[i].position;
+        x += p.x;
+        y += p.y;
+        z += p.z;
+        targets.push({ x: p.x, y: p.y + 1.15, z: p.z });
+      }
+      const n = best.length;
+      return { x: x / n, y: y / n + 1.15, z: z / n, targets };
+    }
+
+    // Steep dive through the cluster, then a pull-up that climbs away on the same heading.
+    function buildAirstrikePath(team) {
+      const aim = enemyClusterAim(team);
+      const heading = Math.random() * Math.PI * 2;
+      const dive = AIRSTRIKE_DIVE;
+      const climb = AIRSTRIKE_CLIMB;
+      const hx = Math.sin(heading);
+      const hz = Math.cos(heading);
+      const diveDir = {
+        x: hx * Math.cos(dive),
+        y: -Math.sin(dive),
+        z: hz * Math.cos(dive)
+      };
+      const sand = getSandHeight(aim.x, aim.z);
+      const nadirY = Math.max(aim.y + 14, sand + 16);
+      let pullRadius = 22;
+      const dip = pullRadius * (1 - Math.cos(dive));
+      if (nadirY - dip < sand + 7) {
+        pullRadius = Math.max(8, (nadirY - (sand + 7)) / (1 - Math.cos(dive)));
+      }
+      const entryY = nadirY + 42;
+      const sEntry = (entryY - aim.y) / diveDir.y;
+      const sNadir = (nadirY - aim.y) / diveDir.y;
+      const start = {
+        x: aim.x + diveDir.x * sEntry,
+        y: entryY,
+        z: aim.z + diveDir.z * sEntry
+      };
+      const nadir = {
+        x: aim.x + diveDir.x * sNadir,
+        y: nadirY,
+        z: aim.z + diveDir.z * sNadir
+      };
+      const pullAngle = dive + climb;
+      const pullLen = pullRadius * pullAngle;
+      const pullH = pullRadius * (Math.sin(dive) + Math.sin(climb));
+      const pullY = pullRadius * (Math.cos(dive) - Math.cos(climb));
+      const climbDir = {
+        x: hx * Math.cos(climb),
+        y: Math.sin(climb),
+        z: hz * Math.cos(climb)
+      };
+      const climbLen = 48;
+      const pullEnd = {
+        x: nadir.x + hx * pullH,
+        y: nadir.y + pullY,
+        z: nadir.z + hz * pullH
+      };
+      const end = {
+        x: pullEnd.x + climbDir.x * climbLen,
+        y: pullEnd.y + climbDir.y * climbLen,
+        z: pullEnd.z + climbDir.z * climbLen
+      };
+      const diveLen = Math.hypot(nadir.x - start.x, nadir.y - start.y, nadir.z - start.z);
+      const total = diveLen + pullLen + climbLen;
+      return {
+        start,
+        nadir,
+        end,
+        aim,
+        pullRadius,
+        yaw: heading,
+        durationMs: Math.round(Math.min(5800, Math.max(3400, (total / 22) * 1000)))
+      };
+    }
+
+    function prepareStrikeFlight(strike) {
+      const dx = strike.nadir.x - strike.start.x;
+      const dy = strike.nadir.y - strike.start.y;
+      const dz = strike.nadir.z - strike.start.z;
+      const diveLen = Math.hypot(dx, dy, dz) || 1;
+      const diveDir = new BABYLON.Vector3(dx / diveLen, dy / diveLen, dz / diveLen);
+      const horiz = Math.hypot(diveDir.x, diveDir.z) || 1;
+      const hx = diveDir.x / horiz;
+      const hz = diveDir.z / horiz;
+      const dive = Math.atan2(-diveDir.y, horiz);
+      const radius = Math.max(6, Number(strike.pullRadius) || 22);
+      const pullAngle = dive + AIRSTRIKE_CLIMB;
+      const pullLen = radius * pullAngle;
+      const pullH = radius * (Math.sin(dive) + Math.sin(AIRSTRIKE_CLIMB));
+      const pullY = radius * (Math.cos(dive) - Math.cos(AIRSTRIKE_CLIMB));
+      const pullEnd = strike.nadir.add(new BABYLON.Vector3(hx * pullH, pullY, hz * pullH));
+      const climbVec = strike.end.subtract(pullEnd);
+      const climbLen = climbVec.length();
+      const climbDir = climbLen > 0.5
+        ? climbVec.scale(1 / climbLen)
+        : new BABYLON.Vector3(hx * Math.cos(AIRSTRIKE_CLIMB), Math.sin(AIRSTRIKE_CLIMB), hz * Math.cos(AIRSTRIKE_CLIMB));
+      strike.diveLen = diveLen;
+      strike.pullLen = pullLen;
+      strike.climbLen = Math.max(climbLen, 0.001);
+      strike.totalLen = diveLen + pullLen + strike.climbLen;
+      strike.diveDir = diveDir;
+      strike.climbDir = climbDir;
+      strike.pullEnd = pullEnd;
+      strike.hx = hx;
+      strike.hz = hz;
+      strike.dive = dive;
+      strike.radius = radius;
+      strike.gunUntil = diveLen / strike.totalLen;
+      strike.samplePos = new BABYLON.Vector3();
+      strike.sampleDir = new BABYLON.Vector3();
+    }
+
+    function sampleStrike(strike, t) {
+      const dist = Math.min(1, Math.max(0, t)) * strike.totalLen;
+      if (dist <= strike.diveLen) {
+        BABYLON.Vector3.LerpToRef(strike.start, strike.nadir, dist / strike.diveLen, strike.samplePos);
+        strike.sampleDir.copyFrom(strike.diveDir);
+        return;
+      }
+      if (dist <= strike.diveLen + strike.pullLen) {
+        const s = dist - strike.diveLen;
+        const beta = strike.dive - s / strike.radius;
+        const hOff = strike.radius * (Math.sin(strike.dive) - Math.sin(beta));
+        const yOff = strike.radius * (Math.cos(strike.dive) - Math.cos(beta));
+        strike.samplePos.set(
+          strike.nadir.x + strike.hx * hOff,
+          strike.nadir.y + yOff,
+          strike.nadir.z + strike.hz * hOff
+        );
+        strike.sampleDir.set(
+          strike.hx * Math.cos(beta),
+          -Math.sin(beta),
+          strike.hz * Math.cos(beta)
+        );
+        return;
+      }
+      const u = (dist - strike.diveLen - strike.pullLen) / strike.climbLen;
+      BABYLON.Vector3.LerpToRef(strike.pullEnd, strike.end, Math.min(1, u), strike.samplePos);
+      strike.sampleDir.copyFrom(strike.climbDir);
+    }
+
+    function pointMustang(root, dir) {
+      const yaw = Math.atan2(dir.x, dir.z);
+      const pitch = -Math.asin(Math.max(-1, Math.min(1, dir.y)));
+      if (!root.rotationQuaternion) root.rotationQuaternion = new BABYLON.Quaternion();
+      BABYLON.Quaternion.RotationYawPitchRollToRef(yaw, pitch, 0, root.rotationQuaternion);
+    }
+
+    function ensureMgNoise(ctx) {
+      if (mgNoiseBuffer) return mgNoiseBuffer;
+      const length = Math.floor(ctx.sampleRate * 0.07);
+      mgNoiseBuffer = ctx.createBuffer(1, length, ctx.sampleRate);
+      const data = mgNoiseBuffer.getChannelData(0);
+      for (let i = 0; i < length; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 1.6);
+      }
+      return mgNoiseBuffer;
+    }
+
+    function ensureEngineNoise(ctx) {
+      if (engineNoiseBuffer) return engineNoiseBuffer;
+      const length = ctx.sampleRate;
+      engineNoiseBuffer = ctx.createBuffer(1, length, ctx.sampleRate);
+      const data = engineNoiseBuffer.getChannelData(0);
+      let b0 = 0;
+      let b1 = 0;
+      for (let i = 0; i < length; i++) {
+        const white = Math.random() * 2 - 1;
+        b0 = 0.985 * b0 + white * 0.04;
+        b1 = 0.9 * b1 + white * 0.08;
+        data[i] = white * 0.22 + b0 * 0.85 + b1 * 0.45;
+      }
+      return engineNoiseBuffer;
+    }
+
+    function stereoPan(ctx, pos, now) {
+      if (!camera || typeof ctx.createStereoPanner !== "function") return ctx.destination;
+      try {
+        const panner = ctx.createStereoPanner();
+        const yaw = player ? player.yaw : 0;
+        const dx = pos.x - camera.position.x;
+        const dz = pos.z - camera.position.z;
+        const len = Math.hypot(dx, dz) || 1;
+        const pan = (dx / len) * Math.cos(yaw) + (dz / len) * -Math.sin(yaw);
+        panner.pan.setValueAtTime(Math.max(-0.85, Math.min(0.85, pan)), now);
+        panner.connect(ctx.destination);
+        return panner;
+      } catch (err) {
+        return ctx.destination;
+      }
+    }
+
+    function startPlaneEngine() {
+      stopPlaneEngine();
+      if (!soundEnabled) return;
+      const ctx = ensureAudioContext();
+      if (!ctx) return;
+      const src = ctx.createBufferSource();
+      src.buffer = ensureEngineNoise(ctx);
+      src.loop = true;
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = 380;
+      const osc = ctx.createOscillator();
+      osc.type = "sawtooth";
+      osc.frequency.value = 72;
+      const oscGain = ctx.createGain();
+      oscGain.gain.value = 0.28;
+      const master = ctx.createGain();
+      const now = ctx.currentTime;
+      master.gain.setValueAtTime(0.0001, now);
+      const panner = typeof ctx.createStereoPanner === "function" ? ctx.createStereoPanner() : null;
+      src.connect(filter);
+      filter.connect(master);
+      osc.connect(oscGain);
+      oscGain.connect(master);
+      if (panner) {
+        master.connect(panner);
+        panner.connect(ctx.destination);
+      } else {
+        master.connect(ctx.destination);
+      }
+      src.start(now);
+      osc.start(now);
+      planeEngine = { ctx, src, osc, master, panner };
+    }
+
+    function updatePlaneEngine(pos) {
+      if (!soundEnabled) {
+        if (planeEngine) stopPlaneEngine();
+        return;
+      }
+      if (!planeEngine) startPlaneEngine();
+      if (!planeEngine) return;
+      const dist = camera ? BABYLON.Vector3.Distance(camera.position, pos) : 0;
+      const vol = 0.2 * Math.max(0.05, Math.pow(1 - Math.min(1, dist / 180), 1.25));
+      const now = planeEngine.ctx.currentTime;
+      planeEngine.master.gain.setTargetAtTime(vol, now, 0.08);
+      if (planeEngine.panner && camera) {
+        const yaw = player ? player.yaw : 0;
+        const dx = pos.x - camera.position.x;
+        const dz = pos.z - camera.position.z;
+        const len = Math.hypot(dx, dz) || 1;
+        const pan = (dx / len) * Math.cos(yaw) + (dz / len) * -Math.sin(yaw);
+        planeEngine.panner.pan.setTargetAtTime(Math.max(-0.85, Math.min(0.85, pan)), now, 0.05);
+      }
+    }
+
+    function stopPlaneEngine() {
+      const audio = planeEngine;
+      planeEngine = null;
+      if (!audio) return;
+      const now = audio.ctx.currentTime;
+      try {
+        audio.master.gain.cancelScheduledValues(now);
+        audio.master.gain.setValueAtTime(Math.max(audio.master.gain.value, 0.0001), now);
+        audio.master.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+        audio.src.stop(now + 0.14);
+        audio.osc.stop(now + 0.14);
+      } catch (err) {}
+    }
+
+    function playAirstrikeGunSound(origin) {
+      if (!soundEnabled) return;
+      const ctx = ensureAudioContext();
+      if (!ctx) return;
+      const dist = camera ? BABYLON.Vector3.Distance(camera.position, origin) : 0;
+      if (dist > 170) return;
+      const distFactor = Math.max(0.08, Math.pow(1 - Math.min(1, dist / 170), 1.4));
+      const masterVol = 0.16 * distFactor;
+      const now = ctx.currentTime;
+      const outNode = stereoPan(ctx, origin, now);
+      const noise = ctx.createBufferSource();
+      noise.buffer = ensureMgNoise(ctx);
+      noise.playbackRate.setValueAtTime(0.92 + Math.random() * 0.16, now);
+      const filter = ctx.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(1800, now);
+      filter.frequency.exponentialRampToValueAtTime(500, now + 0.05);
+      filter.Q.setValueAtTime(0.7, now);
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(masterVol, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
+      noise.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(outNode);
+      noise.start(now);
+      noise.stop(now + 0.06);
+
+      const crack = ctx.createOscillator();
+      crack.type = "square";
+      crack.frequency.setValueAtTime(640, now);
+      crack.frequency.exponentialRampToValueAtTime(180, now + 0.03);
+      const crackGain = ctx.createGain();
+      crackGain.gain.setValueAtTime(masterVol * 0.35, now);
+      crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.032);
+      crack.connect(crackGain);
+      crackGain.connect(outNode);
+      crack.start(now);
+      crack.stop(now + 0.035);
+    }
+
+    function hideAirstrikeFlashes() {
+      if (!mustang) return;
+      for (let i = 0; i < mustang.flashes.length; i++) mustang.flashes[i].isVisible = false;
+    }
+
+    function strikeFlightDir(strike) {
+      if (!strike.dir) {
+        strike.dir = strike.end.subtract(strike.start);
+        if (strike.dir.lengthSquared() < 1e-4) strike.dir.set(0, -1, 0);
+        else strike.dir.normalize();
+      }
+      return strike.dir;
+    }
+
+    function fireAirstrikeGuns(strike, pos) {
+      const flight = strikeFlightDir(strike);
+      const side = BABYLON.Vector3.Cross(flight, BABYLON.Axis.Y);
+      if (side.lengthSquared() < 1e-4) side.set(1, 0, 0);
+      else side.normalize();
+      const isCaller = Boolean(player && strike.callerUnitId === player.unitId);
+      const shotIndex = strike.lastShot;
+      for (let wing = 0; wing < mustang.flashes.length; wing++) {
+        const flash = mustang.flashes[wing];
+        const muzzle = flash.getAbsolutePosition();
+        flash.isVisible = true;
+        const targets = strike.targets && strike.targets.length ? strike.targets : [strike.aim];
+        const target = targets[(shotIndex + wing) % targets.length];
+        const j = ((shotIndex * 3 + wing * 2) % 5) / 5 - 0.5;
+        const ax = target.x + side.x * j * 0.3;
+        const ay = target.y;
+        const az = target.z + side.z * j * 0.3;
+        const dx = ax - muzzle.x;
+        const dy = ay - muzzle.y;
+        const dz = az - muzzle.z;
+        const mag = Math.hypot(dx, dy, dz);
+        if (mag < 0.05) continue;
+        const dirx = dx / mag;
+        const diry = dy / mag;
+        const dirz = dz / mag;
+        const maxRange = Math.min(90, mag + 2);
+        const envHit = castEnvironmentRay(muzzle.x, muzzle.y, muzzle.z, dirx, diry, dirz, maxRange, true);
+        let closest = envHit.dist;
+        let hitKind = envHit.hitKind;
+        let hitSoldier = null;
+        if (isCaller) {
+          for (let i = 0; i < soldiers.length; i++) {
+            const soldier = soldiers[i];
+            if (!soldier.alive || soldier.team === strike.team) continue;
+            const d = intersectRayAABB(
+              muzzle.x, muzzle.y, muzzle.z, dirx, diry, dirz,
+              soldier.position.x - 0.46, soldier.position.x + 0.46,
+              soldier.position.y, soldier.position.y + 2.05,
+              soldier.position.z - 0.46, soldier.position.z + 0.46,
+              closest
+            );
+            if (d >= 0 && d < closest) {
+              closest = d;
+              hitSoldier = soldier;
+              hitKind = soldier.team === "green" ? "green" : "tan";
+            }
+          }
+        }
+        const hitPoint = muzzle.add(new BABYLON.Vector3(dirx, diry, dirz).scale(closest));
+        if (hitSoldier && isCaller && player) {
+          let attacker = player;
+          if (strike.callerUnitId) {
+            for (let i = 0; i < soldiers.length; i++) {
+              if (soldiers[i].unitId === strike.callerUnitId) {
+                attacker = soldiers[i];
+                break;
+              }
+            }
+          }
+          const aimDir = new BABYLON.Vector3(dirx, diry, dirz);
+          hitSoldier.velocity.addInPlace(aimDir.scale(4.5));
+          hitSoldier.tookFireTimer = 1.4;
+          spawnImpactFx(hitPoint, hitSoldier.team === "green" ? "greenPlastic" : "tanPlastic");
+          playImpactHitSound(hitPoint, true);
+          if (mpState.active) {
+            hitSoldier.model.flinchTimer = 1.0;
+            sendNetMessage({
+              type: "damage_unit",
+              targetUnitId: hitSoldier.unitId,
+              attackerUnitId: attacker.unitId,
+              amount: AIRSTRIKE_DAMAGE,
+              shotDir: { x: dirx, y: diry, z: dirz }
+            });
+          } else {
+            applyDamage(hitSoldier, AIRSTRIKE_DAMAGE, attacker);
+          }
+        } else if (hitKind === "sand") {
+          spawnImpactFx(hitPoint, getTerrainImpactFx());
+        } else if (hitKind === "toy") {
+          spawnImpactFx(hitPoint, "toyPlastic");
+        }
+        spawnTracer(muzzle, hitPoint, AIRSTRIKE_TRACER);
+      }
+      strike.flashLeft = 0.04;
+      playAirstrikeGunSound(pos);
+    }
+
+    function endAirstrike() {
+      activeStrike = null;
+      if (mustang && mustang.root) {
+        mustang.root.setEnabled(false);
+        hideAirstrikeFlashes();
+      }
+      stopPlaneEngine();
+      updateAirstrikeUI();
+    }
+
+    function beginAirstrike(spec) {
+      const mine = Boolean(player && spec.callerUnitId === player.unitId);
+      if (!mustang || !mustang.root || activeStrike || gameEnded || isSetupOpen || !spec.start || !spec.end) {
+        if (mine) {
+          airstrikePending = false;
+          updateAirstrikeUI();
+        }
+        return;
+      }
+      const start = new BABYLON.Vector3(Number(spec.start.x), Number(spec.start.y), Number(spec.start.z));
+      const end = new BABYLON.Vector3(Number(spec.end.x), Number(spec.end.y), Number(spec.end.z));
+      const nadir = spec.nadir
+        ? new BABYLON.Vector3(Number(spec.nadir.x), Number(spec.nadir.y), Number(spec.nadir.z))
+        : BABYLON.Vector3.Lerp(start, end, 0.72);
+      const aim = spec.aim
+        ? new BABYLON.Vector3(Number(spec.aim.x), Number(spec.aim.y), Number(spec.aim.z))
+        : end.clone();
+      const rawTargets = Array.isArray(spec.targets) ? spec.targets : (spec.aim && spec.aim.targets);
+      const targets = [];
+      if (Array.isArray(rawTargets)) {
+        for (let i = 0; i < rawTargets.length && targets.length < 12; i++) {
+          const t = rawTargets[i];
+          if (!t) continue;
+          const tx = Number(t.x);
+          const ty = Number(t.y);
+          const tz = Number(t.z);
+          if ([tx, ty, tz].every(Number.isFinite)) targets.push({ x: tx, y: ty, z: tz });
+        }
+      }
+      if (!targets.length) targets.push({ x: aim.x, y: aim.y, z: aim.z });
+      if (![start.x, start.y, start.z, nadir.x, nadir.y, nadir.z, end.x, end.y, end.z, aim.x, aim.y, aim.z].every(Number.isFinite)) {
+        if (mine) {
+          airstrikePending = false;
+          updateAirstrikeUI();
+        }
+        return;
+      }
+      activeStrike = {
+        start,
+        nadir,
+        end,
+        aim,
+        pullRadius: Number(spec.pullRadius) || 22,
+        targets,
+        team: spec.team === "tan" ? "tan" : "green",
+        callerUnitId: spec.callerUnitId,
+        seed: spec.seed || 1,
+        durationMs: spec.durationMs || 3200,
+        elapsed: 0,
+        lastShot: -1,
+        flashLeft: 0,
+        propAngle: 0
+      };
+      prepareStrikeFlight(activeStrike);
+      sampleStrike(activeStrike, 0);
+      pointMustang(mustang.root, activeStrike.sampleDir);
+      if (mine) {
+        airstrikePending = false;
+        if (airstrikeReady) spendAirstrikeCharge();
+      }
+      mustang.root.position.copyFrom(start);
+      mustang.root.setEnabled(true);
+      startPlaneEngine();
+      updateAirstrikeUI();
+    }
+
+    function requestAirstrike() {
+      if (!airstrikeReady || activeStrike || airstrikePending) return;
+      if (gameEnded || isSetupOpen || !player || !player.alive || !mustang) return;
+      const path = buildAirstrikePath(player.team);
+      if (mpState.active) {
+        airstrikePending = true;
+        updateAirstrikeUI();
+        sendNetMessage({
+          type: "call_airstrike",
+          start: path.start,
+          nadir: path.nadir,
+          end: path.end,
+          aim: path.aim,
+          targets: path.aim.targets,
+          pullRadius: path.pullRadius,
+          durationMs: path.durationMs
+        });
+        return;
+      }
+      beginAirstrike({
+        callerUnitId: player.unitId,
+        team: player.team,
+        seed: Math.floor(Math.random() * 0x7fffffff),
+        durationMs: path.durationMs,
+        start: path.start,
+        nadir: path.nadir,
+        end: path.end,
+        aim: path.aim,
+        targets: path.aim.targets,
+        pullRadius: path.pullRadius
+      });
+    }
+
+    function handleAirstrikeMessage(msg) {
+      if (!msg || msg.type === "airstrike_rejected") {
+        airstrikePending = false;
+        updateAirstrikeUI();
+        return;
+      }
+      if (msg.type === "airstrike_started") beginAirstrike(msg);
+    }
+
+    function updateAirstrike(dt) {
+      if (!activeStrike || !mustang) return;
+      if (gameEnded || isSetupOpen) {
+        endAirstrike();
+        return;
+      }
+      const strike = activeStrike;
+      strike.elapsed += dt;
+      const duration = Math.max(0.5, strike.durationMs / 1000);
+      const t = Math.min(1, strike.elapsed / duration);
+      sampleStrike(strike, t);
+      const pos = strike.samplePos;
+      mustang.root.position.copyFrom(pos);
+      pointMustang(mustang.root, strike.sampleDir);
+      if (mustang.prop && mustang.propBase) {
+        strike.propAngle += AIRSTRIKE_PROP_SPIN * dt;
+        BABYLON.Quaternion.RotationAxisToRef(BABYLON.Axis.X, strike.propAngle, mustang.spinQuat);
+        mustang.propBase.multiplyToRef(mustang.spinQuat, mustang.spinOut);
+        if (!mustang.prop.rotationQuaternion) mustang.prop.rotationQuaternion = new BABYLON.Quaternion();
+        mustang.prop.rotationQuaternion.copyFrom(mustang.spinOut);
+      }
+      if (strike.flashLeft > 0) {
+        strike.flashLeft -= dt;
+        if (strike.flashLeft <= 0) hideAirstrikeFlashes();
+      }
+      updatePlaneEngine(pos);
+      const firing = t <= (strike.gunUntil || 0.62);
+      const aimX = pos.x + strike.sampleDir.x * 14;
+      const aimZ = pos.z + strike.sampleDir.z * 14;
+      const overMap = firing && Math.abs(aimX) <= WORLD_LIMIT_X + 6 && Math.abs(aimZ) <= WORLD_LIMIT_Z + 6;
+      if (overMap) {
+        const shotIndex = Math.floor(strike.elapsed / AIRSTRIKE_FIRE_INTERVAL);
+        if (shotIndex > strike.lastShot) {
+          strike.lastShot = shotIndex;
+          fireAirstrikeGuns(strike, pos);
+        }
+      }
+      if (strike.elapsed >= duration) endAirstrike();
+    }
+
+    if (mobileAirstrikeBtnEl) {
+      mobileAirstrikeBtnEl.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        requestAirstrike();
+      }, { passive: false });
+      mobileAirstrikeBtnEl.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        requestAirstrike();
+      });
+    }
+
+    // =========================================================================
     // OVERHEAD PLATES (GUI Editor layout: gui/overheadPlates.json)
     // One shared fullscreen AdvancedDynamicTexture hosts every plate; each soldier
     // gets a lightweight control tree parsed from the template and data-bound at runtime.
@@ -4259,6 +5227,7 @@
       } else {
         document.body.classList.remove("touch-enabled");
       }
+      updateAirstrikeUI();
     }
 
     // Start with modal-open class because Setup Modal is visible initially
@@ -4535,6 +5504,7 @@
       if (e.code in keys) keys[e.code] = true;
       if (e.code === "KeyR") uiNotify("ui.retryRequested");
       if (e.code === "KeyM") uiNotify("ui.setupRequested");
+      if (e.code === "KeyE" && !e.repeat) requestAirstrike();
     });
 
     window.addEventListener("keyup", (e) => {
@@ -6710,6 +7680,7 @@
           target.model.overheadGroup.setEnabled(false);
         }
         if (target.isPlayer && !gameEnded) {
+          resetKillStreak();
           isPlayerKnockedDown = true;
           // Rigged soldiers raise the prompt from beginDeathFade once the fall finishes.
           if (!target.model.animationGroups) uiNotify("ui.playerKnockedDown");
@@ -7203,6 +8174,15 @@
               : Math.max(0, target.health - (msg.amount || 0));
           const newAlive =
             typeof msg.alive === "boolean" ? msg.alive : newHealth > 0;
+          if (
+            msg.killed &&
+            player &&
+            player.alive &&
+            msg.attackerUnitId === mpState.myUnitId &&
+            msg.targetUnitId !== mpState.myUnitId
+          ) {
+            noteKillStreak();
+          }
           applyNetworkDamageState(target, newHealth, newAlive);
           break;
         }
@@ -7223,6 +8203,12 @@
             physicsBall.velocity.y += msg.vy;
             physicsBall.velocity.z += msg.vz;
           }
+          break;
+        }
+
+        case "airstrike_started":
+        case "airstrike_rejected": {
+          handleAirstrikeMessage(msg);
           break;
         }
 
@@ -7614,6 +8600,7 @@
         target.deaths = (target.deaths || 0) + 1;
         if (attacker && attacker !== target) {
           attacker.kills = (attacker.kills || 0) + 1;
+          if (!mpState.active && attacker.isPlayer && attacker.alive) noteKillStreak();
         }
         // AI soldiers auto-respawn after 3 seconds while the match timer is active
         if (!target.isPlayer && !target.isRemotePlayer) {
@@ -7627,13 +8614,14 @@
         // If the local player was knocked down while the match is still running,
         // show the Respawn prompt for this player ONLY (gameEnded remains false so the battle never freezes!)
         if (target.isPlayer && !gameEnded) {
+          resetKillStreak();
           isPlayerKnockedDown = true;
           // Rigged soldiers raise the prompt from beginDeathFade once the fall finishes.
           if (!target.model.animationGroups) uiNotify("ui.playerKnockedDown");
         }
       }
 
-      updateHUD();
+      updateHUD(Boolean(attacker && attacker.isPlayer && target.health <= 0));
     }
 
     let lastHudUpdateMs = 0;
@@ -7707,6 +8695,8 @@
       if (gameEnded && !endedByHost) return;
       gameEnded = true;
       isPlayerKnockedDown = false;
+      airstrikePending = false;
+      endAirstrike();
       lastMatchEndInfo = {
         endedByHost,
         hostName: endedByHost ? (options && options.hostName) || "Host" : ""
@@ -7717,6 +8707,9 @@
     function resetGame() {
       gameEnded = false;
       isPlayerKnockedDown = false;
+      airstrikePending = false;
+      endAirstrike();
+      resetKillStreak();
       matchTimeRemaining =
         mpState.active && mpState.roster && mpState.roster.durationSec
           ? mpState.roster.durationSec
@@ -8614,6 +9607,9 @@
           tracers.splice(i, 1);
         }
       }
+
+      updateAirstrike(dt);
+      updateAirstrikeUI();
 
       // Update dynamic physics beach ball
       updatePhysicsBeachBall(dt);
