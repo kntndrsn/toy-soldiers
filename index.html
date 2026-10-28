@@ -157,26 +157,25 @@
       white-space: nowrap;
     }
 
-    #kill-credit {
+    #kill-credit-layer {
       position: absolute;
       left: 50%;
       top: calc(50% - 18px);
-      transform: translate(-50%, -100%);
+      width: 0;
+      height: 0;
+      pointer-events: none;
+      z-index: 6;
+    }
+
+    .kill-credit {
+      position: absolute;
+      left: 0;
+      top: 0;
       font-size: 13px;
       font-weight: 600;
-      color: rgba(255, 255, 255, 0.6);
+      color: #ffffff;
       white-space: nowrap;
       pointer-events: none;
-      opacity: 0;
-    }
-
-    #kill-credit.show {
-      animation: kill-credit-fade 0.5s linear forwards;
-    }
-
-    @keyframes kill-credit-fade {
-      0%, 70% { opacity: 0.6; }
-      100% { opacity: 0; }
     }
 
     #streak-label {
@@ -950,7 +949,7 @@
         font-size: 11px;
       }
 
-      #kill-credit {
+      .kill-credit {
         font-size: 12px;
       }
 
@@ -1223,7 +1222,7 @@
     <div id="mp-toast-container"></div>
 
     <div id="crosshair"></div>
-    <span id="kill-credit" aria-hidden="true">+1</span>
+    <div id="kill-credit-layer" aria-hidden="true"></div>
 
     <!-- Streamlined New Match & Multiplayer Modal -->
     <div id="setup-modal">
@@ -4332,16 +4331,19 @@
     // =========================================================================
     // GRENADES — hold to aim, release to throw. Predict and live flight share one step.
     // =========================================================================
-    const GRENADE_SPEED = 16;
-    const GRENADE_LOFT = 8;
-    const GRENADE_GRAVITY = 14.5;
+    const GRENADE_SPEED = 27;
+    const GRENADE_LOFT = 11;
+    const GRENADE_GRAVITY = 13;
     const GRENADE_STEP = 1 / 45;
     const GRENADE_MAX_FLIGHT = 4;
     const GRENADE_ARC_SAMPLES = 28;
-    const GRENADE_ORIGIN_FORWARD = 0.4;
+    const GRENADE_AIM_RANGE = 30;
+    // Far enough in front of the body that a sprint cannot leave the spawn behind the soldier.
+    const GRENADE_ORIGIN_FORWARD = 1.2;
     const GRENADE_ORIGIN_UP = 1.3;
-    const GRENADE_BLAST_RADIUS = 10;
-    const GRENADE_MAX_DAMAGE = 200;
+    const GRENADE_BLAST_RADIUS = 20;
+    const GRENADE_MAX_DAMAGE = 340;
+    const GRENADE_DAMAGE_FALLOFF = 1.2;
     const GRENADE_MESH_SIZE = 0.28;
     const GRENADE_FX_POOL = 4;
     const GRENADE_FX_COUNT = 72;
@@ -4349,7 +4351,8 @@
     const GRENADE_EXPLODE_MATCH = 10;
     const GRENADE_FX_DEDUPE_RADIUS = 4;
     const GRENADE_FX_DEDUPE_MS = 700;
-    // Standing throw is 3s. The grenade leaves 0.5s before the clip ends; another aim waits out the clip.
+    // Standing throw releases 1.5s into the clip. Aim is chosen on button release; the grenade
+    // then leaves from wherever the soldier is when this delay ends.
     const GRENADE_THROW_DELAY = 1.5;
     const GRENADE_THROW_COOLDOWN = 3;
     // Standing-throw clip faces 90° left of the other clips. Positive yaw brings it forward.
@@ -4688,9 +4691,9 @@
         y: soldier.position.y + GRENADE_ORIGIN_UP,
         z: soldier.position.z + cosY * GRENADE_ORIGIN_FORWARD
       };
-      const aimX = soldier.position.x + sinY * 14;
-      const aimY = soldier.position.y + 1.55 - Math.sin(pitch) * 6.5;
-      const aimZ = soldier.position.z + cosY * 14;
+      const aimX = soldier.position.x + sinY * GRENADE_AIM_RANGE;
+      const aimY = soldier.position.y + 1.55 - Math.sin(pitch) * GRENADE_AIM_RANGE * 0.46;
+      const aimZ = soldier.position.z + cosY * GRENADE_AIM_RANGE;
       let dx = aimX - origin.x;
       let dy = aimY - origin.y;
       let dz = aimZ - origin.z;
@@ -4775,6 +4778,17 @@
       return Math.hypot(Number(velocity.x), Number(velocity.y), Number(velocity.z)) <= 80;
     }
 
+    // Origin is sampled when the grenade leaves, not when the button was released.
+    function grenadeLaunchOrigin(soldier, fallback) {
+      if (!soldier || !soldier.position) return fallback;
+      const yaw = soldier.yaw || 0;
+      return {
+        x: soldier.position.x + Math.sin(yaw) * GRENADE_ORIGIN_FORWARD,
+        y: soldier.position.y + GRENADE_ORIGIN_UP,
+        z: soldier.position.z + Math.cos(yaw) * GRENADE_ORIGIN_FORWARD
+      };
+    }
+
     function launchGrenade(origin, velocity, options) {
       if (!grenadeVectorsSane(origin, velocity)) return;
       const node = acquireGrenadeNode();
@@ -4813,9 +4827,11 @@
         job.timeLeft -= dt;
         if (job.timeLeft > 0) continue;
         pendingGrenadeThrows.splice(i, 1);
-        const thrower = job.options.thrower;
+        const thrower = job.options.thrower ||
+          (job.options.throwerUnitId && soldiersById.get(job.options.throwerUnitId));
         if (!job.options.cosmetic && (!thrower || !thrower.alive || gameEnded)) continue;
-        launchGrenade(job.origin, job.velocity, job.options);
+        const origin = grenadeLaunchOrigin(thrower, job.origin);
+        launchGrenade(origin, job.velocity, job.options);
       }
     }
 
@@ -4890,7 +4906,7 @@
         const dist = soldierBlastDistance(target, pos.x, pos.y, pos.z);
         if (dist >= GRENADE_BLAST_RADIUS) continue;
         const falloff = 1 - dist / GRENADE_BLAST_RADIUS;
-        const amount = Math.round(GRENADE_MAX_DAMAGE * falloff * falloff);
+        const amount = Math.round(GRENADE_MAX_DAMAGE * Math.pow(falloff, GRENADE_DAMAGE_FALLOFF));
         if (amount <= 0) continue;
         target.tookFireTimer = 1.4;
         if (mpState.active) {
@@ -7536,13 +7552,42 @@
     const healthBarFillEl = document.getElementById("health-bar-fill");
     const playerKillsEl = document.getElementById("player-kills");
     const playerDeathsEl = document.getElementById("player-deaths");
-    const killCreditEl = document.getElementById("kill-credit");
+    const killCreditLayerEl = document.getElementById("kill-credit-layer");
+    const KILL_CREDIT_LIFE = 0.5;
+    const KILL_CREDIT_LINE = 18;
+    const activeKillCredits = [];
+
+    function placeKillCredit(credit) {
+      const rise = credit.shift + (credit.age / KILL_CREDIT_LIFE) * KILL_CREDIT_LINE;
+      credit.el.style.transform = "translate(-50%, calc(-100% - " + rise + "px))";
+      credit.el.style.opacity = String(0.9 * (1 - credit.age / KILL_CREDIT_LIFE));
+    }
 
     function showKillCredit() {
-      if (!killCreditEl) return;
-      killCreditEl.classList.remove("show");
-      void killCreditEl.offsetWidth;
-      killCreditEl.classList.add("show");
+      if (!killCreditLayerEl) return;
+      const el = document.createElement("span");
+      el.className = "kill-credit";
+      el.textContent = "+1";
+      killCreditLayerEl.appendChild(el);
+      for (let i = 0; i < activeKillCredits.length; i++) {
+        activeKillCredits[i].shift += KILL_CREDIT_LINE;
+      }
+      const credit = { el, age: 0, shift: 0 };
+      activeKillCredits.push(credit);
+      placeKillCredit(credit);
+    }
+
+    function updateKillCredits(dt) {
+      for (let i = activeKillCredits.length - 1; i >= 0; i--) {
+        const credit = activeKillCredits[i];
+        credit.age += dt;
+        if (credit.age >= KILL_CREDIT_LIFE) {
+          credit.el.remove();
+          activeKillCredits.splice(i, 1);
+          continue;
+        }
+        placeKillCredit(credit);
+      }
     }
     const matchTimerEl = document.getElementById("match-timer");
     const greenKillsEl = document.getElementById("green-kills");
@@ -10688,6 +10733,7 @@
       updateAirstrike(dt);
       updateAirstrikeUI();
       updateLiveGrenades(dt);
+      updateKillCredits(dt);
 
       // Update dynamic physics beach ball
       updatePhysicsBeachBall(dt);
