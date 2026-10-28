@@ -954,13 +954,15 @@
           <span id="presence-reconnect-text" style="display: none;"></span>
         </span>
         <button id="toggle-sound-btn" class="hud-chip-btn" type="button">🔊 Sound</button>
+        <button id="toggle-fps-btn" class="hud-chip-btn" type="button">30 FPS</button>
+        <button id="toggle-debug-btn" class="hud-chip-btn" type="button">Stats</button>
         <button id="toggle-touch-btn" class="hud-chip-btn" type="button">Touch UI</button>
         <button id="open-teams-btn" class="hud-chip-btn" type="button">Match Setup (M)</button>
         <button id="end-match-btn" class="hud-chip-btn" type="button" style="display: none; border-color: rgba(255, 115, 95, 0.75); color: #ffb8ad; background: rgba(120, 24, 18, 0.85);">⏹ End Match</button>
       </div>
     </div>
 
-    <div id="perf-hud">
+    <div id="perf-hud" hidden>
       <div><span id="perf-fps" style="color: #84ff78; font-weight: bold;">60 FPS</span></div>
       <div id="perf-mp-details" style="display: none;">
         <div>Ping: <span id="perf-ping" style="color: #84ff78; font-weight: bold;">-- ms</span> &bull; Units: <span id="perf-units">0</span></div>
@@ -1173,6 +1175,17 @@
       }
     } catch (err) {}
 
+    const FPS_STORAGE_KEY = "toy_soldiers_max_fps";
+    const DEBUG_STORAGE_KEY = "toy_soldiers_debug";
+    let maxClientFps = 30;
+    let debugEnabled = false;
+    let MIN_FRAME_INTERVAL_MS = 1000 / 30;
+    try {
+      const savedFps = localStorage.getItem(FPS_STORAGE_KEY);
+      if (savedFps === "60") maxClientFps = 60;
+      debugEnabled = localStorage.getItem(DEBUG_STORAGE_KEY) === "1";
+    } catch (err) {}
+
     // =========================================================================
     // 1. BABYLON ENGINE, SCENE, CAMERA & TONE MAPPING
     // =========================================================================
@@ -1181,7 +1194,7 @@
       preserveDrawingBuffer: true,
       stencil: true
     });
-    engine.maxFPS = 60;
+    engine.maxFPS = maxClientFps;
 
     const scene = new BABYLON.Scene(engine);
     scene.clearColor = new BABYLON.Color4(0.51, 0.78, 0.96, 1.0);
@@ -2679,7 +2692,7 @@
           );
           physicsBall.velocity.set(0, 0, 0);
         }
-        if (tsNavGraphReady) rebuildNavGraphFromObstacles();
+        if (tsNavGraphReady && isMultiplayerAuthority()) rebuildNavGraphFromObstacles();
         return;
       }
 
@@ -2767,7 +2780,7 @@
         }
       });
 
-      if (tsNavGraphReady) rebuildNavGraphFromObstacles();
+      if (tsNavGraphReady && isMultiplayerAuthority()) rebuildNavGraphFromObstacles();
     }
 
     rebuildSandboxEnvironment(WORLD_LIMIT);
@@ -3610,8 +3623,17 @@
       presence: null, // { solo, multiplayer, total } app-wide counts from server (refreshed ~5s)
       localMatchEndTimestamp: 0,
       sendTimer: 0,
-      hostSendTimer: 0
+      hostSendTimer: 0,
+      spawnJobId: 0,
+      pendingWorld: null,
+      lastPlayerState: null,
+      playerKeepalive: 0,
+      reconnectBackoffMs: 1500
     };
+    let lastAiPackedById = new Map();
+    let lastBallSent = null;
+    let hostKeyframeTimer = 0;
+    let hiddenTabFps = false;
 
     // Live Performance & Network Telemetry State
     const perfTelemetry = {
@@ -3660,11 +3682,36 @@
         totalUnits: soldiers.length
       };
     }
-    window.__TOY_SOLDIERS_PERF__ = perfTelemetry;
-    window.getToySoldiersPerfProfile = getClientPerfSnapshot;
+    if (debugEnabled) {
+      window.__TOY_SOLDIERS_PERF__ = perfTelemetry;
+      window.getToySoldiersPerfProfile = getClientPerfSnapshot;
+    }
 
     function isMultiplayerAuthority() {
       return !mpState.active || mpState.clientId === mpState.hostId;
+    }
+
+    function ensureAuthorityBrains() {
+      if (!isMultiplayerAuthority()) return;
+      if (tsNavGraphReady && !navGraphState.graph) {
+        rebuildNavGraphFromObstacles();
+      }
+      for (let i = 0; i < soldiers.length; i++) {
+        const s = soldiers[i];
+        if (s.isPlayer || s.isRemotePlayer) continue;
+        if (!s.vehicle || !s.aiProfile) {
+          const skillProfile = getAiSkillProfile(getActiveAiSkill());
+          s.fireRate = (0.78 + (s.slotIndex % 3) * 0.15) * skillProfile.fireRateMul;
+          attachYukaBrain(s);
+        }
+      }
+    }
+
+    function soldiersMatchRoster(roster) {
+      if (!roster || !soldiers.length) return false;
+      const expected = Number(roster.greenTotal || 0) + Number(roster.tanTotal || 0);
+      if (soldiers.length !== expected) return false;
+      return getActiveMapType() === builtMapType;
     }
 
     function sendNetMessage(payload) {
@@ -3954,7 +4001,8 @@
       return { x: chosenPt.x, z: chosenPt.z, yaw };
     }
 
-    function spawnAllSoldiers() {
+    function spawnAllSoldiers(opts = {}) {
+      const chunk = Boolean(opts.chunk);
       const targetMapType = getActiveMapType();
       const targetWorldLimit =
         targetMapType === "shoebox"
@@ -3968,6 +4016,9 @@
       soldiers.length = 0;
       soldiersById.clear();
       clearYukaBrains();
+      lastAiPackedById = new Map();
+      lastBallSent = null;
+      hostKeyframeTimer = 0;
 
       const greenTotal = Math.min(
         MAX_BOTS_PER_TEAM + 1,
@@ -3976,7 +4027,7 @@
           : configuredFriendlyCount + 1
       );
       const tanTotal = Math.min(
-        MAX_BOTS_PER_TEAM,
+        MAX_BOTS_PER_TEAM + 1,
         mpState.active && mpState.roster
           ? mpState.roster.tanTotal
           : configuredEnemyCount
@@ -3998,7 +4049,7 @@
         });
       }
 
-      function createTeamUnits(team, count) {
+      async function createTeamUnits(team, count) {
         for (let i = 0; i < count; i++) {
           const unitId = `${team}_${i}`;
           const isLocalPlayer = unitId === myUnitId;
@@ -4094,7 +4145,7 @@
             tookFireTimer: 0
           };
 
-          if (!isLocalPlayer && !isRemotePlayer) {
+          if (!isLocalPlayer && !isRemotePlayer && isMultiplayerAuthority()) {
             const skillProfile = getAiSkillProfile(getActiveAiSkill());
             unit.fireRate *= skillProfile.fireRateMul;
             attachYukaBrain(unit);
@@ -4110,24 +4161,35 @@
           if (isLocalPlayer) {
             player = unit;
           }
+          if (chunk && (i + 1) % 12 === 0) {
+            await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+          }
         }
       }
 
-      createTeamUnits("green", greenTotal);
-      createTeamUnits("tan", tanTotal);
+      const finishSpawn = () => {
+        if (physicsBall) {
+          const bx = 13;
+          const bz = -5;
+          physicsBall.mesh.position.set(
+            bx,
+            getSandHeight(bx, bz) + physicsBall.radius,
+            bz
+          );
+          physicsBall.velocity.set(0, 0, 0);
+        }
+        updateHUD(true);
+      };
 
-      if (physicsBall) {
-        const bx = 13;
-        const bz = -5;
-        physicsBall.mesh.position.set(
-          bx,
-          getSandHeight(bx, bz) + physicsBall.radius,
-          bz
-        );
-        physicsBall.velocity.set(0, 0, 0);
+      if (!chunk) {
+        createTeamUnits("green", greenTotal);
+        createTeamUnits("tan", tanTotal);
+        finishSpawn();
+        return Promise.resolve();
       }
-
-      updateHUD(true);
+      return createTeamUnits("green", greenTotal)
+        .then(() => createTeamUnits("tan", tanTotal))
+        .then(finishSpawn);
     }
 
     // =========================================================================
@@ -4573,6 +4635,57 @@
         } catch (err) {}
         updateSoundButtonLabel();
         if (soundEnabled) ensureAudioContext();
+      });
+    }
+
+    const toggleFpsBtnEl = document.getElementById("toggle-fps-btn");
+    const toggleDebugBtnEl = document.getElementById("toggle-debug-btn");
+    const perfHudEl = document.getElementById("perf-hud");
+
+    function applyMaxClientFps() {
+      const cap = hiddenTabFps ? 10 : maxClientFps;
+      engine.maxFPS = cap;
+      MIN_FRAME_INTERVAL_MS = 1000 / cap;
+      if (toggleFpsBtnEl) {
+        toggleFpsBtnEl.textContent = `${maxClientFps} FPS`;
+        toggleFpsBtnEl.style.opacity = maxClientFps === 30 ? "0.85" : "1";
+      }
+    }
+
+    function applyDebugMode() {
+      if (perfHudEl) perfHudEl.hidden = !debugEnabled;
+      if (toggleDebugBtnEl) {
+        toggleDebugBtnEl.textContent = debugEnabled ? "Stats On" : "Stats";
+        toggleDebugBtnEl.style.opacity = debugEnabled ? "1" : "0.65";
+      }
+      if (debugEnabled) {
+        window.__TOY_SOLDIERS_PERF__ = perfTelemetry;
+        window.getToySoldiersPerfProfile = getClientPerfSnapshot;
+        updatePerfHudDOM();
+      } else {
+        try {
+          delete window.__TOY_SOLDIERS_PERF__;
+          delete window.getToySoldiersPerfProfile;
+        } catch (err) {}
+      }
+    }
+
+    if (toggleFpsBtnEl) {
+      toggleFpsBtnEl.addEventListener("click", () => {
+        maxClientFps = maxClientFps === 30 ? 60 : 30;
+        try {
+          localStorage.setItem(FPS_STORAGE_KEY, String(maxClientFps));
+        } catch (err) {}
+        applyMaxClientFps();
+      });
+    }
+    if (toggleDebugBtnEl) {
+      toggleDebugBtnEl.addEventListener("click", () => {
+        debugEnabled = !debugEnabled;
+        try {
+          localStorage.setItem(DEBUG_STORAGE_KEY, debugEnabled ? "1" : "0");
+        } catch (err) {}
+        applyDebugMode();
       });
     }
 
@@ -5460,7 +5573,7 @@
     const perfUnitsEl = document.getElementById("perf-units");
 
     function updatePerfHudDOM() {
-      if (!perfFpsEl) return;
+      if (!debugEnabled || !perfFpsEl) return;
 
       const fps = Math.round(perfTelemetry.fps);
       perfFpsEl.textContent = `${fps} FPS`;
@@ -5842,8 +5955,8 @@
     }
 
     function pollServerRoomsPreview() {
-      // Do not poll server during solo gameplay when Setup Modal is closed
-      if (!isSetupOpen && !mpState.active) return;
+      // Only poll the match browser while Match Setup is open (never in-match)
+      if (!isSetupOpen) return;
 
       const httpBase = getServerHttpBase();
       const tokenParam = mpState.clientToken
@@ -5852,8 +5965,19 @@
 
       const fetchStart = performance.now();
       fetch(`${httpBase}/rooms${tokenParam}`, { cache: "no-store" })
-        .then((r) => r.json())
+        .then((r) => {
+          if (r.status === 429) {
+            console.warn("HTTP 429 Too Many Requests", `${httpBase}/rooms`);
+            mpState.reconnectBackoffMs = Math.min(
+              15000,
+              Math.max(2000, (mpState.reconnectBackoffMs || 1500) * 2)
+            );
+            return null;
+          }
+          return r.json();
+        })
         .then((data) => {
+          if (!data) return;
           if (!mpState.active) {
             perfTelemetry.pingMs = performance.now() - fetchStart;
           }
@@ -6067,9 +6191,16 @@
 
     function sendPresenceHeartbeat() {
       if (typeof fetch !== "function") return;
-      const mode = mpState.active ? "multiplayer" : "solo";
+      if (mpState.active) return;
+      const mode = "solo";
       fetch(getPresenceUrl(mode), { cache: "no-store" })
-        .then((r) => r.json())
+        .then((r) => {
+          if (r.status === 429) {
+            console.warn("HTTP 429 Too Many Requests", getPresenceUrl(mode));
+            return null;
+          }
+          return r.json();
+        })
         .then((data) => {
           if (data) applyPresence(data.presence);
         })
@@ -6178,6 +6309,7 @@
       }
       cancelAutoReconnect();
       updateMpStatusBadge();
+      const delay = mpState.reconnectBackoffMs || 1500;
       mpState.reconnectTimer = setTimeout(() => {
         mpState.reconnectTimer = null;
         if (
@@ -6193,7 +6325,7 @@
             true
           );
         }
-      }, 1500);
+      }, delay);
     }
 
     window.addEventListener("online", () => {
@@ -6209,6 +6341,8 @@
     });
 
     document.addEventListener("visibilitychange", () => {
+      hiddenTabFps = document.visibilityState === "hidden";
+      applyMaxClientFps();
       if (document.visibilityState === "visible") {
         pollServerRoomsPreview();
         if (
@@ -6446,9 +6580,19 @@
           }
           mpModalStatusEl.textContent = "Disconnected";
           mpModalStatusEl.style.color = "#ff9e7b";
+          const closeCode = event && typeof event.code === "number" ? event.code : 0;
+          const closeReason = (event && event.reason) || "";
+          console.warn("WebSocket closed", closeCode, closeReason || "(no reason)");
+          if (closeCode === 1008) {
+            mpState.reconnectBackoffMs = Math.min(
+              15000,
+              Math.max(2000, (mpState.reconnectBackoffMs || 1500) * 2)
+            );
+          }
           if (!mpState.intentionalDisconnect && mpState.lastActiveRoomCode && !gameEnded) {
+            const extra = closeCode ? ` (${closeCode}${closeReason ? " " + closeReason : ""})` : "";
             showMpToast(
-              `⚠️ Connection dropped — reconnecting to ${mpState.lastActiveRoomCode}...`,
+              `⚠️ Connection dropped — reconnecting to ${mpState.lastActiveRoomCode}...${extra}`,
               "#ffd584"
             );
             scheduleAutoReconnect();
@@ -6700,6 +6844,7 @@
 
         case "room_joined": {
           cancelAutoReconnect();
+          mpState.reconnectBackoffMs = 1500;
           mpState.active = true;
           announcePresence();
           mpState.intentionalDisconnect = false;
@@ -6724,24 +6869,46 @@
 
           updateMpStatusBadge();
           uiNotify("ui.matchStarted");
-          resetGame();
-          updateHostControlsVisibility();
-
-          if (typeof msg.roster.remainingSec === "number") {
-            syncMatchTimerFromServer(msg.roster.remainingSec);
-          }
-          if (msg.roster.unitStats) {
-            applyServerUnitStats(msg.roster.unitStats);
-          }
-          if (msg.world) {
-            applyWorldStateSnapshot(msg.world, true);
-          }
-          if (msg.roster.matchEnded) {
-            endMatchByTimeLimit(
-              msg.roster.endedByHost
-                ? { endedByHost: true, hostName: msg.roster.hostName }
-                : null
-            );
+          const finishJoin = () => {
+            ensureAuthorityBrains();
+            updateHostControlsVisibility();
+            if (typeof msg.roster.remainingSec === "number") {
+              syncMatchTimerFromServer(msg.roster.remainingSec);
+            }
+            if (msg.roster.unitStats) {
+              applyServerUnitStats(msg.roster.unitStats);
+            }
+            const world = mpState.pendingWorld || msg.world;
+            mpState.pendingWorld = null;
+            if (world) {
+              applyWorldStateSnapshot(world, true);
+            }
+            if (msg.roster.matchEnded) {
+              endMatchByTimeLimit(
+                msg.roster.endedByHost
+                  ? { endedByHost: true, hostName: msg.roster.hostName }
+                  : null
+              );
+            }
+          };
+          if (soldiersMatchRoster(msg.roster)) {
+            gameEnded = false;
+            isPlayerKnockedDown = false;
+            syncRosterHumanFlags(msg.roster);
+            finishJoin();
+          } else {
+            const jobId = ++mpState.spawnJobId;
+            matchTimeRemaining =
+              msg.roster && msg.roster.durationSec
+                ? msg.roster.durationSec
+                : configuredDurationSec;
+            mpState.localMatchEndTimestamp = performance.now() + matchTimeRemaining * 1000;
+            gameEnded = false;
+            isPlayerKnockedDown = false;
+            spawnAllSoldiers({ chunk: true }).then(() => {
+              if (jobId !== mpState.spawnJobId) return;
+              finishJoin();
+            });
           }
 
           const pCount = msg.roster.players ? msg.roster.players.length : 1;
@@ -6805,10 +6972,14 @@
           } else {
             syncRosterHumanFlags(msg.roster);
           }
+          ensureAuthorityBrains();
           break;
         }
 
         case "timer_sync": {
+          if (msg.presence) {
+            applyPresence(msg.presence);
+          }
           if (typeof msg.remainingSec === "number") {
             syncMatchTimerFromServer(msg.remainingSec);
           }
@@ -6884,6 +7055,9 @@
         }
 
         case "room_tick": {
+          if (typeof msg.remainingSec === "number") {
+            syncMatchTimerFromServer(msg.remainingSec);
+          }
           if (Array.isArray(msg.players)) {
             for (let i = 0; i < msg.players.length; i++) {
               const p = msg.players[i];
@@ -6929,14 +7103,18 @@
             }
           }
           if (msg.world) {
-            handleNetworkMessage({
-              type: "world_state",
-              remainingSec: msg.world.remainingSec,
-              matchEnded: msg.world.matchEnded,
-              aiPacked: msg.world.aiPacked,
-              aiUnits: msg.world.aiUnits,
-              ball: msg.world.ball
-            });
+            if (mpState.spawnJobId && !soldiers.length) {
+              mpState.pendingWorld = msg.world;
+            } else {
+              handleNetworkMessage({
+                type: "world_state",
+                remainingSec: msg.world.remainingSec,
+                matchEnded: msg.world.matchEnded,
+                aiPacked: msg.world.aiPacked,
+                aiUnits: msg.world.aiUnits,
+                ball: msg.world.ball
+              });
+            }
           }
           break;
         }
@@ -8405,22 +8583,13 @@
         updatePerfHudDOM();
       }
 
-      if (mpState.active) {
-        perfTelemetry.pingTimer += dt;
-        if (perfTelemetry.pingTimer >= 1.2) {
-          perfTelemetry.pingTimer = 0;
-          sendNetMessage({
-            type: "ping",
-            clientTime: performance.now(),
-            clientPerf: getClientPerfSnapshot()
-          });
-        }
-      } else if (
+      if (
+        !mpState.active &&
+        debugEnabled &&
         window.location.host &&
         !window.location.host.endsWith("github.io") &&
         typeof fetch === "function"
       ) {
-        // Stream solo-mode client performance breakdown to local /api/perf/client every 2s
         perfTelemetry.soloReportTimer += dt;
         if (perfTelemetry.soloReportTimer >= 2.0) {
           perfTelemetry.soloReportTimer = 0;
@@ -8530,21 +8699,51 @@
           perfTelemetry._physAccum += tP1 - tP0;
           perfTelemetry._animAccum += tP2 - tP1;
 
-          // Broadcast local player's state to multiplayer room (~25 Hz)
+          // Broadcast local player's state (~10 Hz, skip unchanged, keepalive 1s)
           if (mpState.active) {
             mpState.sendTimer += dt;
-            if (mpState.sendTimer >= 0.04) {
+            mpState.playerKeepalive += dt;
+            if (mpState.sendTimer >= 0.1) {
               mpState.sendTimer = 0;
-              sendNetMessage({
-                type: "player_state",
-                x: player.position.x,
-                y: player.position.y,
-                z: player.position.z,
-                yaw: player.yaw,
-                pitch: player.pitch,
-                moveBlend: player.moveBlend,
-                strideDir
-              });
+              const qx = Math.round(player.position.x * 100);
+              const qy = Math.round(player.position.y * 100);
+              const qz = Math.round(player.position.z * 100);
+              const qyaw = Math.round(player.yaw * 100);
+              const qpitch = Math.round(player.pitch * 100);
+              const qblend = Math.round(player.moveBlend * 100);
+              const qstride = Math.round(strideDir * 100);
+              const prev = mpState.lastPlayerState;
+              const changed =
+                !prev ||
+                prev.x !== qx ||
+                prev.y !== qy ||
+                prev.z !== qz ||
+                prev.yaw !== qyaw ||
+                prev.pitch !== qpitch ||
+                prev.moveBlend !== qblend ||
+                prev.strideDir !== qstride;
+              if (changed || mpState.playerKeepalive >= 1) {
+                mpState.playerKeepalive = 0;
+                mpState.lastPlayerState = {
+                  x: qx,
+                  y: qy,
+                  z: qz,
+                  yaw: qyaw,
+                  pitch: qpitch,
+                  moveBlend: qblend,
+                  strideDir: qstride
+                };
+                sendNetMessage({
+                  type: "player_state",
+                  x: player.position.x,
+                  y: player.position.y,
+                  z: player.position.z,
+                  yaw: player.yaw,
+                  pitch: player.pitch,
+                  moveBlend: player.moveBlend,
+                  strideDir
+                });
+              }
             }
           }
 
@@ -8637,14 +8836,16 @@
       // If we are the Multiplayer Room Host, broadcast compact quantized AI states & beach ball
       if (mpState.active && isHost && !isSetupOpen) {
         mpState.hostSendTimer += dt;
-        const broadcastInterval = soldiers.length > 40 ? 0.08 : 0.05;
-        if (mpState.hostSendTimer >= broadcastInterval) {
+        hostKeyframeTimer += dt;
+        if (mpState.hostSendTimer >= 0.125) {
           mpState.hostSendTimer = 0;
+          const fullKeyframe = hostKeyframeTimer >= 2;
+          if (fullKeyframe) hostKeyframeTimer = 0;
           const aiPacked = [];
           for (let i = 0; i < soldiers.length; i++) {
             const s = soldiers[i];
             if (s.isPlayer || s.isRemotePlayer) continue;
-            aiPacked.push([
+            const row = [
               s.unitId,
               Math.round(s.position.x * 100),
               Math.round(s.position.y * 100),
@@ -8654,23 +8855,55 @@
               Math.round(s.moveBlend * 100),
               Math.round((s.strafeDir || 0) * 50),
               s.alive ? 1 : 0
-            ]);
-          }
-          const ball = physicsBall
-            ? {
-                x: Math.round(physicsBall.mesh.position.x * 100) / 100,
-                y: Math.round(physicsBall.mesh.position.y * 100) / 100,
-                z: Math.round(physicsBall.mesh.position.z * 100) / 100,
-                vx: Math.round(physicsBall.velocity.x * 100) / 100,
-                vy: Math.round(physicsBall.velocity.y * 100) / 100,
-                vz: Math.round(physicsBall.velocity.z * 100) / 100
+            ];
+            const prev = lastAiPackedById.get(s.unitId);
+            const changed =
+              !prev ||
+              prev[1] !== row[1] ||
+              prev[2] !== row[2] ||
+              prev[3] !== row[3] ||
+              prev[4] !== row[4] ||
+              prev[5] !== row[5] ||
+              prev[6] !== row[6] ||
+              prev[7] !== row[7] ||
+              prev[8] !== row[8];
+            if (fullKeyframe || changed) {
+              if (s.alive || fullKeyframe || (prev && prev[8] !== row[8])) {
+                aiPacked.push(row);
               }
-            : null;
-          sendNetMessage({
-            type: "host_world_state",
-            aiPacked,
-            ball
-          });
+              lastAiPackedById.set(s.unitId, row);
+            }
+          }
+          let ball = undefined;
+          if (physicsBall) {
+            const nextBall = {
+              x: Math.round(physicsBall.mesh.position.x * 100) / 100,
+              y: Math.round(physicsBall.mesh.position.y * 100) / 100,
+              z: Math.round(physicsBall.mesh.position.z * 100) / 100,
+              vx: Math.round(physicsBall.velocity.x * 100) / 100,
+              vy: Math.round(physicsBall.velocity.y * 100) / 100,
+              vz: Math.round(physicsBall.velocity.z * 100) / 100
+            };
+            const prevBall = lastBallSent;
+            const ballMoved =
+              !prevBall ||
+              prevBall.x !== nextBall.x ||
+              prevBall.y !== nextBall.y ||
+              prevBall.z !== nextBall.z;
+            if (fullKeyframe || ballMoved) {
+              ball = nextBall;
+              lastBallSent = nextBall;
+            }
+          }
+          if (aiPacked.length || ball !== undefined) {
+            const payload = {
+              type: "host_world_state",
+              aiPacked,
+              aiDelta: !fullKeyframe
+            };
+            if (ball !== undefined) payload.ball = ball;
+            sendNetMessage(payload);
+          }
         }
       }
 
@@ -8761,11 +8994,17 @@
       updateOverheadPlates();
     });
 
-    // Enforce a hard 60 FPS cap across all clients (including 90Hz/120Hz/144Hz/240Hz displays)
-    // to minimize CPU, GPU, battery, and network resource utilization
-    const MAX_CLIENT_FPS = 60;
-    const MIN_FRAME_INTERVAL_MS = 1000 / MAX_CLIENT_FPS;
+    // Frame cap (30 default, 60 via menu). Hidden tabs drop to ~10 FPS.
     let lastAllowedRenderMs = 0;
+    applyMaxClientFps();
+    applyDebugMode();
+
+    setInterval(() => {
+      if (!mpState.active || !mpState.ws || mpState.ws.readyState !== WebSocket.OPEN) return;
+      const pingMsg = { type: "ping", clientTime: performance.now() };
+      if (debugEnabled) pingMsg.clientPerf = getClientPerfSnapshot();
+      sendNetMessage(pingMsg);
+    }, 15000);
 
     engine.runRenderLoop(() => {
       const now = performance.now();

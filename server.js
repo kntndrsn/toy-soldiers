@@ -187,13 +187,15 @@ function sendVersionedAsset(req, res, relPath, contentType) {
 // ============================================================================
 // 1. DDoS PROTECTION, RATE LIMITING & PERFORMANCE PROFILER STATE
 // ============================================================================
-const MAX_WS_PAYLOAD_BYTES = 16 * 1024; // 16 KB max frame size
+const MAX_WS_PAYLOAD_BYTES = 64 * 1024; // 64 KB; drop oversize frames, do not close
 const MAX_BOTS_PER_TEAM = 64;           // Practical max bot cap per team (64v64)
 const MAX_CONN_PER_IP = Number(process.env.MAX_CONN_PER_IP) || 128;
 const MAX_WS_MSGS_PER_SEC = Number(process.env.MAX_WS_MSGS_PER_SEC) || 180;
 const MAX_WS_BYTES_PER_SEC = Number(process.env.MAX_WS_BYTES_PER_SEC) || 128 * 1024;
+const MAX_WS_BUFFERED_BYTES = 256 * 1024;
 const MAX_ROOM_ACTIONS_PER_10S = 20;
 const MAX_HTTP_REQ_PER_10S = 600;
+const MAX_LIGHT_HTTP_REQ_PER_10S = 2000;
 const IP_BAN_DURATION_MS = 30 * 1000;
 
 // Cached process memory telemetry (updated once per second to avoid synchronous OS syscalls on every ping)
@@ -201,7 +203,7 @@ let cachedRssMB = Math.round((process.memoryUsage().rss / (1024 * 1024)) * 10) /
 let cachedHeapUsedMB = Math.round((process.memoryUsage().heapUsed / (1024 * 1024)) * 10) / 10;
 let cachedHeapTotalMB = Math.round((process.memoryUsage().heapTotal / (1024 * 1024)) * 10) / 10;
 
-// Map<ip, { connCount, httpCount, httpWindowStart, bannedUntil, violations }>
+// Map<ip, { connCount, httpCount, lightHttpCount, windows, httpBannedUntil, bannedUntil, violations, httpViolations }>
 const ipSecurityState = new Map();
 
 const ddosTelemetry = {
@@ -209,7 +211,8 @@ const ddosTelemetry = {
   rateLimitedClients: 0,
   blockedConnections: 0,
   httpRateLimited: 0,
-  malformedPackets: 0
+  malformedPackets: 0,
+  http429ByRoute: {}
 };
 
 function getClientIp(req) {
@@ -237,8 +240,12 @@ function getIpRecord(ip) {
       connCount: 0,
       httpCount: 0,
       httpWindowStart: Date.now(),
+      lightHttpCount: 0,
+      lightHttpWindowStart: Date.now(),
       bannedUntil: 0,
-      violations: 0
+      httpBannedUntil: 0,
+      violations: 0,
+      httpViolations: 0
     };
     ipSecurityState.set(ip, rec);
   }
@@ -248,27 +255,65 @@ function getIpRecord(ip) {
 function isIpBanned(ip) {
   const rec = ipSecurityState.get(ip);
   if (!rec) return false;
-  if (rec.bannedUntil > Date.now()) return true;
-  return false;
+  return rec.bannedUntil > Date.now();
 }
 
-function checkHttpRateLimit(ip) {
+function isLightHttpPath(cleanUrl) {
+  const url = String(cleanUrl || "/");
+  if (
+    url === "/" ||
+    url === "/index.html" ||
+    url === "/health" ||
+    url === "/rooms" ||
+    url === "/api/presence" ||
+    url === "/api/version"
+  ) {
+    return true;
+  }
+  if (
+    url.startsWith("/favicon/") ||
+    url.startsWith("/geometry/") ||
+    url.startsWith("/materials/") ||
+    url.startsWith("/particles/") ||
+    url.startsWith("/gui/") ||
+    url.startsWith("/flowgraphs/") ||
+    url.startsWith("/models/")
+  ) {
+    return true;
+  }
+  return /\.(png|ico|svg|webmanifest|json|glb|woff2?)$/i.test(url);
+}
+
+function recordHttp429(cleanUrl) {
+  ddosTelemetry.httpRateLimited++;
+  const key = String(cleanUrl || "/").slice(0, 80);
+  ddosTelemetry.http429ByRoute[key] = (ddosTelemetry.http429ByRoute[key] || 0) + 1;
+}
+
+function checkHttpRateLimit(ip, cleanUrl) {
   const now = Date.now();
   const rec = getIpRecord(ip);
-  if (rec.bannedUntil > now) {
-    ddosTelemetry.httpRateLimited++;
+  if (rec.httpBannedUntil > now) {
+    recordHttp429(cleanUrl);
     return false;
   }
-  if (now - rec.httpWindowStart > 10000) {
-    rec.httpWindowStart = now;
-    rec.httpCount = 0;
+  const light = isLightHttpPath(cleanUrl);
+  const windowKey = light ? "lightHttpWindowStart" : "httpWindowStart";
+  const countKey = light ? "lightHttpCount" : "httpCount";
+  const max = light ? MAX_LIGHT_HTTP_REQ_PER_10S : MAX_HTTP_REQ_PER_10S;
+  if (now - rec[windowKey] > 10000) {
+    if (rec[countKey] <= max) {
+      rec.httpViolations = Math.max(0, rec.httpViolations - 1);
+    }
+    rec[windowKey] = now;
+    rec[countKey] = 0;
   }
-  rec.httpCount++;
-  if (rec.httpCount > MAX_HTTP_REQ_PER_10S) {
-    ddosTelemetry.httpRateLimited++;
-    rec.violations++;
-    if (rec.violations >= 6) {
-      rec.bannedUntil = now + IP_BAN_DURATION_MS;
+  rec[countKey]++;
+  if (rec[countKey] > max) {
+    recordHttp429(cleanUrl);
+    rec.httpViolations++;
+    if (rec.httpViolations >= 6) {
+      rec.httpBannedUntil = now + IP_BAN_DURATION_MS;
     }
     return false;
   }
@@ -415,8 +460,10 @@ function buildPerfApiPayload() {
   }
 
   let activeIpBans = 0;
+  let activeHttpBans = 0;
   for (const rec of ipSecurityState.values()) {
     if (rec.bannedUntil > now) activeIpBans++;
+    if (rec.httpBannedUntil > now) activeHttpBans++;
   }
 
   // Automated scaling & bottleneck diagnostics for AI / developer consumption
@@ -471,7 +518,9 @@ function buildPerfApiPayload() {
       blockedConnections: ddosTelemetry.blockedConnections,
       httpRateLimited: ddosTelemetry.httpRateLimited,
       malformedPackets: ddosTelemetry.malformedPackets,
-      activeIpBans
+      activeIpBans,
+      activeHttpBans,
+      http429ByRoute: ddosTelemetry.http429ByRoute
     },
     scalingSummary: {
       activeRooms: rooms.size,
@@ -900,13 +949,12 @@ const server = http.createServer((req, res) => {
   }
 
   const clientIp = getClientIp(req);
-  if (!checkHttpRateLimit(clientIp)) {
+  const cleanUrl = (req.url || "/").split("?")[0];
+  if (!checkHttpRateLimit(clientIp, cleanUrl)) {
     res.writeHead(429, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: false, error: "Too many requests. Please slow down." }));
     return;
   }
-
-  const cleanUrl = (req.url || "/").split("?")[0];
 
   if (cleanUrl === "/health" || cleanUrl === "/rooms") {
     let reqClientToken = null;
@@ -1217,6 +1265,10 @@ function recordPresence(rawId, rawMode) {
 
 function safeSend(ws, payload) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (ws.bufferedAmount > MAX_WS_BUFFERED_BYTES) {
+    ddosTelemetry.droppedMessages++;
+    return;
+  }
   const data = typeof payload === "string" ? payload : JSON.stringify(payload);
   try {
     ws.send(data);
@@ -1226,6 +1278,22 @@ function safeSend(ws, payload) {
   } catch {
     // Ignore transient send errors on closing sockets so one bad socket cannot disrupt other rooms
   }
+}
+
+function mergeAiPacked(prevPacked, nextPacked, isDelta) {
+  if (!isDelta || !Array.isArray(prevPacked) || !Array.isArray(nextPacked)) {
+    return Array.isArray(nextPacked) ? nextPacked : prevPacked || null;
+  }
+  const byId = new Map();
+  for (let i = 0; i < prevPacked.length; i++) {
+    const row = prevPacked[i];
+    if (row && row[0] != null) byId.set(row[0], row);
+  }
+  for (let i = 0; i < nextPacked.length; i++) {
+    const row = nextPacked[i];
+    if (row && row[0] != null) byId.set(row[0], row);
+  }
+  return Array.from(byId.values());
 }
 
 function resolveMapType(mapType, limit) {
@@ -1426,11 +1494,11 @@ function getOrCreateRoom(
       statsDirty: true,
       statsDirtyForSync: true,
       cachedUnitStats: null,
-      dirtyPlayers: new Map(), // Map<clientId, PlayerStateDelta> coalesced at 25 Hz
-      pendingShots: [],        // Array<ShotEvent> coalesced at 25 Hz
-      pendingDamages: [],      // Array<DamageEvent> coalesced at 25 Hz
-      pendingRespawns: [],     // Array<RespawnEvent> coalesced at 25 Hz
-      pendingWorldState: null, // Latest host_world_state coalesced at 25 Hz
+      dirtyPlayers: new Map(), // Map<clientId, PlayerStateDelta> coalesced at 10 Hz
+      pendingShots: [],        // Array<ShotEvent> coalesced at 10 Hz
+      pendingDamages: [],      // Array<DamageEvent> coalesced at 10 Hz
+      pendingRespawns: [],     // Array<RespawnEvent> coalesced at 10 Hz
+      pendingWorldState: null, // Latest host_world_state coalesced at 10 Hz
       clients: new Map(), // Map<clientId, ClientInfo>
       disconnectedPlayers: new Map(), // Map<clientToken, SavedPlayerSlot>
       matchId: 1
@@ -1441,7 +1509,7 @@ function getOrCreateRoom(
   return room;
 }
 
-function serializeRoster(room) {
+function serializeRoster(room, opts = {}) {
   const players = [];
   for (const c of room.clients.values()) {
     players.push({
@@ -1460,7 +1528,7 @@ function serializeRoster(room) {
     });
   }
   const remainingSec = Math.max(0, (room.matchEndTime - Date.now()) / 1000);
-  return {
+  const roster = {
     roomCode: room.code,
     hostId: room.hostId,
     originalHostClientId: room.originalHostClientId || null,
@@ -1477,10 +1545,13 @@ function serializeRoster(room) {
     remainingSec,
     matchEnded: room.matchEnded,
     endedByHost: Boolean(room.endedByHost),
-    unitStats: serializeUnitStats(room),
     matchId: room.matchId,
     players
   };
+  if (opts.includeUnitStats !== false) {
+    roster.unitStats = serializeUnitStats(room);
+  }
+  return roster;
 }
 
 function broadcastToRoom(room, payload, excludeClientId = null) {
@@ -1567,43 +1638,9 @@ wss.on("connection", (ws, req) => {
     const rawStr = typeof rawMessage === "string" ? rawMessage : rawMessage.toString();
     const byteLen = rawStr.length;
 
-    // DDoS Check 2: Payload size & per-second message/bandwidth rate limit
+    // DDoS Check 2: drop oversize frames (do not close / IP-ban — host snapshots can spike)
     if (byteLen > MAX_WS_PAYLOAD_BYTES) {
       ddosTelemetry.droppedMessages++;
-      rateState.violations++;
-      return;
-    }
-
-    if (now - rateState.windowStart >= 1000) {
-      rateState.windowStart = now;
-      rateState.msgCount = 0;
-      rateState.byteCount = 0;
-    }
-
-    rateState.msgCount += 1;
-    rateState.byteCount += byteLen;
-    perfMetrics._inPktsAccum += 1;
-    perfMetrics._inBytesAccum += byteLen;
-    perfMetrics.totalInboundPkts += 1;
-
-    if (
-      rateState.msgCount > MAX_WS_MSGS_PER_SEC ||
-      rateState.byteCount > MAX_WS_BYTES_PER_SEC
-    ) {
-      ddosTelemetry.droppedMessages++;
-      if (rateState.msgCount === MAX_WS_MSGS_PER_SEC + 1) {
-        ddosTelemetry.rateLimitedClients++;
-        rateState.violations++;
-        ipRec.violations++;
-      }
-      // Disconnect & temporarily ban extreme flooders
-      if (rateState.msgCount > MAX_WS_MSGS_PER_SEC * 2 || rateState.violations >= 8) {
-        ipRec.bannedUntil = now + IP_BAN_DURATION_MS;
-        ddosTelemetry.blockedConnections++;
-        try {
-          ws.close(1008, "Rate limit exceeded");
-        } catch {}
-      }
       return;
     }
 
@@ -1617,6 +1654,53 @@ wss.on("connection", (ws, req) => {
         ipRec.bannedUntil = now + IP_BAN_DURATION_MS;
         try {
           ws.close(1008, "Malformed packets");
+        } catch {}
+      }
+      return;
+    }
+
+    if (now - rateState.windowStart >= 1000) {
+      if (
+        rateState.msgCount <= MAX_WS_MSGS_PER_SEC &&
+        rateState.byteCount <= MAX_WS_BYTES_PER_SEC
+      ) {
+        rateState.violations = Math.max(0, rateState.violations - 1);
+      }
+      rateState.windowStart = now;
+      rateState.msgCount = 0;
+      rateState.byteCount = 0;
+    }
+
+    const isWorldState = msg && msg.type === "host_world_state";
+    rateState.msgCount += 1;
+    if (!isWorldState) {
+      rateState.byteCount += byteLen;
+    }
+    perfMetrics._inPktsAccum += 1;
+    perfMetrics._inBytesAccum += byteLen;
+    perfMetrics.totalInboundPkts += 1;
+
+    if (rateState.msgCount > MAX_WS_MSGS_PER_SEC) {
+      ddosTelemetry.droppedMessages++;
+      if (rateState.msgCount === MAX_WS_MSGS_PER_SEC + 1) {
+        ddosTelemetry.rateLimitedClients++;
+        rateState.violations++;
+      }
+      if (rateState.msgCount > MAX_WS_MSGS_PER_SEC * 2) {
+        ipRec.bannedUntil = now + IP_BAN_DURATION_MS;
+        ddosTelemetry.blockedConnections++;
+        try {
+          ws.close(1008, "Rate limit exceeded");
+        } catch {}
+      }
+      return;
+    }
+    if (!isWorldState && rateState.byteCount > MAX_WS_BYTES_PER_SEC) {
+      ddosTelemetry.droppedMessages++;
+      rateState.violations++;
+      if (rateState.violations >= 8) {
+        try {
+          ws.close(1008, "Rate limit exceeded");
         } catch {}
       }
       return;
@@ -2139,7 +2223,7 @@ wss.on("connection", (ws, req) => {
               type: "roster_update",
               event: isReturningHost ? "host_rejoined" : "player_joined",
               player: { id: clientId, name, team: finalTeam, unitId },
-              roster: rosterSnapshot
+              roster: serializeRoster(room, { includeUnitStats: false })
             },
             clientId
           );
@@ -2190,7 +2274,7 @@ wss.on("connection", (ws, req) => {
         // Skip broadcast if this player is the only human in the room
         if (currentRoom.clients.size <= 1) break;
 
-        // Coalesce into the room's 25 Hz (40ms) tick flush
+        // Coalesce into the room's 10 Hz tick flush
         currentRoom.dirtyPlayers.set(clientId, {
           clientId,
           unitId: c.unitId,
@@ -2205,22 +2289,37 @@ wss.on("connection", (ws, req) => {
         break;
       }
 
-      // Room Host broadcasts AI soldier states & dynamic beach ball state (~12-20 Hz)
+      // Room Host broadcasts AI soldier states & dynamic beach ball state (~8 Hz, often deltas)
       case "host_world_state": {
         if (!currentRoom || currentRoom.hostId !== clientId) break;
         const remainingSec =
           Math.round(Math.max(0, (currentRoom.matchEndTime - now) / 1000) * 10) / 10;
         const maxAiCount = MAX_BOTS_PER_TEAM * 2;
-        const worldSnap = {
+        const isDelta = Boolean(msg.aiDelta);
+        const incomingPacked = Array.isArray(msg.aiPacked) ? msg.aiPacked.slice(0, maxAiCount) : null;
+        const prevWorld = currentRoom.lastWorldState;
+        const mergedPacked = mergeAiPacked(prevWorld && prevWorld.aiPacked, incomingPacked, isDelta);
+        const ball =
+          msg.ball !== undefined && msg.ball !== null
+            ? msg.ball
+            : prevWorld && prevWorld.ball
+            ? prevWorld.ball
+            : null;
+        currentRoom.lastWorldState = {
           remainingSec,
           matchEnded: currentRoom.matchEnded,
-          aiPacked: Array.isArray(msg.aiPacked) ? msg.aiPacked.slice(0, maxAiCount) : null,
-          aiUnits: Array.isArray(msg.aiUnits) ? msg.aiUnits.slice(0, maxAiCount) : null,
+          aiPacked: mergedPacked,
+          aiDelta: false,
+          ball
+        };
+        if (currentRoom.clients.size <= 1) break;
+        currentRoom.pendingWorldState = {
+          remainingSec,
+          matchEnded: currentRoom.matchEnded,
+          aiPacked: incomingPacked,
+          aiDelta: isDelta,
           ball: msg.ball || null
         };
-        currentRoom.lastWorldState = worldSnap;
-        if (currentRoom.clients.size <= 1) break; // Skip broadcast flush if host is the only player in room
-        currentRoom.pendingWorldState = worldSnap;
         break;
       }
 
@@ -2555,12 +2654,12 @@ function removeClientFromRoom(room, clientId) {
     player: leaving
       ? { id: leaving.id, name: leaving.name, team: leaving.team, unitId: leaving.unitId }
       : null,
-    roster: serializeRoster(room)
+    roster: serializeRoster(room, { includeUnitStats: false })
   });
 }
 
-// 25 Hz (40ms) Unified Room Broadcast Flush (Coalesces player_state, fire_shot, damage_unit, respawn_unit & host_world_state)
-// Eliminates O(N^2) per-packet JSON.stringify & ws.send storms across all active rooms!
+// 10 Hz Unified Room Broadcast Flush (Coalesces player_state, fire_shot, damage_unit, respawn_unit & host_world_state)
+// World snapshots are never echoed back to the simulating host.
 setInterval(() => {
   for (const room of rooms.values()) {
     const hasPlayers = room.dirtyPlayers && room.dirtyPlayers.size > 0;
@@ -2603,12 +2702,13 @@ setInterval(() => {
       continue;
     }
 
-    // Unified room_tick or remote_players_batch packet (1 JSON.stringify + 1 ws.send per client!)
     const playersArr = hasPlayers ? Array.from(room.dirtyPlayers.values()) : null;
     const shotsArr = hasShots ? room.pendingShots.slice() : null;
     const damagesArr = hasDamages ? room.pendingDamages.slice() : null;
     const respawnsArr = hasRespawns ? room.pendingRespawns.slice() : null;
     const worldObj = room.pendingWorldState;
+    const remainingSec =
+      Math.round(Math.max(0, (room.matchEndTime - Date.now()) / 1000) * 10) / 10;
 
     if (hasPlayers) room.dirtyPlayers.clear();
     if (hasShots) room.pendingShots.length = 0;
@@ -2625,22 +2725,54 @@ setInterval(() => {
         },
         null
       );
-    } else {
+    } else if (worldObj && !playersArr && !shotsArr && !damagesArr && !respawnsArr) {
       broadcastToRoom(
         room,
         {
           type: "room_tick",
-          players: playersArr,
-          shots: shotsArr,
-          damages: damagesArr,
-          respawns: respawnsArr,
+          remainingSec,
           world: worldObj
         },
-        null
+        room.hostId
       );
+    } else {
+      const tickWithoutWorld = {
+        type: "room_tick",
+        remainingSec,
+        players: playersArr,
+        shots: shotsArr,
+        damages: damagesArr,
+        respawns: respawnsArr
+      };
+      if (worldObj) {
+        broadcastToRoom(
+          room,
+          Object.assign({}, tickWithoutWorld, { world: worldObj }),
+          room.hostId
+        );
+        if (playersArr || shotsArr || damagesArr || respawnsArr) {
+          const hostClient = room.clients.get(room.hostId);
+          if (hostClient) safeSend(hostClient.ws, tickWithoutWorld);
+        }
+      } else {
+        broadcastToRoom(room, tickWithoutWorld, null);
+      }
     }
   }
-}, 40);
+}, 100);
+
+// Protocol-level ping keeps reverse proxies from dropping quiet sockets (~15s)
+setInterval(() => {
+  for (const room of rooms.values()) {
+    for (const client of room.clients.values()) {
+      if (client.ws && client.ws.readyState === WebSocket.OPEN) {
+        try {
+          client.ws.ping();
+        } catch {}
+      }
+    }
+  }
+}, 15000);
 
 // ============================================================================
 // 3. SERVER-AUTHORITATIVE MATCH TIMER, SCOREBOARD SYNC & TELEMETRY LOOP
@@ -2691,7 +2823,8 @@ setInterval(() => {
         {
           type: "timer_sync",
           remainingSec: Math.round(remainingSec * 10) / 10,
-          matchEnded: room.matchEnded
+          matchEnded: room.matchEnded,
+          presence: cachedPresence
         },
         null
       );
