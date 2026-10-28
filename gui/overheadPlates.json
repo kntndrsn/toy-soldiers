@@ -43,7 +43,7 @@
       {
         "name": "playerPlate",
         "className": "Rectangle",
-        "width": "220px",
+        "width": "300px",
         "height": "60px",
         "thickness": 0,
         "background": "",
@@ -68,7 +68,7 @@
                 "className": "TextBlock",
                 "text": "★ Soldier",
                 "color": "#98ff8c",
-                "fontSize": "22px",
+                "fontSize": "20px",
                 "fontWeight": "bold",
                 "fontFamily": "Segoe UI, sans-serif",
                 "textWrapping": 0,

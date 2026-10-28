@@ -1759,7 +1759,7 @@ wss.on("connection", (ws, req) => {
         const requestedMapType = resolveMapType(msg.mapType, msg.worldLimit);
         const suppliedPassword = String(msg.password || "").trim().slice(0, 32);
         const team = msg.team === "tan" ? "tan" : "green";
-        const name = String(msg.name || "Washington").slice(0, 18);
+        const name = String(msg.name || "George Washington").slice(0, 22);
         const requestedGreen = Number(msg.greenTotal) || 4;
         const requestedTan = Number(msg.tanTotal) || 4;
         const requestedLimit = resolveWorldLimit(requestedMapType, msg.worldLimit);

@@ -1232,7 +1232,7 @@
       <div class="setup-field" style="gap: 8px;">
         <span class="setup-field-label" style="color: #7ad7ff;">Player</span>
         <div style="display: flex; gap: 6px; align-items: center;">
-          <input id="mp-name-input" class="count-input" type="text" value="Soldier" placeholder="Name" style="width: 120px; font-size: 13.5px;" />
+          <input id="mp-name-input" class="count-input" type="text" value="Soldier" placeholder="Name" maxlength="22" style="width: 176px; font-size: 13.5px;" />
           <select id="mp-team-select" class="count-input" style="width: 105px; font-size: 13px;">
             <option value="green">Green Team</option>
             <option value="tan">Tan Team</option>
@@ -5222,7 +5222,7 @@
         if (plate.nameText) plate.nameText.color = style.text;
       }
       if (plate.nameText) {
-        const label = "★ " + (soldier.rawPlayerName || soldier.name || "Player").slice(0, 16);
+        const label = "★ " + (soldier.rawPlayerName || soldier.name || "Player").slice(0, PLAYER_NAME_MAX_LEN);
         if (plate.boundName !== label) {
           plate.boundName = label;
           plate.nameText.text = label;
@@ -5586,80 +5586,82 @@
       }
     }
 
-    // 330+ Historically Themed Soldier Names (American Revolution through 20th Century)
+    // Famous United States generals and military leaders, from the Revolution to the present.
+    // Kept within PLAYER_NAME_MAX_LEN so overhead plates and the server do not clip them.
+    const PLAYER_NAME_MAX_LEN = 22;
     const HISTORICAL_SOLDIER_NAMES = [
-      // American Revolution (Continental Army, Minutemen & Allied Commanders)
-      "Washington", "Lafayette", "Hamilton", "Knox", "Greene", "Marion", "Morgan", "Wayne",
-      "Putnam", "Stark", "Schuyler", "Steuben", "Rochambeau", "Kosciuszko", "Pulaski", "DeKalb",
-      "Mercer", "Warren", "Prescott", "Revere", "EthanAllen", "Sumter", "Pickens", "Lighthorse",
-      "Glover", "Muhlenberg", "Sullivan", "Heath", "Lincoln", "Gates", "StClair", "Moultrie",
-      "Jasper", "NathanHale", "MollyPitcher", "Ludington", "SalemPoor", "PeterSalem", "ArtemasWard", "Gridley",
-      "Knowlton", "Barton", "Tallmadge", "Brewster", "Woodhull", "Culper", "Herkimer", "Gansevoort",
-      "Willett", "Dearborn", "Brooks", "Cilley", "Scammell", "EnochPoor", "Learned", "JohnNixon",
-      "Paterson", "Greaton", "Bond", "Whitcomb", "JosephReed", "Cadwalader", "Ewing", "Mifflin",
-      "EdwardHand", "Irvine", "Armstrong", "Maxwell", "Stirling", "Smallwood", "OthoWilliams", "JohnHoward",
-      "MordecaiGist", "Baylor", "Moylan", "Sheldon", "Armand", "Laurens", "Pinckney", "Huger",
-      "PeterHorry", "Davie", "IsaacShelby", "JohnSevier", "Campbell", "Cleveland", "McDowell", "Winston",
-      "GeorgeClark", "DanielBoone", "SimonKenton", "Bowman", "BenLogan", "LeviTodd", "Harrod", "Montgomery",
-      "Macpherson", "ReturnMeigs", "JohnLamb", "EleazerOswald", "EbenezerStevens", "JohnCrane", "Bauman", "Humphreys",
-      "Trumbull", "Huntington", "Varnum", "Hitchcock", "Lippitt", "Cornell", "Angell", "Olney",
-      "Talbot", "Whipple", "Hopkins", "PaulJones", "JohnBarry", "Biddle", "Nicholson", "Manley",
-      "SamuelTucker", "RichardDale", "JoshuaBarney", "Mugford", "Conyngham", "Fanning", "Ledyard", "Badger",
-      "Danjou", "Grasse", "Destaing", "Lauzun", "Chastellux", "DeuxPonts", "Duportail", "Laumoy",
-      "Gouvion", "Fleury", "Ternant", "Tousard", "Pontgibaud", "Armistead", "JackJouett", "Francisco",
-      "MurphyTim", "ElijahClarke", "JohnDooly", "NancyHart", "AndrewPickens", "Richardson", "Rutherford", "Ashe",
-      "Caswell", "Moore", "Nash", "Hogan", "JethroSumner", "WilliamDavie", "WilliamPolk", "Dickson",
-      // War of 1812, Frontier & Early Republic
-      "Jackson", "WHHarrison", "WinfieldScott", "Macomb", "JacobBrown", "Ripley", "JamesMiller", "ZebulonPike",
-      "WilliamWorth", "EdmundGaines", "ThomasJesup", "JohnWool", "Twiggs", "GeorgeArmistead", "Stricker", "SamSmith",
-      "JamesLawrence", "OliverPerry", "Macdonough", "Bainbridge", "IsaacHull", "ChasStewart", "DavidPorter", "JohnRodgers",
-      "Chauncey", "Warrington", "Blakely", "WmBurrows", "ChasMorris", "Preble", "RichSomers", "WmEaton",
-      "OBannon", "DavyCrockett", "JimBowie", "WmTravis", "SamHouston", "JuanSeguin", "JamesFannin", "Burleson",
-      "BenMilam", "Kearny", "Doniphan", "Fremont", "ZachTaylor", "Ringgold", "Quitman", "JamesShields",
-      // American Civil War
-      "UlyssesGrant", "Sherman", "Sheridan", "GeoThomas", "GeorgeMeade", "Hancock", "Chamberlain", "JohnReynolds",
-      "Sedgwick", "Gouverneur", "AAHumphreys", "HoratioWright", "GeorgeSykes", "HenrySlocum", "OOHoward", "JohnLogan",
-      "McPherson", "FrankBlair", "GrenvilleDodge", "Osterhaus", "JohnCorse", "WmHazen", "Grierson", "JamesWilson",
-      "Kilpatrick", "JohnBuford", "Pleasonton", "DavidGregg", "WesleyMerritt", "Custer", "TomDevin", "WmGamble",
-      "Farnsworth", "StrongVincent", "StephenWeed", "PatORorke", "MarsenaPatrick", "HenryHunt", "JohnTidball", "JohnGibbon",
-      "SamCarroll", "AlexWebb", "NormanHall", "WmHarrow", "Stannard", "Doubleday", "JohnRobinson", "Wadsworth",
-      "SolMeredith", "LysanderCutler", "RufusDawes", "HenryMorrow", "Kryzyzanowski", "CarlSchurz", "FrancisBarlow", "Steinwehr",
-      "ChasCoster", "Buschbeck", "JohnGeary", "ThomasKane", "Candy", "Cobham", "DavidIreland", "Lockwood",
-      "McDougall", "Colgrove", "ThomasRuger", "DavidBirney", "DeTrobriand", "GeoBurling", "ChasGraham", "DanSickles",
-      "JohnCaldwell", "EdwardCross", "PatrickKelly", "SamuelZook", "JohnBrooke", "ThomasSmyth", "NelsonMiles", "AlexHays",
-      "GeoWillard", "Eliakim", "Wheaton", "HenryEustis", "JosBartlett", "DavidNevin", "Torbert", "DavidRussell",
-      "HiramBurnham", "GeoGetty", "AlbionHowe", "LewisGrant", "EllisSpear", "RobertShaw", "Hallowell", "WmCarney",
-      "RobertSmalls", "JohnWilder", "Rosecrans", "DonBuell", "GordonGranger", "Crittenden", "AlexMcCook", "JamesNegley",
-      "JohnBrannan", "AbsalomBaird", "ThomasWood", "JohnPalmer", "SamBeatty", "WmCarlin", "EdwardKing", "Scribner",
-      "Starkweather", "Steedman", "Whittaker", "Ormsby", "JohnTurchin", "JamesGarfield", "Opdycke", "ChasHarker",
-      "GeoWagner", "AugWillich", "AbelStreight", "RobertMinty", "EliLong", "Farragut", "DDPorter", "AndrewFoote",
-      "JohnWorden", "JohnWinslow", "WmCushing", "TunisCraven", "JamesJouett", "FrancisRoe", "RobertELee", "Stonewall",
-      "Longstreet", "JebStuart", "PatCleburne", "JohnGordon", "LewisArmistead", "RichGarnett", "JamesKemper", "Pettigrew",
-      "IsaacTrimble", "JohnHood", "EvanderLaw", "Jerome", "HenryBenning", "RichAnderson", "JoeKershaw", "Barksdale",
-      "WmWofford", "PaulSemmes", "JohnMosby", "Forrest", "JoeWheeler", "WadeHampton", "FitzLee", "TomRosser",
-      "LunsfordLomax", "JubalEarly", "DickEwell", "RobertRodes", "Ramseur", "JohnPegram", "JohnPelham", "PorterAlex",
+      // Revolution and the early republic
+      "George Washington", "Nathanael Greene", "Henry Knox", "Anthony Wayne",
+      "Horatio Gates", "Benedict Arnold", "Israel Putnam", "John Stark",
+      "Philip Schuyler", "Richard Montgomery", "Benjamin Lincoln", "Artemas Ward",
+      "Charles Lee", "Francis Marion", "Daniel Morgan", "John Sullivan",
+      "William Moultrie", "Henry Lee III", "Ethan Allen", "George Rogers Clark",
+      "Thomas Sumter", "Andrew Pickens", "John Paul Jones", "John Barry",
+      "Edward Preble", "Stephen Decatur", "Alexander Hamilton", "Henry Dearborn",
+      // War of 1812
+      "Andrew Jackson", "William H. Harrison", "Winfield Scott", "Jacob Brown",
+      "Edmund P. Gaines", "Alexander Macomb", "Oliver Hazard Perry", "Thomas Macdonough",
+      "William Bainbridge", "Isaac Hull", "James Lawrence", "David Porter",
+      "Zebulon Pike", "Joshua Barney", "William Hull",
+      // Mexican War and the frontier
+      "Zachary Taylor", "Stephen W. Kearny", "William J. Worth", "John E. Wool",
+      "Sam Houston", "George Crook", "Nelson A. Miles", "Ranald Mackenzie",
+      "Wesley Merritt",
+      // Civil War, United States
+      "Ulysses S. Grant", "William T. Sherman", "Philip Sheridan", "George G. Meade",
+      "George H. Thomas", "Winfield S. Hancock", "John F. Reynolds", "Joshua Chamberlain",
+      "George B. McClellan", "Ambrose Burnside", "Joseph Hooker", "John Pope",
+      "William Rosecrans", "Don Carlos Buell", "Henry Halleck", "Irvin McDowell",
+      "Benjamin Butler", "Nathaniel Banks", "John A. Logan", "James B. McPherson",
+      "Oliver O. Howard", "John Sedgwick", "George A. Custer", "John Buford",
+      "David Farragut", "David D. Porter", "Andrew H. Foote", "John Schofield",
+      "Gouverneur Warren", "Benjamin Grierson", "Judson Kilpatrick", "Abner Doubleday",
+      "Gordon Granger", "John Worden", "Emory Upton",
+      // Civil War, Confederate commanders
+      "Robert E. Lee", "Stonewall Jackson", "James Longstreet", "J. E. B. Stuart",
+      "Joseph E. Johnston", "Albert Sidney Johnston", "P. G. T. Beauregard", "Braxton Bragg",
+      "John Bell Hood", "Jubal Early", "A. P. Hill", "D. H. Hill",
+      "George Pickett", "Wade Hampton", "Nathan Bedford Forrest", "John Hunt Morgan",
+      "Patrick Cleburne", "John B. Gordon", "Richard S. Ewell", "Edmund Kirby Smith",
+      "Sterling Price", "William J. Hardee", "John C. Pemberton", "Simon Bolivar Buckner",
+      "Fitzhugh Lee", "John S. Mosby", "Richard Taylor", "Joseph Wheeler",
+      // Spanish-American War and the Philippines
+      "William Shafter", "Leonard Wood", "Arthur MacArthur", "John J. Pershing",
+      "George Dewey", "William T. Sampson", "Winfield S. Schley", "Frederick Funston",
+      "Adna R. Chaffee", "Tasker Bliss",
       // World War I
-      "Pershing", "AlvinYork", "Rickenbacker", "Whittlesey", "Holderman", "McMurtry", "DanDaly", "SmedleyButler",
-      "WendellNeville", "JamesHarbord", "RobtBullard", "HunterLiggett", "Summerall", "BeaumontBuck", "JohnHines", "HansonEly",
-      "FrankParker", "MacArthur", "WildBill", "GeoPatton", "GeoMarshall", "SamWoodfill", "Barkley", "Sawelson",
-      "Marcellus", "HaroldTurner", "DonaldCall", "FrankLuke", "RaoulLufbery", "DavidPutnam", "ElliotSprings", "FieldKindley",
-      "ReedLandis", "HenryJohnson", "NeedhamRoberts", "JamesEurope", "SamBadgett",
-      // World War II & Korean War
-      "Eisenhower", "OmarBradley", "AudieMurphy", "DickWinters", "RonSpeirs", "CarwoodLipton", "BillGuarnere", "BabeHeffron",
-      "BuckCompton", "DonMalarkey", "JoeToye", "GeorgeLuz", "FrankPerconte", "BullRandleman", "LewisNixon", "RobertSink",
-      "BobStrayer", "ThomasMeehan", "HarryWelsh", "FloydTalbert", "JohnnyMartin", "SkipMuck", "AlexPenkala", "DocRoe",
-      "ShiftyPowers", "JohnBasilone", "ChestyPuller", "Vandegrift", "RedMikeEdson", "DavidShoup", "MitchellPaige", "JackLucas",
-      "WmHawkins", "KenWalsh", "JoeFoss", "PappyBoyington", "RobertGaler", "HaroldBauer", "JohnSmith", "MarionCarl",
-      "DavidMcCampbell", "ButchOHare", "JimmyThach", "JimmyFlatley", "GeorgeGay", "JohnWaldron", "JimmyDoolittle", "DickBong",
-      "TommyMcGuire", "WadeMcClusky", "DickBest", "DustyKleiss", "ChesterNimitz", "RaySpruance", "BullHalsey", "MarcMitscher",
-      "WillisLee", "ArleighBurke", "ErnestEvans", "RobertJohnston", "SamRoberts", "CliftonSprague", "JimGavin", "MattRidgway",
-      "MaxwellTaylor", "McAuliffe", "RobertCole", "JulianAaron", "Vandervoort", "BillYarborough", "WilliamDarby", "JamesRudder",
-      "HenryMucci", "RobertPrince", "CreightonAbrams", "LafayettePool", "EarlyB", "BruceClarke", "MauriceRose", "LightningJoe",
-      "CourtneyHodges", "SandyPatch", "LucianTruscott", "MarkClark", "ErnestHarmon", "WaltonWalker", "WilliamDean", "OPSmith",
-      "RayMurray", "WEBarber", "RayDavis", "ReginaldMyers", "CarlSitter", "Gabreski", "DonGentile", "GeorgePreddy",
-      "HubZemke", "DaveSchilling", "RobtJohnson", "BudMahurin", "ChasMacdonald", "NeelKearby", "JohnMeyer", "DonBlakeslee",
-      "RobinOlds", "ChuckYeager", "BudAnderson", "BobHoover", "JackIlfrey", "JamesJabara", "JoeMcConnell", "VernonBaker",
-      "DanielInouye", "WillyJames", "BenDavis", "LeeArcher", "WendellPruitt", "RubenRivers", "ChasThomas", "EdwardCarter"
+      "Peyton C. March", "Hunter Liggett", "Robert L. Bullard", "James G. Harbord",
+      "Charles Summerall", "John L. Hines", "Malin Craig", "Fox Conner",
+      // World War II
+      "George C. Marshall", "Dwight D. Eisenhower", "Omar Bradley", "George S. Patton",
+      "Douglas MacArthur", "Mark W. Clark", "Courtney Hodges", "Jacob L. Devers",
+      "Lucian Truscott", "Alexander Patch", "William H. Simpson", "J. Lawton Collins",
+      "Matthew B. Ridgway", "James M. Gavin", "Maxwell D. Taylor", "Anthony McAuliffe",
+      "Jonathan Wainwright", "Joseph Stilwell", "Walter Krueger", "Robert Eichelberger",
+      "Simon B. Buckner Jr.", "Leonard Gerow", "Lesley McNair", "Claire Chennault",
+      "Henry H. Arnold", "Carl Spaatz", "Ira C. Eaker", "Jimmy Doolittle",
+      "Curtis LeMay", "George Kenney", "Nathan Twining", "Hoyt Vandenberg",
+      "Chester W. Nimitz", "Ernest J. King", "William F. Halsey", "Raymond A. Spruance",
+      "Frank Jack Fletcher", "Marc Mitscher", "Richmond K. Turner", "Thomas Kinkaid",
+      "William D. Leahy", "Alexander Vandegrift", "Holland M. Smith", "Roy S. Geiger",
+      "Lewis B. Puller", "Clifton B. Cates", "Lemuel C. Shepherd", "Merritt A. Edson",
+      "Evans Carlson", "Charles A. Lockwood", "Jesse Oldendorf", "Willis A. Lee",
+      // Korea
+      "Oliver P. Smith", "James Van Fleet", "William F. Dean", "Edward Almond",
+      "Walton H. Walker",
+      // Vietnam
+      "William Westmoreland", "Creighton Abrams", "Frederick Weyand", "Earle Wheeler",
+      "Harold K. Johnson", "Victor Krulak", "Lewis Walt", "Elmo R. Zumwalt",
+      "Harold G. Moore", "William W. Momyer",
+      // Gulf War to the present
+      "Norman Schwarzkopf", "Colin Powell", "Charles A. Horner", "Walter Boomer",
+      "Barry McCaffrey", "Frederick Franks", "Tommy Franks", "David Petraeus",
+      "Stanley McChrystal", "James Mattis", "John Abizaid", "Raymond Odierno",
+      "Lloyd Austin", "Richard Myers", "Peter Pace", "Michael Mullen",
+      "Martin Dempsey", "Joseph Dunford", "Mark Milley", "H. R. McMaster",
+      "Anthony Zinni", "Wesley Clark", "Eric Shinseki", "William McRaven",
+      "John Shalikashvili", "Hugh Shelton", "James Stavridis", "Ann Dunwoody",
+      "Grace Hopper", "Michelle Howard", "David M. Shoup", "John F. Kelly"
     ];
 
     const activeOnlinePlayerNames = new Set();
@@ -5692,8 +5694,8 @@
 
       const fallbackBase =
         HISTORICAL_SOLDIER_NAMES[Math.floor(Math.random() * HISTORICAL_SOLDIER_NAMES.length)] ||
-        "Washington";
-      const fallback = `${fallbackBase.slice(0, 14)}${Math.floor(10 + Math.random() * 90)}`;
+        "George Washington";
+      const fallback = `${fallbackBase.slice(0, PLAYER_NAME_MAX_LEN - 2)}${Math.floor(10 + Math.random() * 90)}`;
       if (extraExcludedSet) {
         extraExcludedSet.add(fallback.toLowerCase());
       } else {
@@ -7729,7 +7731,7 @@
       const wasCustomRenamed = localStorage.getItem(CUSTOM_NAME_FLAG_KEY) === "1";
       if (mpNameInputEl) {
         if (wasCustomRenamed || (savedName !== null && savedName !== "")) {
-          mpNameInputEl.value = (savedName !== null ? savedName : "").slice(0, 18);
+          mpNameInputEl.value = (savedName !== null ? savedName : "").slice(0, PLAYER_NAME_MAX_LEN);
           userCustomizedPlayerName = true;
         } else {
           const initialName = pickUniqueHistoricalSoldierName();
@@ -7882,7 +7884,7 @@
     function saveSetupSettingsToStorage() {
       try {
         if (mpNameInputEl) {
-          const rawName = mpNameInputEl.value.slice(0, 18);
+          const rawName = mpNameInputEl.value.slice(0, PLAYER_NAME_MAX_LEN);
           localStorage.setItem(NAME_STORAGE_KEY, rawName);
           if (userCustomizedPlayerName) {
             localStorage.setItem(CUSTOM_NAME_FLAG_KEY, "1");
@@ -7945,10 +7947,10 @@
     function handleUserRenamedSelf() {
       userCustomizedPlayerName = true;
       if (mpNameInputEl && mpNameInputEl.value.length > 18) {
-        mpNameInputEl.value = mpNameInputEl.value.slice(0, 18);
+        mpNameInputEl.value = mpNameInputEl.value.slice(0, PLAYER_NAME_MAX_LEN);
       }
       saveSetupSettingsToStorage();
-      const cleanName = (mpNameInputEl ? mpNameInputEl.value : "").trim().slice(0, 18);
+      const cleanName = (mpNameInputEl ? mpNameInputEl.value : "").trim().slice(0, PLAYER_NAME_MAX_LEN);
       if (player) {
         player.rawPlayerName = cleanName || "Soldier";
         player.name = `${player.rawPlayerName} (You)`;
@@ -8537,7 +8539,7 @@
 
       const wsUrl = (mpUrlInputEl.value || "wss://toy-soldiers.duckdns.org").trim();
       const playerName =
-        (mpNameInputEl ? mpNameInputEl.value : "").trim().slice(0, 18) || "Soldier";
+        (mpNameInputEl ? mpNameInputEl.value : "").trim().slice(0, PLAYER_NAME_MAX_LEN) || "Soldier";
 
       // If hosting a new match and not already hosting an existing room, ensure room code doesn't collide
       const alreadyHostingRoom =
