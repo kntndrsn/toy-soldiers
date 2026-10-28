@@ -34,7 +34,8 @@ const FAVICON_FILES = new Set([
 
 const MODEL_FILES = new Set([
   "Meshy_AI_rigged_green_All_Animations.glb",
-  "Meshy_AI_vintage_toy_m16_rifle.glb"
+  "Meshy_AI_vintage_toy_m16_rifle.glb",
+  "Meshy_AI_p51_mustang.glb"
 ]);
 
 // Node Material Editor graphs (NME JSON) served at /materials/<file>
@@ -1353,6 +1354,29 @@ function allocateUniqueRoomCode(requestedRaw, mapType = "sandbox") {
   return `${prefix}${seq}`;
 }
 
+const AIRSTRIKE_DURATION_MS = 3200;
+
+function readAirstrikePoint(p, minY, maxY) {
+  if (!p || typeof p !== "object") return null;
+  const x = Number(p.x);
+  const y = Number(p.y);
+  const z = Number(p.z);
+  if (![x, y, z].every(Number.isFinite)) return null;
+  if (Math.abs(x) > 420 || Math.abs(z) > 420) return null;
+  if (y < minY || y > maxY) return null;
+  return { x, y, z };
+}
+
+function readAirstrikeTargets(list) {
+  if (!Array.isArray(list)) return [];
+  const targets = [];
+  for (let i = 0; i < list.length && targets.length < 12; i++) {
+    const point = readAirstrikePoint(list[i], -8, 40);
+    if (point) targets.push(point);
+  }
+  return targets;
+}
+
 function getUnitStat(room, unitId) {
   let st = room.unitStats.get(unitId);
   if (!st) {
@@ -1408,6 +1432,7 @@ function resetRoomMatchState(room) {
   }
   room.statsDirty = true;
   room.statsDirtyForSync = true;
+  room.airstrikeUntil = 0;
 }
 
 function isRoomOwner(room, clientId, clientToken) {
@@ -1501,7 +1526,8 @@ function getOrCreateRoom(
       pendingWorldState: null, // Latest host_world_state coalesced at 10 Hz
       clients: new Map(), // Map<clientId, ClientInfo>
       disconnectedPlayers: new Map(), // Map<clientToken, SavedPlayerSlot>
-      matchId: 1
+      matchId: 1,
+      airstrikeUntil: 0
     };
     resetRoomMatchState(room);
     rooms.set(roomCode, room);
@@ -2481,6 +2507,66 @@ wss.on("connection", (ws, req) => {
             }
           });
         }
+        break;
+      }
+
+      // One strafing run per room. The caller picks the path; the server locks the slot and rebroadcasts it.
+      case "call_airstrike": {
+        if (!currentRoom || currentRoom.matchEnded) {
+          safeSend(ws, { type: "airstrike_rejected", reason: "ended" });
+          break;
+        }
+        const sender = currentRoom.clients.get(clientId);
+        if (!sender) {
+          safeSend(ws, { type: "airstrike_rejected", reason: "missing" });
+          break;
+        }
+        const senderStat = getUnitStat(currentRoom, sender.unitId);
+        if (!senderStat.alive) {
+          safeSend(ws, { type: "airstrike_rejected", reason: "dead" });
+          break;
+        }
+        if (currentRoom.airstrikeUntil && now < currentRoom.airstrikeUntil) {
+          safeSend(ws, { type: "airstrike_rejected", reason: "busy" });
+          break;
+        }
+        const start = readAirstrikePoint(msg.start, 4, 180);
+        const nadir = readAirstrikePoint(msg.nadir, 4, 120);
+        const end = readAirstrikePoint(msg.end, 4, 180);
+        const aim = readAirstrikePoint(msg.aim, -8, 40);
+        if (!start || !nadir || !end || !aim) {
+          safeSend(ws, { type: "airstrike_rejected", reason: "bad_path" });
+          break;
+        }
+        const diveDist = Math.hypot(nadir.x - start.x, nadir.y - start.y, nadir.z - start.z);
+        const awayDist = Math.hypot(end.x - nadir.x, end.y - nadir.y, end.z - nadir.z);
+        const pullRadius = Number(msg.pullRadius);
+        const radius = Math.max(6, Math.min(60, Number.isFinite(pullRadius) ? pullRadius : 22));
+        if (diveDist < 8 || diveDist > 280 || nadir.y > start.y - 4 ||
+            awayDist < 8 || awayDist > 280 || end.y < nadir.y + 4) {
+          safeSend(ws, { type: "airstrike_rejected", reason: "bad_path" });
+          break;
+        }
+        const requestedDuration = Number(msg.durationMs);
+        const durationMs = Math.max(2000, Math.min(6000,
+          Number.isFinite(requestedDuration) ? requestedDuration : AIRSTRIKE_DURATION_MS
+        ));
+        currentRoom.airstrikeUntil = now + durationMs;
+        broadcastToRoom(currentRoom, {
+          type: "airstrike_started",
+          callerUnitId: sender.unitId,
+          team: sender.team === "tan" ? "tan" : "green",
+          seed: Math.floor(Math.random() * 0x7fffffff),
+          durationMs,
+          yaw: Math.atan2(nadir.x - start.x, nadir.z - start.z),
+          pitch: Math.asin(Math.max(-1, Math.min(1, (nadir.y - start.y) / diveDist))),
+          pullRadius: radius,
+          start,
+          nadir,
+          end,
+          aim,
+          targets: readAirstrikeTargets(msg.targets)
+        });
         break;
       }
 
