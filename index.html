@@ -655,6 +655,45 @@
       background: rgba(65, 145, 55, 0.88);
     }
 
+    /* Grenade aim/throw. Sits on the left, just above and left of the move stick. */
+    #mobile-grenade-btn {
+      position: absolute;
+      left: 16px;
+      bottom: 176px;
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      background: radial-gradient(
+        circle at 35% 35%,
+        rgba(214, 224, 96, 0.96),
+        rgba(78, 96, 28, 0.94)
+      );
+      border: 2.5px solid rgba(236, 244, 170, 0.92);
+      color: #f7ffd8;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      touch-action: none;
+      cursor: pointer;
+      z-index: 2;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      user-select: none;
+    }
+
+    #mobile-grenade-btn.active {
+      transform: scale(0.92);
+      background: radial-gradient(
+        circle at 35% 35%,
+        rgba(244, 255, 140, 0.98),
+        rgba(128, 148, 32, 0.96)
+      );
+      box-shadow: 0 0 16px rgba(210, 230, 70, 0.55);
+    }
+
     /* Airstrike call-in. Gray until a charge is ready, then gold. */
     #mobile-airstrike-btn {
       position: absolute;
@@ -980,6 +1019,14 @@
         bottom: 120px;
       }
 
+      #mobile-grenade-btn {
+        width: 52px;
+        height: 52px;
+        left: 6px;
+        bottom: 148px;
+        font-size: 9px;
+      }
+
       #mobile-airstrike-btn {
         width: 52px;
         height: 52px;
@@ -1013,6 +1060,14 @@
         height: 54px;
         right: 116px;
         bottom: 24px;
+      }
+
+      #mobile-grenade-btn {
+        width: 48px;
+        height: 48px;
+        left: 6px;
+        bottom: 128px;
+        font-size: 9px;
       }
 
       #mobile-airstrike-btn {
@@ -1061,6 +1116,7 @@
 
     <div id="right-touch-zone"></div>
 
+    <div id="mobile-grenade-btn" title="Grenade (G)">NADE</div>
     <div id="mobile-jump-btn">JUMP</div>
     <div id="mobile-airstrike-btn" hidden>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>
@@ -2952,7 +3008,9 @@
       run: "Run_and_Shoot",
       vault: "Vault_with_Rifle",
       // The exported Death with Rifle clip has this generated name in the GLB.
-      death: "_01a17b40_0b49_7260_98c0_64d66f5e633a"
+      death: "_01a17b40_0b49_7260_98c0_64d66f5e633a",
+      // Standing Throw in the updated GLB (generated name, not a literal label).
+      throw: "_01a18105_7a70_737e_aa8e_d79ff5a2b157"
     });
     const RIFLE_SCALE = 1.08;
     const RIFLE_TRIGGER = new BABYLON.Vector3(0.22, -0.075, 0);
@@ -3092,12 +3150,10 @@
       model.animationPlaying = playing;
       // RuntimeAnimations capture enableBlending from the target override when they start.
       model.blendOverride.enableBlending = !snap;
-      group.start(
-        name !== SOLDIER_CLIPS.vault && name !== SOLDIER_CLIPS.death,
-        playing ? 1 : 0,
-        group.from,
-        group.to
-      );
+      const loops = name !== SOLDIER_CLIPS.vault &&
+        name !== SOLDIER_CLIPS.death &&
+        name !== SOLDIER_CLIPS.throw;
+      group.start(loops, playing ? 1 : 0, group.from, group.to);
       model.blendOverride.enableBlending = true;
     }
 
@@ -3144,6 +3200,11 @@
       });
       model.animationGroups[SOLDIER_CLIPS.vault].onAnimationGroupEndObservable.add(() => {
         if (model.animationName !== SOLDIER_CLIPS.vault) return;
+        model.manualAnimation = false;
+        model.animationPlaying = false;
+      });
+      model.animationGroups[SOLDIER_CLIPS.throw].onAnimationGroupEndObservable.add(() => {
+        if (model.animationName !== SOLDIER_CLIPS.throw) return;
         model.manualAnimation = false;
         model.animationPlaying = false;
       });
@@ -4229,6 +4290,759 @@
     }
 
     // =========================================================================
+    // GRENADES — hold to aim, release to throw. Predict and live flight share one step.
+    // =========================================================================
+    const GRENADE_SPEED = 16;
+    const GRENADE_LOFT = 7.2;
+    const GRENADE_GRAVITY = 14.5;
+    const GRENADE_STEP = 1 / 45;
+    const GRENADE_MAX_FLIGHT = 3.05;
+    const GRENADE_ARC_SAMPLES = 28;
+    const GRENADE_ORIGIN_FORWARD = 0.4;
+    const GRENADE_ORIGIN_UP = 1.3;
+    const GRENADE_BLAST_RADIUS = 7;
+    const GRENADE_MAX_DAMAGE = 100;
+    const GRENADE_MESH_SIZE = 0.28;
+    const GRENADE_FX_POOL = 4;
+    const GRENADE_FX_COUNT = 72;
+    const GRENADE_GLOW_LIFE = 0.24;
+    const GRENADE_EXPLODE_MATCH = 10;
+    const GRENADE_FX_DEDUPE_RADIUS = 4;
+    const GRENADE_FX_DEDUPE_MS = 700;
+    // Standing throw is 3s. The grenade leaves 0.5s before the clip ends; another aim waits out the clip.
+    const GRENADE_THROW_DELAY = 1.5;
+    const GRENADE_THROW_COOLDOWN = 3;
+    // Standing-throw clip faces 90° left of the other clips. Positive yaw brings it forward.
+    const GRENADE_THROW_YAW = Math.PI / 2;
+
+    let grenadeAiming = false;
+    let grenadeCooldownLeft = 0;
+    let grenadePointerHeld = false;
+    let grenadeIgnoreMouseUntil = 0;
+    let grenadeTemplate = null;
+    let grenadeTemplateVersion = 0;
+    let grenadeCamKick = 0;
+    const grenadePool = [];
+    const liveGrenades = [];
+    const pendingGrenadeThrows = [];
+    const grenadeGlowPool = [];
+    const activeGrenadeGlows = [];
+    const recentGrenadeBlasts = [];
+    const grenadeArcPoints = [];
+    for (let arcPoint = 0; arcPoint < GRENADE_ARC_SAMPLES; arcPoint++) {
+      grenadeArcPoints.push(new BABYLON.Vector3(0, -20, 0));
+    }
+    let grenadeArcLine = null;
+    let grenadeMarker = null;
+    const grenadeArcColor = new BABYLON.Color3(0.86, 1, 0.4);
+    const mobileGrenadeBtnEl = document.getElementById("mobile-grenade-btn");
+
+    const grenadeMarkerMat = new BABYLON.StandardMaterial("grenadeMarkerMat", scene);
+    grenadeMarkerMat.emissiveColor = new BABYLON.Color3(0.95, 1, 0.42);
+    grenadeMarkerMat.diffuseColor = new BABYLON.Color3(0.15, 0.18, 0.04);
+    grenadeMarkerMat.specularColor = new BABYLON.Color3(0, 0, 0);
+    grenadeMarkerMat.disableLighting = true;
+
+    const grenadeGlowMat = new BABYLON.StandardMaterial("grenadeGlowMat", scene);
+    grenadeGlowMat.emissiveColor = new BABYLON.Color3(1, 0.58, 0.16);
+    grenadeGlowMat.diffuseColor = new BABYLON.Color3(0, 0, 0);
+    grenadeGlowMat.specularColor = new BABYLON.Color3(0, 0, 0);
+    grenadeGlowMat.alpha = 0.5;
+    grenadeGlowMat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+    grenadeGlowMat.disableLighting = true;
+
+    function grenadeNodeMeshes(node) {
+      const meshes = [];
+      if (!node) return meshes;
+      if (node.getTotalVertices && node.getTotalVertices() > 0) meshes.push(node);
+      if (node.getChildMeshes) {
+        node.getChildMeshes(false).forEach((mesh) => {
+          if (mesh.getTotalVertices && mesh.getTotalVertices() > 0) meshes.push(mesh);
+        });
+      }
+      return meshes;
+    }
+
+    function ensureGrenadeFallback() {
+      if (grenadeTemplate) return;
+      const mesh = BABYLON.MeshBuilder.CreateSphere(
+        "grenadeFallback",
+        { diameter: GRENADE_MESH_SIZE, segments: 8 },
+        scene
+      );
+      const mat = new BABYLON.StandardMaterial("grenadeFallbackMat", scene);
+      mat.diffuseColor = new BABYLON.Color3(0.32, 0.48, 0.16);
+      mat.specularColor = new BABYLON.Color3(0.22, 0.22, 0.16);
+      mesh.material = mat;
+      mesh.isPickable = false;
+      mesh.setEnabled(false);
+      grenadeTemplate = mesh;
+      grenadeTemplateVersion += 1;
+    }
+
+    function measureGrenadeBounds(rootNode) {
+      let minX = Infinity, minY = Infinity, minZ = Infinity;
+      let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+      grenadeNodeMeshes(rootNode).forEach((mesh) => {
+        mesh.computeWorldMatrix(true);
+        mesh.refreshBoundingInfo(true, true);
+        const bb = mesh.getBoundingInfo().boundingBox;
+        minX = Math.min(minX, bb.minimumWorld.x);
+        minY = Math.min(minY, bb.minimumWorld.y);
+        minZ = Math.min(minZ, bb.minimumWorld.z);
+        maxX = Math.max(maxX, bb.maximumWorld.x);
+        maxY = Math.max(maxY, bb.maximumWorld.y);
+        maxZ = Math.max(maxZ, bb.maximumWorld.z);
+      });
+      return { minX, minY, minZ, maxX, maxY, maxZ };
+    }
+
+    async function loadGrenadeAsset() {
+      const container = await BABYLON.LoadAssetContainerAsync(
+        assetUrl("models/Meshy_AI_Grenade.glb"),
+        scene,
+        { pluginExtension: ".glb" }
+      );
+      container.addAllToScene();
+      container.lights.slice().forEach((light) => light.dispose());
+      container.cameras.slice().forEach((cam) => cam.dispose());
+      const holder = new BABYLON.TransformNode("grenadeSource", scene);
+      container.rootNodes.forEach((node) => { node.parent = holder; });
+      holder.rotationQuaternion = null;
+      holder.rotation.set(0, 0, 0);
+      holder.scaling.setAll(1);
+      holder.position.set(0, 0, 0);
+      holder.computeWorldMatrix(true);
+      const unscaled = measureGrenadeBounds(holder);
+      const longest = Math.max(
+        unscaled.maxX - unscaled.minX,
+        unscaled.maxY - unscaled.minY,
+        unscaled.maxZ - unscaled.minZ
+      );
+      if (!(longest > 1e-4)) {
+        holder.dispose(false, true);
+        throw new Error("Grenade GLB has no measurable bounds");
+      }
+      holder.scaling.setAll(GRENADE_MESH_SIZE / longest);
+      holder.computeWorldMatrix(true);
+      const fitted = measureGrenadeBounds(holder);
+      holder.position.set(
+        -(fitted.minX + fitted.maxX) * 0.5,
+        -(fitted.minY + fitted.maxY) * 0.5,
+        -(fitted.minZ + fitted.maxZ) * 0.5
+      );
+      grenadeNodeMeshes(holder).forEach((mesh) => { mesh.isPickable = false; });
+      grenadePool.splice(0).forEach((node) => node.dispose());
+      const previous = grenadeTemplate;
+      const previousVersion = grenadeTemplateVersion;
+      grenadeTemplateVersion += 1;
+      grenadeTemplate = holder;
+      holder.setEnabled(false);
+      const previousInFlight = liveGrenades.some((grenade) =>
+        grenade.node && grenade.node.metadata && grenade.node.metadata.grenadeVersion === previousVersion
+      );
+      if (previous && previous !== holder && !previousInFlight) previous.dispose();
+      else if (previous && previous !== holder) previous.setEnabled(false);
+    }
+
+    ensureGrenadeFallback();
+    loadGrenadeAsset().catch((error) => {
+      console.error("Unable to load grenade mesh:", error);
+      ensureGrenadeFallback();
+    });
+
+    function acquireGrenadeNode() {
+      if (!grenadeTemplate) return null;
+      while (grenadePool.length) {
+        const pooled = grenadePool[grenadePool.length - 1];
+        if (pooled.metadata && pooled.metadata.grenadeVersion === grenadeTemplateVersion) break;
+        grenadePool.pop().dispose();
+      }
+      let node = grenadePool.pop();
+      if (!node) {
+        node = grenadeTemplate.clone("liveGrenade");
+        node.metadata = { grenadeVersion: grenadeTemplateVersion, shadowed: true };
+        grenadeNodeMeshes(node).forEach((mesh) => {
+          mesh.isPickable = false;
+          mesh.isVisible = true;
+          mesh.setEnabled(true);
+          shadowGen.addShadowCaster(mesh);
+        });
+      }
+      if (node.rotationQuaternion) node.rotationQuaternion = null;
+      node.setEnabled(true);
+      grenadeNodeMeshes(node).forEach((mesh) => {
+        mesh.isVisible = true;
+        mesh.setEnabled(true);
+      });
+      return node;
+    }
+
+    function releaseGrenadeNode(node) {
+      if (!node || (typeof node.isDisposed === "function" && node.isDisposed())) return;
+      if (!node.metadata || node.metadata.grenadeVersion !== grenadeTemplateVersion) {
+        node.dispose();
+        return;
+      }
+      node.setEnabled(false);
+      grenadePool.push(node);
+    }
+
+    function grenadeGroundHeight(x, z) {
+      if (builtMapType !== "kitchen" && (Math.abs(x) > WORLD_LIMIT_X || Math.abs(z) > WORLD_LIMIT_Z)) {
+        return -0.45;
+      }
+      return getSandHeight(x, z);
+    }
+
+    function grenadeGroundCross(x0, y0, z0, x1, y1, z1) {
+      const g0 = grenadeGroundHeight(x0, z0);
+      if (y0 <= g0) return { t: 0, x: x0, y: g0, z: z0 };
+      if (y1 > grenadeGroundHeight(x1, z1)) return null;
+      let lo = 0;
+      let hi = 1;
+      for (let i = 0; i < 6; i++) {
+        const mid = (lo + hi) * 0.5;
+        const x = x0 + (x1 - x0) * mid;
+        const y = y0 + (y1 - y0) * mid;
+        const z = z0 + (z1 - z0) * mid;
+        if (y <= grenadeGroundHeight(x, z)) hi = mid;
+        else lo = mid;
+      }
+      const t = (lo + hi) * 0.5;
+      const x = x0 + (x1 - x0) * t;
+      const z = z0 + (z1 - z0) * t;
+      return { t, x, y: grenadeGroundHeight(x, z), z };
+    }
+
+    // First solid contact along one flight step: toy AABBs, sandbox walls, then the sand heightfield.
+    function grenadeSegmentHit(x0, y0, z0, x1, y1, z1) {
+      const dx = x1 - x0;
+      const dy = y1 - y0;
+      const dz = z1 - z0;
+      const segLen = Math.hypot(dx, dy, dz);
+      if (segLen < 1e-6) {
+        const ground = grenadeGroundHeight(x0, z0);
+        return y0 <= ground ? { x: x0, y: ground, z: z0 } : null;
+      }
+      const inv = 1 / segLen;
+      const dirx = dx * inv;
+      const diry = dy * inv;
+      const dirz = dz * inv;
+      let best = segLen;
+      let hit = null;
+      const take = (dist, x, y, z) => {
+        if (dist >= 0 && dist < best) {
+          best = dist;
+          hit = { x, y, z };
+        }
+      };
+
+      for (let i = 0; i < obstacles.length; i++) {
+        const obs = obstacles[i];
+        const d = intersectRayAABB(
+          x0, y0, z0, dirx, diry, dirz,
+          obs.minX, obs.maxX, obs.minY ?? -1.5, obs.maxY, obs.minZ, obs.maxZ,
+          best
+        );
+        if (d >= 0) take(d, x0 + dirx * d, y0 + diry * d, z0 + dirz * d);
+      }
+
+      if (builtMapType === "kitchen") {
+        const d = intersectRayAABB(
+          x0, y0, z0, dirx, diry, dirz,
+          -WORLD_LIMIT_X, WORLD_LIMIT_X, -3, 0, -WORLD_LIMIT_Z, WORLD_LIMIT_Z,
+          best
+        );
+        if (d >= 0) take(d, x0 + dirx * d, y0 + diry * d, z0 + dirz * d);
+      } else {
+        const wallTop = builtMapType === "shoebox" ? 5.0 : 3.3;
+        const wall = (t) => {
+          if (!(t > 0 && t < best)) return;
+          const y = y0 + diry * t;
+          if (y <= wallTop) take(t, x0 + dirx * t, y, z0 + dirz * t);
+        };
+        if (dirx > 1e-5) wall((WORLD_LIMIT_X - x0) / dirx);
+        else if (dirx < -1e-5) wall((-WORLD_LIMIT_X - x0) / dirx);
+        if (dirz > 1e-5) wall((WORLD_LIMIT_Z - z0) / dirz);
+        else if (dirz < -1e-5) wall((-WORLD_LIMIT_Z - z0) / dirz);
+      }
+
+      const ground = grenadeGroundCross(x0, y0, z0, x1, y1, z1);
+      if (ground) take(ground.t * segLen, ground.x, ground.y, ground.z);
+      return hit;
+    }
+
+    function advanceGrenadeState(state, dt) {
+      state.vy -= GRENADE_GRAVITY * dt;
+      const nx = state.x + state.vx * dt;
+      const ny = state.y + state.vy * dt;
+      const nz = state.z + state.vz * dt;
+      const hit = grenadeSegmentHit(state.x, state.y, state.z, nx, ny, nz);
+      state.age += dt;
+      if (hit) {
+        state.x = hit.x;
+        state.y = hit.y;
+        state.z = hit.z;
+        state.impact = true;
+        return true;
+      }
+      state.x = nx;
+      state.y = ny;
+      state.z = nz;
+      if (state.age >= GRENADE_MAX_FLIGHT - 1e-4) {
+        state.impact = true;
+        state.airburst = true;
+        return true;
+      }
+      return false;
+    }
+
+    function resampleGrenadePoints(raw) {
+      const last = raw.length - 1;
+      const count = GRENADE_ARC_SAMPLES;
+      if (last <= 0) {
+        const only = raw[0] || { x: 0, y: 0, z: 0 };
+        for (let i = 0; i < count; i++) grenadeArcPoints[i].set(only.x, only.y, only.z);
+        return grenadeArcPoints;
+      }
+      for (let i = 0; i < count; i++) {
+        const t = (i / (count - 1)) * last;
+        const i0 = Math.floor(t);
+        const i1 = Math.min(last, i0 + 1);
+        const f = t - i0;
+        const a = raw[i0];
+        const b = raw[i1];
+        grenadeArcPoints[i].set(
+          a.x + (b.x - a.x) * f,
+          a.y + (b.y - a.y) * f,
+          a.z + (b.z - a.z) * f
+        );
+      }
+      return grenadeArcPoints;
+    }
+
+    function predictGrenadeFlight(origin, velocity) {
+      const state = {
+        x: origin.x, y: origin.y, z: origin.z,
+        vx: velocity.x, vy: velocity.y, vz: velocity.z,
+        age: 0, impact: false
+      };
+      const raw = [{ x: state.x, y: state.y, z: state.z }];
+      const maxSteps = Math.ceil(GRENADE_MAX_FLIGHT / GRENADE_STEP) + 1;
+      for (let i = 0; i < maxSteps && !state.impact; i++) {
+        advanceGrenadeState(state, GRENADE_STEP);
+        raw.push({ x: state.x, y: state.y, z: state.z });
+      }
+      resampleGrenadePoints(raw);
+      return { impact: { x: state.x, y: state.y, z: state.z } };
+    }
+
+    function computeGrenadeThrow(soldier) {
+      const yaw = soldier.yaw || 0;
+      const pitch = soldier.pitch || 0;
+      const sinY = Math.sin(yaw);
+      const cosY = Math.cos(yaw);
+      const origin = {
+        x: soldier.position.x + sinY * GRENADE_ORIGIN_FORWARD,
+        y: soldier.position.y + GRENADE_ORIGIN_UP,
+        z: soldier.position.z + cosY * GRENADE_ORIGIN_FORWARD
+      };
+      const aimX = soldier.position.x + sinY * 14;
+      const aimY = soldier.position.y + 1.55 - Math.sin(pitch) * 6.5;
+      const aimZ = soldier.position.z + cosY * 14;
+      let dx = aimX - origin.x;
+      let dy = aimY - origin.y;
+      let dz = aimZ - origin.z;
+      const mag = Math.hypot(dx, dy, dz) || 1;
+      dx /= mag;
+      dy /= mag;
+      dz /= mag;
+      const lookUp = Math.max(-1, Math.min(1, -pitch / 0.5));
+      const speed = GRENADE_SPEED * (1 + lookUp * 0.22);
+      const loft = GRENADE_LOFT * (0.72 + lookUp * 0.45);
+      return {
+        origin,
+        velocity: {
+          x: dx * speed,
+          y: dy * speed + loft,
+          z: dz * speed
+        }
+      };
+    }
+
+    function hideGrenadePreview() {
+      if (grenadeArcLine) grenadeArcLine.isVisible = false;
+      if (grenadeMarker) grenadeMarker.isVisible = false;
+    }
+
+    function showGrenadePreview(path) {
+      const options = { points: grenadeArcPoints, updatable: true };
+      if (grenadeArcLine) options.instance = grenadeArcLine;
+      grenadeArcLine = BABYLON.MeshBuilder.CreateLines("grenadeArc", options, scene);
+      grenadeArcLine.color = grenadeArcColor;
+      grenadeArcLine.isPickable = false;
+      grenadeArcLine.alwaysSelectAsActiveMesh = true;
+      grenadeArcLine.isVisible = true;
+      if (!grenadeMarker) {
+        grenadeMarker = BABYLON.MeshBuilder.CreateSphere(
+          "grenadeMarker",
+          { diameter: 0.32, segments: 6 },
+          scene
+        );
+        grenadeMarker.material = grenadeMarkerMat;
+        grenadeMarker.isPickable = false;
+      }
+      grenadeMarker.isVisible = true;
+      grenadeMarker.position.set(path.impact.x, path.impact.y + 0.15, path.impact.z);
+    }
+
+    function setGrenadeButtonActive(active) {
+      if (!mobileGrenadeBtnEl) return;
+      mobileGrenadeBtnEl.classList.toggle("active", Boolean(active));
+    }
+
+    function grenadeThrowBusy() {
+      return grenadeCooldownLeft > 0 || pendingGrenadeThrows.some((job) => !job.cosmetic);
+    }
+
+    function beginGrenadeAim() {
+      if (grenadeAiming || grenadeThrowBusy()) return;
+      if (!player || !player.alive || gameEnded || isSetupOpen) return;
+      grenadeAiming = true;
+      setGrenadeButtonActive(true);
+    }
+
+    function cancelGrenadeAim() {
+      grenadeAiming = false;
+      grenadePointerHeld = false;
+      hideGrenadePreview();
+      setGrenadeButtonActive(false);
+    }
+
+    function playThrowClip(soldier) {
+      const model = soldier && soldier.model;
+      if (!model || !soldier.alive || model.deathStarted || !model.animationGroups) return;
+      if (!model.animationGroups[SOLDIER_CLIPS.throw]) return;
+      model.manualAnimation = true;
+      setSoldierClip(model, SOLDIER_CLIPS.throw, true);
+    }
+
+    function grenadeVectorsSane(origin, velocity) {
+      if (!origin || !velocity) return false;
+      const nums = [origin.x, origin.y, origin.z, velocity.x, velocity.y, velocity.z];
+      if (!nums.every((n) => Number.isFinite(Number(n)))) return false;
+      return Math.hypot(Number(velocity.x), Number(velocity.y), Number(velocity.z)) <= 80;
+    }
+
+    function launchGrenade(origin, velocity, options) {
+      if (!grenadeVectorsSane(origin, velocity)) return;
+      const node = acquireGrenadeNode();
+      const grenade = {
+        node,
+        x: origin.x,
+        y: origin.y,
+        z: origin.z,
+        vx: velocity.x,
+        vy: velocity.y,
+        vz: velocity.z,
+        age: 0,
+        accum: 0,
+        impact: false,
+        spin: Math.random() * Math.PI * 2,
+        cosmetic: Boolean(options.cosmetic),
+        thrower: options.cosmetic ? null : options.thrower,
+        throwerUnitId: options.throwerUnitId || (options.thrower && options.thrower.unitId) || ""
+      };
+      if (node) node.position.set(grenade.x, grenade.y, grenade.z);
+      liveGrenades.push(grenade);
+    }
+
+    function queueGrenadeThrow(origin, velocity, options) {
+      pendingGrenadeThrows.push({
+        timeLeft: GRENADE_THROW_DELAY,
+        origin,
+        velocity,
+        options
+      });
+    }
+
+    function updatePendingGrenadeThrows(dt) {
+      for (let i = pendingGrenadeThrows.length - 1; i >= 0; i--) {
+        const job = pendingGrenadeThrows[i];
+        job.timeLeft -= dt;
+        if (job.timeLeft > 0) continue;
+        pendingGrenadeThrows.splice(i, 1);
+        const thrower = job.options.thrower;
+        if (!job.options.cosmetic && (!thrower || !thrower.alive || gameEnded)) continue;
+        launchGrenade(job.origin, job.velocity, job.options);
+      }
+    }
+
+    function releaseGrenadeThrow() {
+      if (!grenadeAiming) return;
+      const thrower = player;
+      const canThrow = Boolean(thrower && thrower.alive && !gameEnded && !isSetupOpen && !grenadeThrowBusy());
+      grenadeAiming = false;
+      hideGrenadePreview();
+      setGrenadeButtonActive(false);
+      if (!canThrow) return;
+      const spec = computeGrenadeThrow(thrower);
+      playThrowClip(thrower);
+      grenadeCooldownLeft = GRENADE_THROW_COOLDOWN;
+      queueGrenadeThrow(spec.origin, spec.velocity, {
+        cosmetic: false,
+        thrower,
+        throwerUnitId: thrower.unitId
+      });
+      if (mpState.active) {
+        sendNetMessage({
+          type: "throw_grenade",
+          throwerUnitId: thrower.unitId,
+          origin: spec.origin,
+          velocity: spec.velocity
+        });
+      }
+    }
+
+    function updateGrenadeAim() {
+      if (!grenadeAiming) return;
+      if (!player || !player.alive || gameEnded || isSetupOpen) {
+        cancelGrenadeAim();
+        return;
+      }
+      const spec = computeGrenadeThrow(player);
+      showGrenadePreview(predictGrenadeFlight(spec.origin, spec.velocity));
+    }
+
+    function rememberGrenadeBlast(pos) {
+      const now = performance.now();
+      recentGrenadeBlasts.push({ x: pos.x, y: pos.y, z: pos.z, t: now });
+      while (recentGrenadeBlasts.length && now - recentGrenadeBlasts[0].t > 2000) {
+        recentGrenadeBlasts.shift();
+      }
+    }
+
+    function hasRecentGrenadeBlast(pos) {
+      const now = performance.now();
+      for (let i = recentGrenadeBlasts.length - 1; i >= 0; i--) {
+        const blast = recentGrenadeBlasts[i];
+        if (now - blast.t > GRENADE_FX_DEDUPE_MS) continue;
+        if (Math.hypot(blast.x - pos.x, blast.y - pos.y, blast.z - pos.z) <= GRENADE_FX_DEDUPE_RADIUS) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function soldierBlastDistance(soldier, x, y, z) {
+      const dx = Math.max(Math.abs(x - soldier.position.x) - 0.46, 0);
+      const dy = Math.max(Math.abs(y - (soldier.position.y + 1)) - 1, 0);
+      const dz = Math.max(Math.abs(z - soldier.position.z) - 0.46, 0);
+      return Math.hypot(dx, dy, dz);
+    }
+
+    function applyGrenadeAreaDamage(pos, thrower) {
+      if (!thrower || !thrower.isPlayer) return;
+      for (let i = 0; i < soldiers.length; i++) {
+        const target = soldiers[i];
+        if (!target.alive || target.team === thrower.team) continue;
+        const dist = soldierBlastDistance(target, pos.x, pos.y, pos.z);
+        if (dist >= GRENADE_BLAST_RADIUS) continue;
+        const falloff = 1 - dist / GRENADE_BLAST_RADIUS;
+        const amount = Math.round(GRENADE_MAX_DAMAGE * falloff * falloff);
+        if (amount <= 0) continue;
+        target.tookFireTimer = 1.4;
+        if (mpState.active) {
+          target.model.flinchTimer = 1.0;
+          sendNetMessage({
+            type: "damage_unit",
+            targetUnitId: target.unitId,
+            attackerUnitId: thrower.unitId,
+            amount
+          });
+        } else {
+          applyDamage(target, amount, thrower);
+        }
+      }
+    }
+
+    function applyGrenadeCameraKick(pos) {
+      if (!player) return;
+      const dist = Math.hypot(player.position.x - pos.x, player.position.z - pos.z);
+      const proximity = Math.max(0, 1 - dist / (GRENADE_BLAST_RADIUS + 4));
+      grenadeCamKick = Math.min(0.42, grenadeCamKick + 0.06 + proximity * 0.16);
+    }
+
+    function playGrenadeBoom(origin) {
+      if (!soundEnabled) return;
+      const ctx = ensureAudioContext();
+      if (!ctx) return;
+      const dist = camera ? BABYLON.Vector3.Distance(camera.position, origin) : 0;
+      if (dist > 100) return;
+      const vol = (dist < 14 ? 0.42 : 0.26) * Math.max(0.07, Math.pow(1 - Math.min(1, dist / 100), 1.3));
+      const now = ctx.currentTime;
+      const thump = ctx.createOscillator();
+      thump.type = "sine";
+      thump.frequency.setValueAtTime(118, now);
+      thump.frequency.exponentialRampToValueAtTime(38, now + 0.18);
+      const thumpGain = ctx.createGain();
+      thumpGain.gain.setValueAtTime(vol, now);
+      thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      thump.connect(thumpGain);
+      thumpGain.connect(ctx.destination);
+      thump.start(now);
+      thump.stop(now + 0.24);
+      if (!gunshotNoiseBuffer) return;
+      const noise = ctx.createBufferSource();
+      noise.buffer = gunshotNoiseBuffer;
+      noise.playbackRate.setValueAtTime(0.42, now);
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(420, now);
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(vol * 0.8, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+      noise.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      noise.start(now);
+      noise.stop(now + 0.22);
+    }
+
+    function spawnGrenadeGlow(pos) {
+      let mesh = grenadeGlowPool.pop();
+      if (!mesh) {
+        mesh = BABYLON.MeshBuilder.CreateSphere("grenadeGlow", { diameter: 1, segments: 8 }, scene);
+        mesh.material = grenadeGlowMat;
+        mesh.isPickable = false;
+      }
+      mesh.position.set(pos.x, pos.y + 0.15, pos.z);
+      mesh.scaling.setAll(0.35);
+      mesh.visibility = 1;
+      mesh.setEnabled(true);
+      activeGrenadeGlows.push({ mesh, life: GRENADE_GLOW_LIFE });
+    }
+
+    function updateGrenadeGlows(dt) {
+      for (let i = activeGrenadeGlows.length - 1; i >= 0; i--) {
+        const glow = activeGrenadeGlows[i];
+        glow.life -= dt;
+        const t = 1 - Math.max(0, glow.life) / GRENADE_GLOW_LIFE;
+        glow.mesh.scaling.setAll(0.4 + t * 3.6);
+        glow.mesh.visibility = Math.max(0, 1 - t);
+        if (glow.life <= 0) {
+          glow.mesh.setEnabled(false);
+          grenadeGlowPool.push(glow.mesh);
+          activeGrenadeGlows.splice(i, 1);
+        }
+      }
+    }
+
+    function presentGrenadeExplosion(pos, thrower) {
+      const point = new BABYLON.Vector3(pos.x, pos.y, pos.z);
+      spawnGrenadeExplosionFx(point);
+      spawnGrenadeGlow(pos);
+      playGrenadeBoom(point);
+      if (!thrower || !thrower.isPlayer) return;
+      applyGrenadeCameraKick(pos);
+      applyGrenadeAreaDamage(pos, thrower);
+      if (mpState.active) {
+        sendNetMessage({
+          type: "grenade_explode",
+          throwerUnitId: thrower.unitId,
+          position: { x: pos.x, y: pos.y, z: pos.z }
+        });
+      }
+    }
+
+    function detonateGrenade(grenade) {
+      const pos = { x: grenade.x, y: grenade.y, z: grenade.z };
+      releaseGrenadeNode(grenade.node);
+      grenade.node = null;
+      if (grenade.cosmetic && hasRecentGrenadeBlast(pos)) return;
+      presentGrenadeExplosion(pos, grenade.cosmetic ? null : grenade.thrower);
+      rememberGrenadeBlast(pos);
+    }
+
+    function updateLiveGrenades(dt) {
+      if (grenadeCooldownLeft > 0) grenadeCooldownLeft = Math.max(0, grenadeCooldownLeft - dt);
+      updatePendingGrenadeThrows(dt);
+      updateGrenadeGlows(dt);
+      for (let i = liveGrenades.length - 1; i >= 0; i--) {
+        const grenade = liveGrenades[i];
+        grenade.accum += dt;
+        let exploded = false;
+        let guard = 0;
+        while (grenade.accum >= GRENADE_STEP && !exploded && guard < 8) {
+          grenade.accum -= GRENADE_STEP;
+          guard += 1;
+          if (advanceGrenadeState(grenade, GRENADE_STEP)) exploded = true;
+        }
+        if (grenade.node) {
+          grenade.node.position.set(grenade.x, grenade.y, grenade.z);
+          grenade.spin += dt * 9;
+          if (grenade.node.rotationQuaternion) grenade.node.rotationQuaternion = null;
+          grenade.node.rotation.x = grenade.spin;
+          grenade.node.rotation.z = grenade.spin * 0.65;
+        }
+        if (!exploded) continue;
+        liveGrenades.splice(i, 1);
+        detonateGrenade(grenade);
+      }
+    }
+
+    function clearLiveGrenades() {
+      cancelGrenadeAim();
+      grenadeCooldownLeft = 0;
+      pendingGrenadeThrows.length = 0;
+      for (let i = liveGrenades.length - 1; i >= 0; i--) releaseGrenadeNode(liveGrenades[i].node);
+      liveGrenades.length = 0;
+      for (let i = activeGrenadeGlows.length - 1; i >= 0; i--) {
+        activeGrenadeGlows[i].mesh.setEnabled(false);
+        grenadeGlowPool.push(activeGrenadeGlows[i].mesh);
+      }
+      activeGrenadeGlows.length = 0;
+    }
+
+    function handleRemoteGrenadeThrow(msg) {
+      if (!msg || !grenadeVectorsSane(msg.origin, msg.velocity)) return;
+      if (player && msg.throwerUnitId === player.unitId) return;
+      const thrower = soldiersById.get(msg.throwerUnitId);
+      if (thrower) playThrowClip(thrower);
+      queueGrenadeThrow(msg.origin, msg.velocity, {
+        cosmetic: true,
+        thrower: null,
+        throwerUnitId: msg.throwerUnitId
+      });
+    }
+
+    function handleRemoteGrenadeExplode(msg) {
+      if (!msg || !msg.position) return;
+      const pos = msg.position;
+      if (![pos.x, pos.y, pos.z].every((n) => Number.isFinite(Number(n)))) return;
+      if (player && msg.throwerUnitId === player.unitId) return;
+      let match = -1;
+      let matchDist = GRENADE_EXPLODE_MATCH;
+      for (let i = 0; i < liveGrenades.length; i++) {
+        const grenade = liveGrenades[i];
+        if (!grenade.cosmetic || grenade.throwerUnitId !== msg.throwerUnitId) continue;
+        const dist = Math.hypot(grenade.x - pos.x, grenade.y - pos.y, grenade.z - pos.z);
+        if (dist < matchDist) {
+          matchDist = dist;
+          match = i;
+        }
+      }
+      if (match >= 0) {
+        releaseGrenadeNode(liveGrenades[match].node);
+        liveGrenades.splice(match, 1);
+      }
+      if (hasRecentGrenadeBlast(pos)) return;
+      presentGrenadeExplosion(pos, null);
+      rememberGrenadeBlast(pos);
+    }
+
+    // =========================================================================
     // OVERHEAD PLATES (GUI Editor layout: gui/overheadPlates.json)
     // One shared fullscreen AdvancedDynamicTexture hosts every plate; each soldier
     // gets a lightweight control tree parsed from the template and data-bound at runtime.
@@ -4439,6 +5253,7 @@
       if (model.deathStarted) resetSoldierDeath(model);
       model.visualRoot.position.y = soldier.stepSmoothY || 0;
       model.visualRoot.rotation.x = soldier.pitch * 0.3 - model.recoilTimer * 0.05;
+      model.visualRoot.rotation.y = model.animationName === SOLDIER_CLIPS.throw ? GRENADE_THROW_YAW : 0;
       model.visualRoot.rotation.z = model.flinchTimer * 0.07;
       const networkDriven = soldier.isRemotePlayer || (mpState.active && !isMultiplayerAuthority());
       const surfaceY = networkDriven
@@ -4451,6 +5266,7 @@
         model.stopAnimation();
         model.wasGrounded = grounded;
       }
+      syncThrowRifle(model);
       if (model.manualAnimation) return;
       // Walking off a terrain ripple is not a jump and must not interrupt the run clip.
       const jumping = !grounded && (networkDriven
@@ -4465,6 +5281,14 @@
       }
       model.wasGrounded = true;
       setSoldierClip(model, SOLDIER_CLIPS.run, isMoving);
+      syncThrowRifle(model);
+    }
+
+    function syncThrowRifle(model) {
+      if (!model.rifleInstance || model.rifleDropped) return;
+      const throwing = model.animationName === SOLDIER_CLIPS.throw;
+      model.rifleInstance.isVisible = !throwing;
+      if (throwing) model.muzzleFlash.isVisible = false;
     }
 
     // =========================================================================
@@ -5512,6 +6336,38 @@
       mobileJumpBtnEl.classList.remove("active");
     });
 
+    // ----- LEFT-SIDE GRENADE BUTTON (HOLD TO AIM, RELEASE TO THROW) -----
+    if (mobileGrenadeBtnEl) {
+      mobileGrenadeBtnEl.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        grenadeIgnoreMouseUntil = performance.now() + 700;
+        grenadePointerHeld = true;
+        beginGrenadeAim();
+      }, { passive: false });
+      const endGrenadeTouch = (e) => {
+        if (e && e.cancelable) e.preventDefault();
+        if (!grenadePointerHeld) return;
+        grenadePointerHeld = false;
+        releaseGrenadeThrow();
+      };
+      mobileGrenadeBtnEl.addEventListener("touchend", endGrenadeTouch);
+      mobileGrenadeBtnEl.addEventListener("touchcancel", endGrenadeTouch);
+      mobileGrenadeBtnEl.addEventListener("mousedown", (e) => {
+        if (performance.now() < grenadeIgnoreMouseUntil) return;
+        e.preventDefault();
+        e.stopPropagation();
+        grenadePointerHeld = true;
+        beginGrenadeAim();
+      });
+      mobileGrenadeBtnEl.addEventListener("contextmenu", (e) => e.preventDefault());
+    }
+    window.addEventListener("mouseup", () => {
+      if (!grenadePointerHeld) return;
+      grenadePointerHeld = false;
+      releaseGrenadeThrow();
+    });
+
     // ----- DESKTOP KEYBOARD & MOUSE -----
     window.addEventListener("keydown", (e) => {
       const tag = document.activeElement ? document.activeElement.tagName : "";
@@ -5520,10 +6376,12 @@
       if (e.code === "KeyR") uiNotify("ui.retryRequested");
       if (e.code === "KeyM") uiNotify("ui.setupRequested");
       if (e.code === "KeyE" && !e.repeat) requestAirstrike();
+      if (e.code === "KeyG" && !e.repeat) beginGrenadeAim();
     });
 
     window.addEventListener("keyup", (e) => {
       if (e.code in keys) keys[e.code] = false;
+      if (e.code === "KeyG") releaseGrenadeThrow();
     });
 
     canvas.addEventListener("click", () => {
@@ -5928,6 +6786,74 @@
       console.warn("Impact particle graphs unavailable; bullet impacts will have no burst effect.", error);
     });
 
+    // Grenade blast, pooled like the impact graphs (one NodeParticleSystemSet per slot).
+    const grenadeFxPool = [];
+    const grenadeFxColor = new BABYLON.Color4(1, 0.82, 0.38, 1);
+
+    function grenadeFxInput(set, name) {
+      if (!set || typeof set.getBlockByName !== "function") return null;
+      try {
+        return set.getBlockByName(name);
+      } catch (err) {
+        return null;
+      }
+    }
+
+    async function loadGrenadeExplosionFx() {
+      const res = await fetch(assetUrl("particles/grenadeExplosion.json"));
+      if (!res.ok) throw new Error("grenadeExplosion.json: HTTP " + res.status);
+      const json = await res.json();
+      const pool = [];
+      for (let i = 0; i < GRENADE_FX_POOL; i++) {
+        const set = BABYLON.NodeParticleSystemSet.Parse(json);
+        const built = await set.buildAsync(scene);
+        const system = built.systems && built.systems[0];
+        if (!system) throw new Error("grenadeExplosion.json produced no particle system");
+        system.name = "grenadeExplosion_" + i;
+        system.emitter = new BABYLON.Vector3(0, -100, 0);
+        system.start();
+        pool.push({
+          system,
+          inputs: {
+            color: grenadeFxInput(set, "color"),
+            size: grenadeFxInput(set, "size"),
+            lifeTime: grenadeFxInput(set, "lifeTime"),
+            emitPower: grenadeFxInput(set, "emitPower")
+          },
+          lastFrame: -1
+        });
+      }
+      grenadeFxPool.splice(0, grenadeFxPool.length, ...pool);
+    }
+
+    function spawnGrenadeExplosionFx(point) {
+      if (!grenadeFxPool.length || !point) return;
+      const frame = scene.getFrameId();
+      let slot = null;
+      for (let i = 0; i < grenadeFxPool.length; i++) {
+        const candidate = grenadeFxPool[i];
+        if (!candidate.system.isReady()) continue;
+        if (candidate.lastFrame !== frame) {
+          slot = candidate;
+          break;
+        }
+        if (!slot) slot = candidate;
+      }
+      if (!slot) return;
+      slot.lastFrame = frame;
+      if (slot.inputs.color) slot.inputs.color.value = grenadeFxColor;
+      if (slot.inputs.size) slot.inputs.size.value = 0.42;
+      if (slot.inputs.lifeTime) slot.inputs.lifeTime.value = 0.62;
+      if (slot.inputs.emitPower) slot.inputs.emitPower.value = 1.6;
+      slot.system.emitter.copyFrom(point);
+      slot.system.manualEmitCount = GRENADE_FX_COUNT;
+    }
+
+    loadGrenadeExplosionFx().catch((error) => {
+      grenadeFxPool.length = 0;
+      console.warn("Grenade explosion graph unavailable; blasts will use the glow mesh only.", error);
+    });
+
     // Fast analytical muzzle position (avoids expensive scene-graph matrix recomputation for distant bots)
     function getMuzzleWorldPosition(soldier) {
       if (soldier.isPlayer) {
@@ -6213,7 +7139,7 @@
     }
 
     function firePlayerWeapon() {
-      if (!player) return;
+      if (!player || grenadeAiming) return;
       const camForward = camera.getDirection(BABYLON.Vector3.Forward());
       const ox = camera.position.x, oy = camera.position.y, oz = camera.position.z;
       const dx = camForward.x, dy = camForward.y, dz = camForward.z;
@@ -8294,6 +9220,16 @@
           break;
         }
 
+        case "throw_grenade": {
+          handleRemoteGrenadeThrow(msg);
+          break;
+        }
+
+        case "grenade_explode": {
+          handleRemoteGrenadeExplode(msg);
+          break;
+        }
+
         case "pong": {
           if (typeof msg.clientTime === "number") {
             perfTelemetry.pingMs = Math.max(0, performance.now() - msg.clientTime);
@@ -8443,6 +9379,7 @@
       isMouseDown = false;
       isMobileFiring = false;
       mobileFireBtnEl.classList.remove("active");
+      cancelGrenadeAim();
       resetJoystick();
       if (document.pointerLockElement && document.exitPointerLock) {
         document.exitPointerLock();
@@ -8781,6 +9718,7 @@
       isPlayerKnockedDown = false;
       airstrikePending = false;
       endAirstrike();
+      clearLiveGrenades();
       lastMatchEndInfo = {
         endedByHost,
         hostName: endedByHost ? (options && options.hostName) || "Host" : ""
@@ -8793,6 +9731,7 @@
       isPlayerKnockedDown = false;
       airstrikePending = false;
       endAirstrike();
+      clearLiveGrenades();
       resetKillStreak();
       matchTimeRemaining =
         mpState.active && mpState.roster && mpState.roster.durationSec
@@ -9696,6 +10635,7 @@
 
       updateAirstrike(dt);
       updateAirstrikeUI();
+      updateLiveGrenades(dt);
 
       // Update dynamic physics beach ball
       updatePhysicsBeachBall(dt);
@@ -9829,11 +10769,13 @@
             }
           }
 
+          updateGrenadeAim();
           if (player.fireCooldown > 0) player.fireCooldown -= dt;
-          if ((isMouseDown || isMobileFiring) && player.fireCooldown <= 0) {
+          if (!grenadeAiming && (isMouseDown || isMobileFiring) && player.fireCooldown <= 0) {
             firePlayerWeapon();
           }
         } else {
+          if (grenadeAiming) cancelGrenadeAim();
           const tP0 = performance.now();
           updateSoldierPhysicsAndCollisions(player, dt);
           const tP1 = performance.now();
@@ -10065,6 +11007,11 @@
         desiredCamPos.y = Math.max(sandUnderCam + 0.85, desiredCamPos.y);
 
         camera.position.copyFrom(desiredCamPos);
+        if (grenadeCamKick > 0) {
+          camera.position.y += grenadeCamKick;
+          grenadeCamKick *= Math.max(0, 1 - dt * 6);
+          if (grenadeCamKick < 0.004) grenadeCamKick = 0;
+        }
 
         const lookTarget = player.position
           .add(forward.scale(14))

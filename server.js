@@ -35,7 +35,8 @@ const FAVICON_FILES = new Set([
 const MODEL_FILES = new Set([
   "Meshy_AI_rigged_green_All_Animations.glb",
   "Meshy_AI_vintage_toy_m16_rifle.glb",
-  "Meshy_AI_p51_mustang.glb"
+  "Meshy_AI_p51_mustang.glb",
+  "Meshy_AI_Grenade.glb"
 ]);
 
 // Node Material Editor graphs (NME JSON) served at /materials/<file>
@@ -59,7 +60,8 @@ const GEOMETRY_FILES = new Set([
 // Node Particle Editor graphs (NPE JSON) served at /particles/<file>
 const PARTICLE_FILES = new Set([
   "sandPuff.json",
-  "plasticSparks.json"
+  "plasticSparks.json",
+  "grenadeExplosion.json"
 ]);
 
 // GUI Editor layouts (AdvancedDynamicTexture JSON) served at /gui/<file>
@@ -2459,6 +2461,58 @@ wss.on("connection", (ws, req) => {
           },
           clientId
         );
+        break;
+      }
+
+      // Cosmetic grenade flight. Damage stays on damage_unit from the throwing client.
+      case "throw_grenade":
+      case "grenade_explode": {
+        if (!currentRoom || currentRoom.clients.size <= 1) break;
+        const sender = currentRoom.clients.get(clientId);
+        if (!sender) break;
+        const vecs = msg.type === "throw_grenade"
+          ? [msg.origin, msg.velocity]
+          : [msg.position];
+        const finite = vecs.every((v) =>
+          v && [v.x, v.y, v.z].every((n) => Number.isFinite(Number(n)))
+        );
+        if (!finite) break;
+        if (msg.type === "throw_grenade") {
+          const speed = Math.hypot(Number(msg.velocity.x), Number(msg.velocity.y), Number(msg.velocity.z));
+          if (speed > 80) break;
+          broadcastToRoom(
+            currentRoom,
+            {
+              type: "throw_grenade",
+              throwerUnitId: sender.unitId,
+              origin: {
+                x: Number(msg.origin.x),
+                y: Number(msg.origin.y),
+                z: Number(msg.origin.z)
+              },
+              velocity: {
+                x: Number(msg.velocity.x),
+                y: Number(msg.velocity.y),
+                z: Number(msg.velocity.z)
+              }
+            },
+            clientId
+          );
+        } else {
+          broadcastToRoom(
+            currentRoom,
+            {
+              type: "grenade_explode",
+              throwerUnitId: sender.unitId,
+              position: {
+                x: Number(msg.position.x),
+                y: Number(msg.position.y),
+                z: Number(msg.position.z)
+              }
+            },
+            clientId
+          );
+        }
         break;
       }
 
