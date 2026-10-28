@@ -150,6 +150,35 @@
       transition: width 0.15s ease, background-color 0.15s ease;
     }
 
+    #player-kd {
+      font-size: 12.5px;
+      font-weight: bold;
+      letter-spacing: 0.3px;
+      white-space: nowrap;
+    }
+
+    #kill-credit {
+      position: absolute;
+      left: 50%;
+      top: calc(50% - 18px);
+      transform: translate(-50%, -100%);
+      font-size: 13px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.6);
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    #kill-credit.show {
+      animation: kill-credit-fade 0.5s linear forwards;
+    }
+
+    @keyframes kill-credit-fade {
+      0%, 70% { opacity: 0.6; }
+      100% { opacity: 0; }
+    }
+
     #streak-label {
       font-size: 12px;
       font-weight: bold;
@@ -917,6 +946,14 @@
         height: 9px;
       }
 
+      #player-kd {
+        font-size: 11px;
+      }
+
+      #kill-credit {
+        font-size: 12px;
+      }
+
       #top-right-bar {
         top: 10px;
         right: 10px;
@@ -1136,6 +1173,7 @@
       <div id="health-bar-bg">
         <div id="health-bar-fill"></div>
       </div>
+      <div id="player-kd">K <span id="player-kills">0</span> / D <span id="player-deaths">0</span></div>
       <div id="streak-label" hidden>STREAK 0</div>
     </div>
 
@@ -1185,6 +1223,7 @@
     <div id="mp-toast-container"></div>
 
     <div id="crosshair"></div>
+    <span id="kill-credit" aria-hidden="true">+1</span>
 
     <!-- Streamlined New Match & Multiplayer Modal -->
     <div id="setup-modal">
@@ -3628,6 +3667,7 @@
 
     function noteKillStreak() {
       if (!player || !player.alive || gameEnded) return;
+      showKillCredit();
       killStreak += 1;
       if (killStreak >= AIRSTRIKE_KILLS && !airstrikeReady) airstrikeReady = true;
       updateAirstrikeUI();
@@ -4293,15 +4333,15 @@
     // GRENADES — hold to aim, release to throw. Predict and live flight share one step.
     // =========================================================================
     const GRENADE_SPEED = 16;
-    const GRENADE_LOFT = 7.2;
+    const GRENADE_LOFT = 8;
     const GRENADE_GRAVITY = 14.5;
     const GRENADE_STEP = 1 / 45;
-    const GRENADE_MAX_FLIGHT = 3.05;
+    const GRENADE_MAX_FLIGHT = 4;
     const GRENADE_ARC_SAMPLES = 28;
     const GRENADE_ORIGIN_FORWARD = 0.4;
     const GRENADE_ORIGIN_UP = 1.3;
-    const GRENADE_BLAST_RADIUS = 7;
-    const GRENADE_MAX_DAMAGE = 100;
+    const GRENADE_BLAST_RADIUS = 10;
+    const GRENADE_MAX_DAMAGE = 200;
     const GRENADE_MESH_SIZE = 0.28;
     const GRENADE_FX_POOL = 4;
     const GRENADE_FX_COUNT = 72;
@@ -7494,6 +7534,16 @@
 
     const healthValueEl = document.getElementById("health-value");
     const healthBarFillEl = document.getElementById("health-bar-fill");
+    const playerKillsEl = document.getElementById("player-kills");
+    const playerDeathsEl = document.getElementById("player-deaths");
+    const killCreditEl = document.getElementById("kill-credit");
+
+    function showKillCredit() {
+      if (!killCreditEl) return;
+      killCreditEl.classList.remove("show");
+      void killCreditEl.offsetWidth;
+      killCreditEl.classList.add("show");
+    }
     const matchTimerEl = document.getElementById("match-timer");
     const greenKillsEl = document.getElementById("green-kills");
     const tanKillsEl = document.getElementById("tan-kills");
@@ -9657,6 +9707,8 @@
       const hp = Math.max(0, Math.round(player.health));
       healthValueEl.textContent = hp;
       healthBarFillEl.style.width = hp + "%";
+      if (playerKillsEl) playerKillsEl.textContent = player.kills || 0;
+      if (playerDeathsEl) playerDeathsEl.textContent = player.deaths || 0;
 
       if (hp > 50) healthBarFillEl.style.backgroundColor = "#3bd13b";
       else if (hp > 25) healthBarFillEl.style.backgroundColor = "#f0ad4e";
