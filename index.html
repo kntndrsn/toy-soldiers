@@ -62,6 +62,22 @@
       z-index: 20;
     }
 
+    /* Brief red edge flash when the local player takes damage */
+    #damage-vignette {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      background: radial-gradient(
+        ellipse at center,
+        transparent 42%,
+        rgba(140, 0, 0, 0.22) 72%,
+        rgba(160, 0, 0, 0.72) 100%
+      );
+      box-shadow: inset 0 0 90px 28px rgba(150, 0, 0, 0.55);
+      will-change: opacity;
+    }
+
     input, select, button {
       touch-action: manipulation;
       user-select: auto;
@@ -1058,6 +1074,7 @@
 
   <!-- On-Screen HUD -->
   <div id="hud">
+    <div id="damage-vignette" aria-hidden="true"></div>
     <div id="status-panel">
       <div id="health-label">HP <span id="health-value">100</span>%</div>
       <div id="health-bar-bg">
@@ -4014,8 +4031,6 @@
               }
             }
           }
-          const aimDir = new BABYLON.Vector3(dirx, diry, dirz);
-          hitSoldier.velocity.addInPlace(aimDir.scale(4.5));
           hitSoldier.tookFireTimer = 1.4;
           spawnImpactFx(hitPoint, hitSoldier.team === "green" ? "greenPlastic" : "tanPlastic");
           playImpactHitSound(hitPoint, true);
@@ -5773,6 +5788,57 @@
       osc.stop(now + 0.055);
     }
 
+    // COD-style body-hit cue when the local player takes damage
+    function playPlayerHurtSound() {
+      if (!soundEnabled) return;
+      const ctx = ensureAudioContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+      const duration = 0.11;
+
+      // Filtered noise burst — short "fwip/crunch" that cuts through gunfire
+      const sampleCount = Math.max(1, Math.floor(ctx.sampleRate * duration));
+      const buffer = ctx.createBuffer(1, sampleCount, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < sampleCount; i++) {
+        const t = i / sampleCount;
+        data[i] = (Math.random() * 2 - 1) * (1 - t);
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+
+      const band = ctx.createBiquadFilter();
+      band.type = "bandpass";
+      band.frequency.setValueAtTime(2200, now);
+      band.Q.setValueAtTime(1.4, now);
+
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.32, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+      noise.connect(band);
+      band.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      noise.start(now);
+      noise.stop(now + duration);
+
+      // Low thump for weight
+      const thump = ctx.createOscillator();
+      thump.type = "sine";
+      thump.frequency.setValueAtTime(140, now);
+      thump.frequency.exponentialRampToValueAtTime(55, now + 0.09);
+
+      const thumpGain = ctx.createGain();
+      thumpGain.gain.setValueAtTime(0.22, now);
+      thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+      thump.connect(thumpGain);
+      thumpGain.connect(ctx.destination);
+      thump.start(now);
+      thump.stop(now + 0.105);
+    }
+
     const tracers = [];
 
     function spawnTracer(startPoint, endPoint, color3) {
@@ -6092,7 +6158,6 @@
       const effectiveDamage = isHardcoreActive() ? 100 : damageAmount;
 
       if (hitSoldier) {
-        hitSoldier.velocity.addInPlace(aimDir.scale(4.5));
         hitSoldier.tookFireTimer = 1.4;
         spawnImpactFx(hitPoint, hitSoldier.team === "green" ? "greenPlastic" : "tanPlastic");
         playImpactHitSound(hitPoint, true);
@@ -6483,6 +6548,24 @@
     // =========================================================================
     // 11. HEALTH, SCOREBOARD HUD, TEAM SETUP MODAL & TIMED MATCH LOGIC
     // =========================================================================
+    const damageVignetteEl = document.getElementById("damage-vignette");
+    let damageVignetteIntensity = 0;
+    const DAMAGE_VIGNETTE_FADE_SEC = 1.0;
+
+    function triggerLocalPlayerHitFeedback() {
+      damageVignetteIntensity = 1;
+      if (damageVignetteEl) damageVignetteEl.style.opacity = "1";
+      playPlayerHurtSound();
+    }
+
+    function updateDamageVignette(dt) {
+      if (damageVignetteIntensity <= 0) return;
+      damageVignetteIntensity = Math.max(0, damageVignetteIntensity - dt / DAMAGE_VIGNETTE_FADE_SEC);
+      if (damageVignetteEl) {
+        damageVignetteEl.style.opacity = String(damageVignetteIntensity);
+      }
+    }
+
     const healthValueEl = document.getElementById("health-value");
     const healthBarFillEl = document.getElementById("health-bar-fill");
     const matchTimerEl = document.getElementById("match-timer");
@@ -7665,9 +7748,14 @@
     function applyNetworkDamageState(target, newHealth, newAlive) {
       if (!target || gameEnded) return;
 
+      const prevHealth = target.health;
+      const tookLocalHit = target.isPlayer && newHealth < prevHealth;
+
       target.health = Math.max(0, newHealth);
       target.model.flinchTimer = 1.0;
       target.tookFireTimer = 1.4;
+
+      if (tookLocalHit) triggerLocalPlayerHitFeedback();
 
       setPlateHealth(target.model, target.health / target.maxHealth);
 
@@ -8162,12 +8250,6 @@
               target.velocity.set(0, 0, 0);
             }
           }
-          const dir = msg.shotDir
-            ? new BABYLON.Vector3(msg.shotDir.x, msg.shotDir.y, msg.shotDir.z)
-            : null;
-          if (dir) {
-            target.velocity.addInPlace(dir.scale(4.5));
-          }
           const newHealth =
             typeof msg.health === "number"
               ? msg.health
@@ -8592,6 +8674,8 @@
       target.health = Math.max(0, target.health - finalAmount);
       target.model.flinchTimer = 1.0;
       target.tookFireTimer = 1.4;
+
+      if (target.isPlayer) triggerLocalPlayerHitFeedback();
 
       setPlateHealth(target.model, target.health / target.maxHealth);
 
@@ -9549,6 +9633,8 @@
       const rawDt = Math.max(0.0005, (now - lastTime) / 1000);
       const dt = Math.min(rawDt, 0.1);
       lastTime = now;
+
+      updateDamageVignette(dt);
 
       // Update FPS (capped at 60 FPS), Frame Time, Subsystem Breakdown, WebSocket Ping & Network Bandwidth Telemetry
       perfTelemetry.totalFrames += 1;
