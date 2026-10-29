@@ -66,7 +66,8 @@ const PARTICLE_FILES = new Set([
 
 // GUI Editor layouts (AdvancedDynamicTexture JSON) served at /gui/<file>
 const GUI_FILES = new Set([
-  "overheadPlates.json"
+  "overheadPlates.json",
+  "m16Sight.json"
 ]);
 
 // Flow Graph coordinators (presentation/control flow only) served at /flowgraphs/<file>

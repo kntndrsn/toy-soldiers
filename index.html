@@ -247,6 +247,26 @@
       height: 20px;
     }
 
+    body.aiming #crosshair {
+      visibility: hidden;
+    }
+
+    /* Round scope housing. The last color stop stays black out to the screen corners. */
+    #scope-mask {
+      position: fixed;
+      inset: 0;
+      z-index: 4;
+      pointer-events: none;
+      opacity: 0;
+      background: radial-gradient(
+        circle at center,
+        rgba(0, 0, 0, 0) 0,
+        rgba(0, 0, 0, 0) 20vmin,
+        rgba(0, 0, 0, 0.55) 26vmin,
+        #000 32vmin
+      );
+    }
+
     /* Win / Game Over / Respawn / Final Scoreboard Modal */
     #end-message {
       position: absolute;
@@ -746,6 +766,40 @@
       box-shadow: 0 0 16px rgba(210, 230, 70, 0.55);
     }
 
+    /* Sights toggle. Sits above JUMP and left of the airstrike button. */
+    #mobile-aim-btn {
+      position: absolute;
+      right: 158px;
+      bottom: 122px;
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      background: rgba(30, 40, 30, 0.72);
+      border: 2px solid rgba(216, 255, 210, 0.85);
+      color: #f4ffe8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      touch-action: none;
+      cursor: pointer;
+      z-index: 2;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      user-select: none;
+    }
+
+    #mobile-aim-btn svg {
+      width: 28px;
+      height: 28px;
+      display: block;
+    }
+
+    #mobile-aim-btn.active {
+      transform: scale(0.92);
+      background: rgba(65, 145, 55, 0.88);
+      box-shadow: 0 0 16px rgba(180, 255, 160, 0.45);
+    }
+
     /* Airstrike call-in. Gray until a charge is ready, then gold. */
     #mobile-airstrike-btn {
       position: absolute;
@@ -1136,6 +1190,18 @@
         font-size: 9px;
       }
 
+      #mobile-aim-btn {
+        width: 52px;
+        height: 52px;
+        right: 100px;
+        bottom: 128px;
+      }
+
+      #mobile-aim-btn svg {
+        width: 24px;
+        height: 24px;
+      }
+
       #mobile-airstrike-btn {
         width: 52px;
         height: 52px;
@@ -1179,6 +1245,18 @@
         font-size: 9px;
       }
 
+      #mobile-aim-btn {
+        width: 48px;
+        height: 48px;
+        right: 120px;
+        bottom: 86px;
+      }
+
+      #mobile-aim-btn svg {
+        width: 22px;
+        height: 22px;
+      }
+
       #mobile-airstrike-btn {
         width: 50px;
         height: 50px;
@@ -1214,6 +1292,7 @@
 </head>
 <body>
   <canvas id="renderCanvas"></canvas>
+  <div id="scope-mask" aria-hidden="true"></div>
 
   <!-- Call of Duty Mobile-Style Touch Overlay -->
   <div id="mobile-controls">
@@ -1227,6 +1306,12 @@
 
     <div id="mobile-grenade-btn" title="Grenade (G)">NADE</div>
     <div id="mobile-jump-btn">JUMP</div>
+    <div id="mobile-aim-btn" role="button" title="Aim (right click)" aria-label="Aim down sights" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="2"></circle>
+        <path fill="none" stroke="currentColor" stroke-width="2" d="M12 2v4M12 18v4M2 12h4M18 12h4"></path>
+      </svg>
+    </div>
     <div id="mobile-airstrike-btn" hidden>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>
       <small>AIR</small>
@@ -4824,6 +4909,7 @@
     function beginGrenadeAim() {
       if (grenadeAiming || grenadeThrowBusy()) return;
       if (!player || !player.alive || gameEnded || isSetupOpen) return;
+      setAiming(false);
       grenadeAiming = true;
       setGrenadeButtonActive(true);
     }
@@ -5354,6 +5440,34 @@
 
     loadOverheadPlates().catch((error) => {
       console.warn("Overhead GUI layout unavailable; soldier plates disabled.", error);
+    });
+
+    const SIGHT_GUI_URL = "gui/m16Sight.json";
+    let sightRoot = null;
+    const scopeMaskEl = document.getElementById("scope-mask");
+
+    async function loadM16Sight() {
+      const response = await fetch(assetUrl(SIGHT_GUI_URL));
+      if (!response.ok) throw new Error(`HTTP ${response.status} for ${SIGHT_GUI_URL}`);
+      const layout = await response.json();
+      const sightGui = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("m16SightUI", true, scene);
+      sightGui.isForeground = true;
+      sightGui.parseSerializedObject(layout, false);
+      const guiRoot = sightGui.rootContainer;
+      if (guiRoot) {
+        guiRoot.isPointerBlocker = false;
+        guiRoot.isHitTestVisible = false;
+      }
+      sightRoot = sightGui.getControlByName("sightRoot");
+      if (!sightRoot) throw new Error("Missing GUI control: sightRoot");
+      sightRoot.isVisible = false;
+      sightRoot.alpha = 0;
+      sightRoot.isPointerBlocker = false;
+      sightRoot.isHitTestVisible = false;
+    }
+
+    loadM16Sight().catch((error) => {
+      console.warn("M16 sight picture unavailable.", error);
     });
 
     function animateSoldier(soldier, dt, isMoving, forceFullPose) {
@@ -6150,6 +6264,9 @@
     let isMouseDown = false;
     let gameEnded = false;
     let isPlayerKnockedDown = false;
+    let aimingDownSights = false;
+    let aimBlend = 0;
+    let aimIgnoreMouseUntil = 0;
 
     // Mobile Dual-Thumb State
     let moveStickX = 0; // -1 (left) to +1 (right)
@@ -6163,6 +6280,7 @@
     const rightTouchZoneEl = document.getElementById("right-touch-zone");
     const mobileFireBtnEl = document.getElementById("mobile-fire-btn");
     const mobileJumpBtnEl = document.getElementById("mobile-jump-btn");
+    const mobileAimBtnEl = document.getElementById("mobile-aim-btn");
     const openTeamsBtnEl = document.getElementById("open-teams-btn");
     const topRightBarEl = document.getElementById("top-right-bar");
     const hudMenuToggleBtnEl = document.getElementById("hud-menu-toggle-btn");
@@ -6329,12 +6447,30 @@
     let lastLookY = 0;
     const TOUCH_LOOK_SENSITIVITY = 0.0048;
 
+    function aimLookScale() {
+      return 1 - aimBlend * 0.75;
+    }
+
+    function setAiming(on) {
+      const allow = Boolean(on) && player && player.alive && !gameEnded && !isSetupOpen && !grenadeAiming;
+      aimingDownSights = allow;
+      if (mobileAimBtnEl) {
+        mobileAimBtnEl.classList.toggle("active", aimingDownSights);
+        mobileAimBtnEl.setAttribute("aria-pressed", aimingDownSights ? "true" : "false");
+      }
+    }
+
+    function toggleAiming() {
+      setAiming(!aimingDownSights);
+    }
+
     function applyTouchAimDelta(dx, dy) {
       if (gameEnded || isSetupOpen || !player) return;
-      player.yaw += dx * TOUCH_LOOK_SENSITIVITY;
+      const lookScale = aimLookScale();
+      player.yaw += dx * TOUCH_LOOK_SENSITIVITY * lookScale;
       player.pitch = Math.max(
         -0.42,
-        Math.min(0.65, player.pitch + dy * TOUCH_LOOK_SENSITIVITY)
+        Math.min(0.65, player.pitch + dy * TOUCH_LOOK_SENSITIVITY * lookScale)
       );
     }
 
@@ -6477,6 +6613,22 @@
     });
 
     // ----- LEFT-SIDE GRENADE BUTTON (HOLD TO AIM, RELEASE TO THROW) -----
+    if (mobileAimBtnEl) {
+      mobileAimBtnEl.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        aimIgnoreMouseUntil = performance.now() + 700;
+        toggleAiming();
+      }, { passive: false });
+      mobileAimBtnEl.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.button !== 0 || performance.now() < aimIgnoreMouseUntil) return;
+        toggleAiming();
+      });
+      mobileAimBtnEl.addEventListener("contextmenu", (e) => e.preventDefault());
+    }
+
     if (mobileGrenadeBtnEl) {
       mobileGrenadeBtnEl.addEventListener("touchstart", (e) => {
         e.preventDefault();
@@ -6532,7 +6684,16 @@
       }
     });
 
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
     window.addEventListener("mousedown", (e) => {
+      if (e.button === 2) {
+        const locked = document.pointerLockElement === canvas;
+        if ((locked || e.target === canvas) && !gameEnded && !isSetupOpen) {
+          e.preventDefault();
+          toggleAiming();
+        }
+      }
       if (e.button === 0 && !gameEnded && !isSetupOpen && e.target === canvas) {
         isMouseDown = true;
       }
@@ -6545,7 +6706,7 @@
     window.addEventListener("mousemove", (e) => {
       if (gameEnded || isSetupOpen || !player) return;
       if (document.pointerLockElement === canvas || isMouseDown) {
-        const sensitivity = 0.0026;
+        const sensitivity = 0.0026 * aimLookScale();
         player.yaw += e.movementX * sensitivity;
         player.pitch = Math.max(
           -0.42,
@@ -7145,11 +7306,12 @@
       return { dist: closestDist, hitKind };
     }
 
-    function fireWeapon(shooter, aimDir, damageAmount) {
+    function fireWeapon(shooter, aimDir, damageAmount, rayOrigin) {
       shooter.fireCooldown = shooter.fireRate;
       shooter.model.recoilTimer = 1.0;
 
       const muzzlePos = getMuzzleWorldPosition(shooter);
+      const shotPos = rayOrigin || muzzlePos;
 
       // Only show 3D muzzle flash & dynamic light for shots within 55m of camera
       const distToCamSq = camera
@@ -7168,7 +7330,7 @@
       playGunshotSound(muzzlePos, Boolean(shooter.isPlayer));
 
       const maxRange = 135;
-      const ox = muzzlePos.x, oy = muzzlePos.y, oz = muzzlePos.z;
+      const ox = shotPos.x, oy = shotPos.y, oz = shotPos.z;
       const dx = aimDir.x, dy = aimDir.y, dz = aimDir.z;
 
       // 1. Check environment (toys, walls, sand heightfield) analytically
@@ -7209,7 +7371,7 @@
         }
       }
 
-      const hitPoint = muzzlePos.add(aimDir.scale(closestDist));
+      const hitPoint = shotPos.add(aimDir.scale(closestDist));
       const effectiveDamage = isHardcoreActive() ? 100 : damageAmount;
 
       if (hitSoldier) {
@@ -7292,9 +7454,15 @@
 
       const aimPoint = camera.position.add(camForward.scale(Math.max(4, aimDist)));
       const muzzlePos = getMuzzleWorldPosition(player);
-      const shotDir = aimPoint.subtract(muzzlePos).normalize();
+      const sighted = aimBlend >= 0.85;
+      const shotDir = sighted ? camForward : aimPoint.subtract(muzzlePos).normalize();
 
-      fireWeapon(player, shotDir, isHardcoreActive() ? 100 : 34);
+      fireWeapon(
+        player,
+        shotDir,
+        isHardcoreActive() ? 100 : 34,
+        sighted ? camera.position.clone() : null
+      );
     }
 
     function hasLineOfSight(fromSoldier, toSoldier) {
@@ -11315,8 +11483,18 @@
 
       // ----- THIRD-PERSON FOLLOW CAMERA (WITH WALL & TOY ANTI-CLIPPING) -----
       if (player) {
+        if (aimingDownSights && (!player.alive || gameEnded || isSetupOpen || grenadeAiming)) {
+          setAiming(false);
+        }
+        const aimTarget = aimingDownSights ? 1 : 0;
+        const aimStep = Math.min(1, dt / 0.18);
+        if (aimBlend < aimTarget) aimBlend = Math.min(aimTarget, aimBlend + aimStep);
+        else if (aimBlend > aimTarget) aimBlend = Math.max(aimTarget, aimBlend - aimStep);
+
         const isPortrait = window.innerWidth < window.innerHeight;
-        camera.fov = isPortrait ? 1.24 : 1.02;
+        const hipFov = isPortrait ? 1.24 : 1.02;
+        const adsFov = isPortrait ? 0.26 : 0.2;
+        camera.fov = hipFov + (adsFov - hipFov) * aimBlend;
         const camDistance = isPortrait ? 6.4 : 5.4;
         const camHeight = isPortrait ? 2.85 : 2.65;
         const shoulderOffset = isPortrait ? 0.45 : 0.72;
@@ -11399,7 +11577,29 @@
           .add(forward.scale(14))
           .add(right.scale(shoulderOffset * 0.45));
         lookTarget.y = player.position.y + 1.55 - Math.sin(player.pitch) * 6.5;
+        if (aimBlend > 0) {
+          let aimReach = 1.2;
+          const aimHit = castEnvironmentRay(
+            headOrigin.x, headOrigin.y, headOrigin.z,
+            forward.x, 0, forward.z,
+            aimReach,
+            false
+          );
+          if (aimHit.hitKind !== "air" && aimHit.dist < aimReach) {
+            aimReach = Math.max(0.15, aimHit.dist - 0.2);
+          }
+          const aimEye = headOrigin.add(forward.scale(aimReach));
+          camera.position.x += (aimEye.x - camera.position.x) * aimBlend;
+          camera.position.y += (aimEye.y - camera.position.y) * aimBlend;
+          camera.position.z += (aimEye.z - camera.position.z) * aimBlend;
+        }
         camera.setTarget(lookTarget);
+        if (sightRoot) {
+          sightRoot.isVisible = aimBlend > 0.02;
+          sightRoot.alpha = aimBlend;
+        }
+        if (scopeMaskEl) scopeMaskEl.style.opacity = aimBlend > 0.001 ? String(aimBlend) : "0";
+        document.body.classList.toggle("aiming", aimBlend > 0.02);
       }
 
       updateOverheadPlates();

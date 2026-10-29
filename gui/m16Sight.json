@@ -1,0 +1,64 @@
+{
+  "root": {
+    "name": "root",
+    "className": "Container",
+    "children": [
+      {
+        "name": "sightRoot",
+        "className": "Container",
+        "isPointerBlocker": false,
+        "isHitTestVisible": false,
+        "background": "",
+        "width": "100%",
+        "height": "100%",
+        "thickness": 0,
+        "children": [
+          {
+            "name": "dotHalo",
+            "className": "Ellipse",
+            "isHitTestVisible": false,
+            "isPointerBlocker": false,
+            "shadowBlur": 12,
+            "shadowColor": "#ff2418",
+            "background": "#ff2a1844",
+            "width": "22px",
+            "height": "22px",
+            "thickness": 0,
+            "horizontalAlignment": 2,
+            "verticalAlignment": 2
+          },
+          {
+            "name": "dotRing",
+            "className": "Ellipse",
+            "isHitTestVisible": false,
+            "isPointerBlocker": false,
+            "color": "#ff3a28",
+            "background": "",
+            "width": "46px",
+            "height": "46px",
+            "thickness": 1.5,
+            "horizontalAlignment": 2,
+            "verticalAlignment": 2
+          },
+          {
+            "name": "redDot",
+            "className": "Ellipse",
+            "isHitTestVisible": false,
+            "isPointerBlocker": false,
+            "shadowBlur": 6,
+            "shadowColor": "#ff2014",
+            "zIndex": 2,
+            "background": "#ff1a12",
+            "width": "7px",
+            "height": "7px",
+            "thickness": 0,
+            "horizontalAlignment": 2,
+            "verticalAlignment": 2
+          }
+        ]
+      }
+    ]
+  },
+  "width": 1920,
+  "height": 1080
+}
