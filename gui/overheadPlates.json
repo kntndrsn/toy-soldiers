@@ -43,7 +43,7 @@
       {
         "name": "playerPlate",
         "className": "Rectangle",
-        "width": "300px",
+        "width": "460px",
         "height": "60px",
         "thickness": 0,
         "background": "",
@@ -66,9 +66,9 @@
               {
                 "name": "playerNameText",
                 "className": "TextBlock",
-                "text": "★ Soldier",
+                "text": "· RCT Soldier",
                 "color": "#98ff8c",
-                "fontSize": "20px",
+                "fontSize": "18px",
                 "fontWeight": "bold",
                 "fontFamily": "Segoe UI, sans-serif",
                 "textWrapping": 0,

@@ -1310,6 +1310,15 @@ function normalizeAiSkill(raw) {
   return "intermediate";
 }
 
+// Career rank is owned by the browser. The room only relays the ladder index.
+const MAX_RANK_INDEX = 10;
+
+function clampRank(value) {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return n > MAX_RANK_INDEX ? MAX_RANK_INDEX : n;
+}
+
 function resolveWorldLimit(mapType, limit) {
   return mapType === "kitchen" ? 64 : mapType === "shoebox" ? 28
     : Math.max(50, Math.min(130, Number(limit) || 80));
@@ -1543,6 +1552,7 @@ function serializeRoster(room, opts = {}) {
     players.push({
       id: c.id,
       name: c.name,
+      rank: clampRank(c.rank),
       team: c.team,
       slotIndex: c.slotIndex,
       unitId: c.unitId,
@@ -1760,6 +1770,7 @@ wss.on("connection", (ws, req) => {
         const suppliedPassword = String(msg.password || "").trim().slice(0, 32);
         const team = msg.team === "tan" ? "tan" : "green";
         const name = String(msg.name || "George Washington").slice(0, 22);
+        const rank = clampRank(msg.rank);
         const requestedGreen = Number(msg.greenTotal) || 4;
         const requestedTan = Number(msg.tanTotal) || 4;
         const requestedLimit = resolveWorldLimit(requestedMapType, msg.worldLimit);
@@ -1859,6 +1870,7 @@ wss.on("connection", (ws, req) => {
                 clientToken,
                 ws,
                 name,
+                rank,
                 team,
                 slotIndex: 0,
                 unitId: `${team}_0`,
@@ -1875,6 +1887,7 @@ wss.on("connection", (ws, req) => {
               hostClient.ws = ws;
               hostClient.clientToken = clientToken || hostClient.clientToken;
               hostClient.name = name;
+              hostClient.rank = rank;
               hostClient.team = team;
             }
 
@@ -1996,6 +2009,7 @@ wss.on("connection", (ws, req) => {
             clientToken,
             ws,
             name,
+            rank,
             team,
             slotIndex,
             unitId,
@@ -2209,6 +2223,7 @@ wss.on("connection", (ws, req) => {
           clientToken,
           ws,
           name,
+          rank,
           team: finalTeam,
           slotIndex,
           unitId,
@@ -2250,7 +2265,7 @@ wss.on("connection", (ws, req) => {
             {
               type: "roster_update",
               event: isReturningHost ? "host_rejoined" : "player_joined",
-              player: { id: clientId, name, team: finalTeam, unitId },
+              player: { id: clientId, name, team: finalTeam, unitId, rank },
               roster: serializeRoster(room, { includeUnitStats: false })
             },
             clientId
@@ -2281,6 +2296,29 @@ wss.on("connection", (ws, req) => {
               clientId
             );
           }
+        }
+        break;
+      }
+
+      // Lifetime rank changed on this browser (promotion or a different saved name).
+      case "set_rank": {
+        if (!currentRoom) break;
+        const c = currentRoom.clients.get(clientId);
+        if (!c) break;
+        const nextRank = clampRank(msg.rank);
+        if (c.rank === nextRank) break;
+        c.rank = nextRank;
+        if (currentRoom.clients.size > 1) {
+          broadcastToRoom(
+            currentRoom,
+            {
+              type: "roster_update",
+              event: "rank_changed",
+              player: { id: clientId, name: c.name, team: c.team, unitId: c.unitId, rank: nextRank },
+              roster: serializeRoster(currentRoom, { includeUnitStats: false })
+            },
+            clientId
+          );
         }
         break;
       }
@@ -2792,7 +2830,7 @@ function removeClientFromRoom(room, clientId) {
     type: "roster_update",
     event: "player_left",
     player: leaving
-      ? { id: leaving.id, name: leaving.name, team: leaving.team, unitId: leaving.unitId }
+      ? { id: leaving.id, name: leaving.name, team: leaving.team, unitId: leaving.unitId, rank: clampRank(leaving.rank) }
       : null,
     roster: serializeRoster(room, { includeUnitStats: false })
   });

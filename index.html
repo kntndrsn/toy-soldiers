@@ -84,24 +84,43 @@
       -webkit-user-select: auto;
     }
 
+    /* One top row. The center column shrinks so the side pills never cover it. */
+    #hud-top {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      right: 8px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 6px;
+      z-index: 24;
+      pointer-events: none;
+    }
+
     /* Team Scoreboard (Top Center) */
     #scoreboard {
-      position: absolute;
-      top: 16px;
-      left: 50%;
-      transform: translateX(-50%);
+      position: relative;
+      justify-self: center;
+      min-width: 0;
+      max-width: 100%;
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 8px;
       background: rgba(20, 20, 20, 0.68);
-      padding: 8px 18px;
+      padding: 5px 10px;
       border-radius: 999px;
       border: 1px solid rgba(255, 255, 255, 0.25);
-      font-size: 14.5px;
+      font-size: 13px;
       font-weight: bold;
-      letter-spacing: 0.3px;
+      letter-spacing: 0.2px;
       white-space: nowrap;
+      overflow: hidden;
       backdrop-filter: blur(3px);
+    }
+
+    .team-initial {
+      display: none;
     }
 
     .team-badge-green {
@@ -112,18 +131,18 @@
       color: #ffd584;
     }
 
-    /* Health Status Pill (Top Left on both large and small screens) */
+    /* Health, rank, match score, and total XP. One compact pill. */
     #status-panel {
-      position: absolute;
-      top: 16px;
-      left: 16px;
+      position: relative;
+      justify-self: start;
+      z-index: 2;
       background: rgba(20, 25, 18, 0.72);
-      padding: 8px 14px;
+      padding: 5px 10px;
       border-radius: 999px;
       border: 1px solid rgba(255, 255, 255, 0.25);
       display: flex;
       align-items: center;
-      gap: 9px;
+      gap: 6px;
       backdrop-filter: blur(3px);
     }
 
@@ -135,8 +154,8 @@
     }
 
     #health-bar-bg {
-      width: 86px;
-      height: 11px;
+      width: 72px;
+      height: 12px;
       background: rgba(255, 255, 255, 0.2);
       border: 1px solid rgba(255, 255, 255, 0.5);
       border-radius: 999px;
@@ -150,11 +169,17 @@
       transition: width 0.15s ease, background-color 0.15s ease;
     }
 
-    #player-kd {
-      font-size: 12.5px;
+    #player-rank,
+    #player-score {
+      font-size: 13px;
       font-weight: bold;
-      letter-spacing: 0.3px;
+      letter-spacing: 0.15px;
       white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    #player-rank {
+      color: #ffe08a;
     }
 
     #kill-credit-layer {
@@ -414,9 +439,8 @@
 
     /* Top-Right Action Bar (Teams & Mobile HUD Toggle; collapses to menu on smaller screens) */
     #top-right-bar {
-      position: absolute;
-      top: 16px;
-      right: 16px;
+      position: relative;
+      justify-self: end;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -923,6 +947,46 @@
       background: #2980f2;
     }
 
+    /* Open fold and small laptop widths: keep the right side to one button so the match bar has room. */
+    @media (max-width: 1280px) {
+      #hud-menu-toggle-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 6px 10px;
+        font-size: 16px;
+      }
+
+      #top-right-menu-items {
+        display: none;
+        position: absolute;
+        top: 38px;
+        right: 0;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+        background: rgba(16, 22, 16, 0.94);
+        padding: 8px;
+        border-radius: 10px;
+        border: 1px solid rgba(152, 255, 140, 0.4);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+        min-width: 150px;
+        z-index: 26;
+      }
+
+      #top-right-bar.menu-open #top-right-menu-items {
+        display: flex;
+      }
+
+      .team-word {
+        display: none;
+      }
+
+      .team-initial {
+        display: inline;
+      }
+    }
+
     /* Responsive Layout for Smaller Screens, Mobile Portrait & Mobile Landscape */
     @media (max-width: 980px), (max-height: 540px) {
       #online-roster-panel {
@@ -930,32 +994,22 @@
       }
 
       #status-panel {
-        top: 10px;
-        left: 10px;
-        padding: 6px 11px;
-        gap: 7px;
+        padding: 4px 8px;
+        gap: 5px;
       }
 
-      #health-label {
+      #player-rank,
+      #player-score {
         font-size: 12px;
       }
 
       #health-bar-bg {
-        width: 68px;
-        height: 9px;
-      }
-
-      #player-kd {
-        font-size: 11px;
+        width: 56px;
+        height: 10px;
       }
 
       .kill-credit {
         font-size: 12px;
-      }
-
-      #top-right-bar {
-        top: 10px;
-        right: 10px;
       }
 
       #hud-menu-toggle-btn {
@@ -996,38 +1050,57 @@
       }
 
       #perf-hud {
-        top: 44px;
-        right: 10px;
+        top: 48px;
+        right: 8px;
         padding: 4px 8px;
         font-size: 10px;
         line-height: 1.3;
       }
 
+      .team-word {
+        display: none;
+      }
+
+      .team-initial {
+        display: inline;
+      }
+
       #scoreboard {
-        top: 10px;
-        padding: 6px 12px;
-        font-size: 12px;
-        gap: 8px;
-        max-width: calc(100vw - 230px);
-        overflow: hidden;
-        text-overflow: ellipsis;
+        padding: 4px 8px;
+        font-size: 11.5px;
+        gap: 5px;
       }
     }
 
     /* Mobile Portrait: stack Scoreboard cleanly below the top-left HP pill & top-right menu button
        so it never collides on narrow phone screens */
     @media (max-width: 580px) {
+      #hud-top {
+        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-areas:
+          "status menu"
+          "score score";
+        row-gap: 4px;
+      }
+
+      #status-panel {
+        grid-area: status;
+      }
+
+      #top-right-bar {
+        grid-area: menu;
+      }
+
       #scoreboard {
-        top: 44px;
-        max-width: calc(100vw - 20px);
-        padding: 4px 12px;
-        font-size: 11.5px;
-        gap: 6px;
+        grid-area: score;
+        padding: 3px 8px;
+        font-size: 11px;
+        gap: 5px;
       }
 
       #perf-hud {
-        top: 74px;
-        right: 10px;
+        top: 72px;
+        right: 8px;
       }
 
       #mp-toast-container {
@@ -1167,13 +1240,37 @@
   <!-- On-Screen HUD -->
   <div id="hud">
     <div id="damage-vignette" aria-hidden="true"></div>
+    <div id="hud-top">
     <div id="status-panel">
-      <div id="health-label">HP <span id="health-value">100</span>%</div>
-      <div id="health-bar-bg">
+      <div id="health-bar-bg" title="Health">
         <div id="health-bar-fill"></div>
       </div>
-      <div id="player-kd">K <span id="player-kills">0</span> / D <span id="player-deaths">0</span></div>
+      <div id="player-score" title="Kills this match">Kills: 0</div>
+      <div id="player-rank" title="Recruit">· RCT</div>
       <div id="streak-label" hidden>STREAK 0</div>
+    </div>
+
+    <div id="scoreboard">
+      <span id="match-timer" style="color: #ffffff;">05:00</span>
+      <span class="team-badge-green">Green: <span id="green-kills">0</span></span>
+      <span>-</span>
+      <span class="team-badge-tan">Tan: <span id="tan-kills">0</span></span>
+    </div>
+
+    <div id="top-right-bar">
+      <button id="hud-menu-toggle-btn" class="hud-chip-btn" type="button" aria-expanded="false" aria-label="Menu" title="Menu">☰</button>
+      <div id="top-right-menu-items">
+        <span id="mp-status-badge" class="hud-chip-btn" title="Total Online">
+          <span class="presence-stat" id="presence-match-stat" style="display: none;"><b id="presence-match-count">0</b><small>MATCH</small></span>
+          <span class="presence-stat"><b id="presence-online-count">0</b><small>ONLINE</small></span>
+          <span id="presence-reconnect-text" style="display: none;"></span>
+        </span>
+        <button id="toggle-sound-btn" class="hud-chip-btn" type="button" aria-label="Sound on" title="Sound on">🔊</button>
+        <button id="toggle-fps-btn" class="hud-chip-btn" type="button">30 FPS</button>
+        <button id="open-teams-btn" class="hud-chip-btn" type="button">Match Setup (M)</button>
+        <button id="end-match-btn" class="hud-chip-btn" type="button" style="display: none; border-color: rgba(255, 115, 95, 0.75); color: #ffb8ad; background: rgba(120, 24, 18, 0.85);">⏹ End Match</button>
+      </div>
+    </div>
     </div>
 
     <div id="airstrike-key-hint" hidden>
@@ -1186,37 +1283,12 @@
       <div id="online-roster-list"></div>
     </div>
 
-    <div id="top-right-bar">
-      <button id="hud-menu-toggle-btn" class="hud-chip-btn" type="button" aria-expanded="false" title="Toggle Menu">☰ Menu</button>
-      <div id="top-right-menu-items">
-        <span id="mp-status-badge" class="hud-chip-btn" title="Total Online">
-          <span class="presence-stat" id="presence-match-stat" style="display: none;"><b id="presence-match-count">0</b><small>MATCH</small></span>
-          <span class="presence-stat"><b id="presence-online-count">0</b><small>ONLINE</small></span>
-          <span id="presence-reconnect-text" style="display: none;"></span>
-        </span>
-        <button id="toggle-sound-btn" class="hud-chip-btn" type="button">🔊 Sound</button>
-        <button id="toggle-fps-btn" class="hud-chip-btn" type="button">30 FPS</button>
-        <button id="toggle-debug-btn" class="hud-chip-btn" type="button">Stats</button>
-        <button id="toggle-touch-btn" class="hud-chip-btn" type="button">Touch UI</button>
-        <button id="open-teams-btn" class="hud-chip-btn" type="button">Match Setup (M)</button>
-        <button id="end-match-btn" class="hud-chip-btn" type="button" style="display: none; border-color: rgba(255, 115, 95, 0.75); color: #ffb8ad; background: rgba(120, 24, 18, 0.85);">⏹ End Match</button>
-      </div>
-    </div>
-
     <div id="perf-hud" hidden>
       <div><span id="perf-fps" style="color: #84ff78; font-weight: bold;">60 FPS</span></div>
       <div id="perf-mp-details" style="display: none;">
         <div>Ping: <span id="perf-ping" style="color: #84ff78; font-weight: bold;">-- ms</span> &bull; Units: <span id="perf-units">0</span></div>
         <div>Net: <span id="perf-net">0 pkt/s (0.0 KB/s)</span></div>
       </div>
-    </div>
-
-    <div id="scoreboard">
-      <span id="match-timer" style="color: #ffffff;">05:00</span>
-      <span style="opacity: 0.45;">|</span>
-      <span class="team-badge-green">GREEN: <span id="green-kills">0</span> (<span id="green-count">4</span>/<span id="green-total">4</span>)</span>
-      <span>vs</span>
-      <span class="team-badge-tan">TAN: <span id="tan-kills">0</span> (<span id="tan-count">4</span>/<span id="tan-total">4</span>)</span>
     </div>
 
     <div id="mp-toast-container"></div>
@@ -1368,6 +1440,7 @@
         <table id="final-scoreboard-table">
           <thead>
             <tr>
+              <th>Rank</th>
               <th>Soldier</th>
               <th>Team</th>
               <th>Kills</th>
@@ -1418,14 +1491,12 @@
     } catch (err) {}
 
     const FPS_STORAGE_KEY = "toy_soldiers_max_fps";
-    const DEBUG_STORAGE_KEY = "toy_soldiers_debug";
     let maxClientFps = 30;
     let debugEnabled = false;
     let MIN_FRAME_INTERVAL_MS = 1000 / 30;
     try {
       const savedFps = localStorage.getItem(FPS_STORAGE_KEY);
       if (savedFps === "60") maxClientFps = 60;
-      debugEnabled = localStorage.getItem(DEBUG_STORAGE_KEY) === "1";
     } catch (err) {}
 
     // =========================================================================
@@ -3670,6 +3741,7 @@
       killStreak += 1;
       if (killStreak >= AIRSTRIKE_KILLS && !airstrikeReady) airstrikeReady = true;
       updateAirstrikeUI();
+      awardKillCareer();
     }
 
     function spendAirstrikeCharge() {
@@ -5222,7 +5294,8 @@
         if (plate.nameText) plate.nameText.color = style.text;
       }
       if (plate.nameText) {
-        const label = "★ " + (soldier.rawPlayerName || soldier.name || "Player").slice(0, PLAYER_NAME_MAX_LEN);
+        const rawName = (soldier.rawPlayerName || soldier.name || "Player").slice(0, PLAYER_NAME_MAX_LEN);
+        const label = `${formatRankBadge(soldier.rank)} ${rawName}`;
         if (plate.boundName !== label) {
           plate.boundName = label;
           plate.nameText.text = label;
@@ -5998,6 +6071,11 @@
             alive: savedStats && typeof savedStats.alive === "boolean" ? savedStats.alive : true,
             kills: savedStats && typeof savedStats.kills === "number" ? savedStats.kills : 0,
             deaths: savedStats && typeof savedStats.deaths === "number" ? savedStats.deaths : 0,
+            rank: isLocalPlayer
+              ? localRankIndex()
+              : isRemotePlayer
+              ? clampRankIndex(remotePlayerInfo.rank)
+              : undefined,
             respawnTimer: 0,
             fireCooldown: isLocalPlayer ? 0 : 0.6 + (i % 4) * 0.35,
             fireRate: isLocalPlayer ? 0.2 : 0.78 + (i % 3) * 0.15,
@@ -6085,7 +6163,6 @@
     const rightTouchZoneEl = document.getElementById("right-touch-zone");
     const mobileFireBtnEl = document.getElementById("mobile-fire-btn");
     const mobileJumpBtnEl = document.getElementById("mobile-jump-btn");
-    const toggleTouchBtnEl = document.getElementById("toggle-touch-btn");
     const openTeamsBtnEl = document.getElementById("open-teams-btn");
     const topRightBarEl = document.getElementById("top-right-bar");
     const hudMenuToggleBtnEl = document.getElementById("hud-menu-toggle-btn");
@@ -6130,23 +6207,28 @@
     // Start with modal-open class because Setup Modal is visible initially
     document.body.classList.add("modal-open");
 
-    // Auto-enable touch controls on coarse-pointer mobile/tablet devices
-    if (window.matchMedia("(pointer: coarse)").matches) {
+    // Touch controls follow the input. A finger turns them on. A mouse, pen, or keyboard turns them off.
+    let lastTouchInputMs = 0;
+    function noteTouchInput() {
+      lastTouchInputMs = performance.now();
       enableTouchUI(true);
     }
+    if (window.matchMedia("(pointer: coarse)").matches) noteTouchInput();
 
+    window.addEventListener("touchstart", noteTouchInput, { passive: true });
     window.addEventListener(
-      "touchstart",
-      () => {
-        enableTouchUI(true);
+      "pointerdown",
+      (e) => {
+        if (e.pointerType === "touch") noteTouchInput();
+        else if (
+          (e.pointerType === "mouse" || e.pointerType === "pen") &&
+          performance.now() - lastTouchInputMs > 700
+        ) {
+          enableTouchUI(false);
+        }
       },
-      { once: true, passive: true }
+      { passive: true }
     );
-
-    toggleTouchBtnEl.addEventListener("click", () => {
-      enableTouchUI(!document.body.classList.contains("touch-enabled"));
-      closeTopRightMenu();
-    });
 
     openTeamsBtnEl.addEventListener("click", () => {
       closeTopRightMenu();
@@ -6430,6 +6512,7 @@
     window.addEventListener("keydown", (e) => {
       const tag = document.activeElement ? document.activeElement.tagName : "";
       if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+      if (performance.now() - lastTouchInputMs > 700) enableTouchUI(false);
       if (e.code in keys) keys[e.code] = true;
       if (e.code === "KeyR") uiNotify("ui.retryRequested");
       if (e.code === "KeyM") uiNotify("ui.setupRequested");
@@ -6487,7 +6570,10 @@
 
     function updateSoundButtonLabel() {
       if (!toggleSoundBtnEl) return;
-      toggleSoundBtnEl.textContent = soundEnabled ? "🔊 Sound" : "🔇 Muted";
+      const soundLabel = soundEnabled ? "Sound on" : "Sound off";
+      toggleSoundBtnEl.textContent = soundEnabled ? "🔊" : "🔇";
+      toggleSoundBtnEl.title = soundLabel;
+      toggleSoundBtnEl.setAttribute("aria-label", soundLabel);
       toggleSoundBtnEl.style.opacity = soundEnabled ? "1" : "0.65";
     }
     updateSoundButtonLabel();
@@ -6540,7 +6626,6 @@
     }
 
     const toggleFpsBtnEl = document.getElementById("toggle-fps-btn");
-    const toggleDebugBtnEl = document.getElementById("toggle-debug-btn");
     const perfHudEl = document.getElementById("perf-hud");
 
     function applyMaxClientFps() {
@@ -6555,10 +6640,6 @@
 
     function applyDebugMode() {
       if (perfHudEl) perfHudEl.hidden = !debugEnabled;
-      if (toggleDebugBtnEl) {
-        toggleDebugBtnEl.textContent = debugEnabled ? "Stats On" : "Stats";
-        toggleDebugBtnEl.style.opacity = debugEnabled ? "1" : "0.65";
-      }
       if (debugEnabled) {
         window.__TOY_SOLDIERS_PERF__ = perfTelemetry;
         window.getToySoldiersPerfProfile = getClientPerfSnapshot;
@@ -6580,16 +6661,6 @@
         applyMaxClientFps();
       });
     }
-    if (toggleDebugBtnEl) {
-      toggleDebugBtnEl.addEventListener("click", () => {
-        debugEnabled = !debugEnabled;
-        try {
-          localStorage.setItem(DEBUG_STORAGE_KEY, debugEnabled ? "1" : "0");
-        } catch (err) {}
-        applyDebugMode();
-      });
-    }
-
     // Plays a synthesized 3D rifle gunshot with distance attenuation and stereo panning
     function playGunshotSound(shooterPos, isLocalShooter) {
       if (!soundEnabled) return;
@@ -7552,8 +7623,8 @@
 
     const healthValueEl = document.getElementById("health-value");
     const healthBarFillEl = document.getElementById("health-bar-fill");
-    const playerKillsEl = document.getElementById("player-kills");
-    const playerDeathsEl = document.getElementById("player-deaths");
+    const playerRankEl = document.getElementById("player-rank");
+    const playerScoreEl = document.getElementById("player-score");
     const killCreditLayerEl = document.getElementById("kill-credit-layer");
     const KILL_CREDIT_LIFE = 0.5;
     const KILL_CREDIT_LINE = 18;
@@ -7695,6 +7766,197 @@
       return Math.max(min, Math.min(max, n));
     }
 
+    // Name-keyed career. Clearing site data drops it. Match K/D still resets every round.
+    const CAREER_STORAGE_KEY = "toy_soldiers_career";
+    const RANK_LADDER = [
+      { insignia: "·", abbr: "RCT", title: "Recruit", xp: 0 },
+      { insignia: "▴", abbr: "PVT", title: "Private", xp: 10 },
+      { insignia: "▴▴", abbr: "PFC", title: "Private First Class", xp: 24 },
+      { insignia: "▴▴▴", abbr: "CPL", title: "Corporal", xp: 44 },
+      { insignia: "◆", abbr: "SGT", title: "Sergeant", xp: 72 },
+      { insignia: "◆◆", abbr: "SSG", title: "Staff Sergeant", xp: 110 },
+      { insignia: "▬", abbr: "LT", title: "Lieutenant", xp: 160 },
+      { insignia: "▬▬", abbr: "CPT", title: "Captain", xp: 230 },
+      { insignia: "✦", abbr: "MAJ", title: "Major", xp: 320 },
+      { insignia: "▲", abbr: "COL", title: "Colonel", xp: 440 },
+      { insignia: "★★", abbr: "GEN", title: "General", xp: 600 }
+    ];
+    let careerByName = {};
+    let careerAwardedMatchKey = "";
+    let soloMatchSerial = 0;
+    let lastPublishedRank = null;
+
+    function careerNameKey(name) {
+      return String(name || "").trim().slice(0, PLAYER_NAME_MAX_LEN).toLowerCase();
+    }
+
+    function currentCareerName() {
+      const typed = mpNameInputEl ? mpNameInputEl.value : "";
+      const trimmed = String(typed || "").trim().slice(0, PLAYER_NAME_MAX_LEN);
+      return trimmed || "Soldier";
+    }
+
+    function emptyCareerRecord() {
+      return { xp: 0, kills: 0, wins: 0, matches: 0 };
+    }
+
+    function loadCareerStore() {
+      careerByName = {};
+      try {
+        const raw = localStorage.getItem(CAREER_STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        const names = parsed && parsed.v === 1 ? parsed.names : null;
+        if (!names || typeof names !== "object") return;
+        const next = {};
+        for (const key of Object.keys(names)) {
+          const rec = names[key];
+          if (!rec || typeof rec !== "object") continue;
+          const cleanKey = careerNameKey(key);
+          if (!cleanKey) continue;
+          next[cleanKey] = {
+            xp: Math.max(0, Math.floor(Number(rec.xp) || 0)),
+            kills: Math.max(0, Math.floor(Number(rec.kills) || 0)),
+            wins: Math.max(0, Math.floor(Number(rec.wins) || 0)),
+            matches: Math.max(0, Math.floor(Number(rec.matches) || 0))
+          };
+        }
+        careerByName = next;
+      } catch (err) {
+        careerByName = {};
+      }
+    }
+
+    function saveCareerStore() {
+      try {
+        localStorage.setItem(CAREER_STORAGE_KEY, JSON.stringify({ v: 1, names: careerByName }));
+      } catch (err) {}
+    }
+
+    function getCareerRecord(name) {
+      const rec = careerByName[careerNameKey(name)];
+      if (!rec) return emptyCareerRecord();
+      return rec;
+    }
+
+    function clampRankIndex(value) {
+      const n = Math.floor(Number(value));
+      if (!Number.isFinite(n) || n < 0) return 0;
+      return Math.min(RANK_LADDER.length - 1, n);
+    }
+
+    function rankIndexForXp(xp) {
+      const amount = Math.max(0, Number(xp) || 0);
+      let index = 0;
+      for (let i = 0; i < RANK_LADDER.length; i++) {
+        if (amount >= RANK_LADDER[i].xp) index = i;
+      }
+      return index;
+    }
+
+    function rankDef(index) {
+      return RANK_LADDER[clampRankIndex(index)];
+    }
+
+    function localRankIndex() {
+      return rankIndexForXp(getCareerRecord(currentCareerName()).xp);
+    }
+
+    function formatRankBadge(index) {
+      const rank = rankDef(index);
+      return `${rank.insignia} ${rank.abbr}`;
+    }
+
+    function formatRankTitle(index) {
+      const rank = rankDef(index);
+      return `${rank.insignia} ${rank.title}`;
+    }
+
+    function updateRankHud() {
+      const index = localRankIndex();
+      const badge = formatRankBadge(index);
+      const xp = getCareerRecord(currentCareerName()).xp;
+      const title = `${formatRankTitle(index)} · ${xp} XP`;
+      if (playerRankEl) {
+        if (playerRankEl.textContent !== badge) playerRankEl.textContent = badge;
+        if (playerRankEl.title !== title) playerRankEl.title = title;
+      }
+      if (playerScoreEl && player) {
+        const scoreLabel = `Kills: ${player.kills || 0}`;
+        if (playerScoreEl.textContent !== scoreLabel) playerScoreEl.textContent = scoreLabel;
+      }
+    }
+
+    function rememberLocalRankOnRoster(rank) {
+      if (!mpState.roster || !Array.isArray(mpState.roster.players) || !mpState.clientId) return;
+      for (let i = 0; i < mpState.roster.players.length; i++) {
+        if (mpState.roster.players[i].id === mpState.clientId) {
+          mpState.roster.players[i].rank = rank;
+          return;
+        }
+      }
+    }
+
+    function publishLocalRank() {
+      const rank = localRankIndex();
+      if (player && player.isPlayer) player.rank = rank;
+      rememberLocalRankOnRoster(rank);
+      updateRankHud();
+      if (player) {
+        updateSoldierOverheadPlate(player);
+        updateHUD(true);
+      }
+      if (rank === lastPublishedRank) return;
+      if (!mpState.active || !mpState.ws || mpState.ws.readyState !== WebSocket.OPEN) return;
+      lastPublishedRank = rank;
+      sendNetMessage({ type: "set_rank", rank });
+    }
+
+    function addCareerXp(amount, flags) {
+      const gained = Math.floor(Number(amount) || 0);
+      if (gained <= 0) return;
+      const name = currentCareerName();
+      const key = careerNameKey(name);
+      if (!key) return;
+      const before = getCareerRecord(name);
+      const prevRank = rankIndexForXp(before.xp);
+      careerByName[key] = {
+        xp: before.xp + gained,
+        kills: before.kills + (flags && flags.kill ? 1 : 0),
+        wins: before.wins + (flags && flags.win ? 1 : 0),
+        matches: before.matches + (flags && flags.match ? 1 : 0)
+      };
+      saveCareerStore();
+      const newRank = rankIndexForXp(careerByName[key].xp);
+      if (newRank > prevRank) {
+        showMpToast(`Promoted to ${formatRankTitle(newRank)}`, "#ffe08a");
+      }
+      publishLocalRank();
+    }
+
+    function awardKillCareer() {
+      addCareerXp(2, { kill: true });
+    }
+
+    function awardMatchCareer() {
+      if (!player) return;
+      const key =
+        mpState.active && mpState.roster && typeof mpState.roster.matchId === "number"
+          ? `mp:${mpState.roomCode}:${mpState.roster.matchId}`
+          : `solo:${soloMatchSerial}`;
+      if (careerAwardedMatchKey === key) return;
+      careerAwardedMatchKey = key;
+      let greenKills = 0;
+      let tanKills = 0;
+      for (let i = 0; i < soldiers.length; i++) {
+        const s = soldiers[i];
+        if (s.team === "green") greenKills += s.kills || 0;
+        else tanKills += s.kills || 0;
+      }
+      const won = player.team === "green" ? greenKills > tanKills : tanKills > greenKills;
+      addCareerXp(won ? 5 : 1, { match: true, win: won });
+    }
+
     // Persistent storage keys for all Match Setup settings & host identity
     const NAME_STORAGE_KEY = "toy_soldiers_player_name";
     const CUSTOM_NAME_FLAG_KEY = "toy_soldiers_custom_name_set";
@@ -7794,6 +8056,8 @@
       if (savedPassword !== null && mpPasswordInputEl) {
         mpPasswordInputEl.value = savedPassword.slice(0, 32);
       }
+      loadCareerStore();
+      updateRankHud();
     } catch (err) {
       if (!mpState.clientToken) {
         mpState.clientToken = "tok_" + Math.random().toString(36).slice(2, 10);
@@ -7801,6 +8065,8 @@
       if (mpNameInputEl && !userCustomizedPlayerName) {
         mpNameInputEl.value = pickUniqueHistoricalSoldierName();
       }
+      loadCareerStore();
+      updateRankHud();
     }
 
     function isLocalPlayerHost() {
@@ -7954,8 +8220,8 @@
       if (player) {
         player.rawPlayerName = cleanName || "Soldier";
         player.name = `${player.rawPlayerName} (You)`;
-        updateSoldierOverheadPlate(player);
       }
+      publishLocalRank();
     }
 
     mpNameInputEl.addEventListener("input", handleUserRenamedSelf);
@@ -8584,8 +8850,10 @@
         worldLimit: configuredMapType === "shoebox" ? 28 : configuredMapLimit,
         hardcoreMode: configuredHardcoreMode,
         aiSkill: configuredAiSkill,
-        durationSec: configuredDurationSec
+        durationSec: configuredDurationSec,
+        rank: localRankIndex()
       };
+      lastPublishedRank = actionPayload.rank;
 
       // If we already have an open WebSocket to the same server URL, send the room action directly
       // so the host never drops from their room when starting a new match!
@@ -8813,6 +9081,7 @@
           const customName = (mpNameInputEl.value || "").trim();
           s.rawPlayerName = customName || "You";
           s.name = customName ? `${customName} (You)` : "You";
+          s.rank = localRankIndex();
           player = s;
         } else if (humanMap.has(s.unitId)) {
           const info = humanMap.get(s.unitId);
@@ -8820,6 +9089,7 @@
           s.isRemotePlayer = true;
           s.rawPlayerName = info.name || "Player";
           s.name = s.rawPlayerName + " (Player)";
+          s.rank = clampRankIndex(info.rank);
           const st = roster.unitStats && roster.unitStats[s.unitId];
           const shouldBeAlive =
             (st && typeof st.alive === "boolean" ? st.alive : info.alive) !== false;
@@ -8835,6 +9105,7 @@
           s.isPlayer = false;
           s.isRemotePlayer = false;
           s.rawPlayerName = "";
+          s.rank = undefined;
           if (s.botName) {
             s.name = s.botName;
           }
@@ -9534,8 +9805,13 @@
             : s.isRemotePlayer
             ? "background: rgba(122, 215, 255, 0.12); font-weight: bold;"
             : "";
+          const rankCell =
+            s.isPlayer || s.isRemotePlayer
+              ? escapeHtml(formatRankBadge(s.isPlayer ? localRankIndex() : s.rank))
+              : "—";
           return `
             <tr style="${rowStyle}">
+              <td>${rankCell}</td>
               <td>${escapeHtml(s.name)}</td>
               <td style="color:${teamColor}; font-weight:bold;">${s.team.toUpperCase()}</td>
               <td>${s.kills || 0}</td>
@@ -9752,10 +10028,12 @@
       lastHudUpdateMs = nowMs;
 
       const hp = Math.max(0, Math.round(player.health));
-      healthValueEl.textContent = hp;
-      healthBarFillEl.style.width = hp + "%";
-      if (playerKillsEl) playerKillsEl.textContent = player.kills || 0;
-      if (playerDeathsEl) playerDeathsEl.textContent = player.deaths || 0;
+      if (healthValueEl) healthValueEl.textContent = hp;
+      if (healthBarFillEl) {
+        healthBarFillEl.style.width = hp + "%";
+        healthBarFillEl.parentElement.title = `Health ${hp}%`;
+      }
+      updateRankHud();
 
       if (hp > 50) healthBarFillEl.style.backgroundColor = "#3bd13b";
       else if (hp > 25) healthBarFillEl.style.backgroundColor = "#f0ad4e";
@@ -9783,10 +10061,10 @@
 
       if (greenKillsEl) greenKillsEl.textContent = greenKills;
       if (tanKillsEl) tanKillsEl.textContent = tanKills;
-      greenCountEl.textContent = greenAlive;
-      greenTotalEl.textContent = greenTotal;
-      tanCountEl.textContent = tanAlive;
-      tanTotalEl.textContent = tanTotal;
+      if (greenCountEl) greenCountEl.textContent = greenAlive;
+      if (greenTotalEl) greenTotalEl.textContent = greenTotal;
+      if (tanCountEl) tanCountEl.textContent = tanAlive;
+      if (tanTotalEl) tanTotalEl.textContent = tanTotal;
 
       if (mpState.active && mpState.roster && Array.isArray(mpState.roster.players)) {
         onlineRosterPanelEl.style.display = "block";
@@ -9800,7 +10078,9 @@
             const badgeColor = p.team === "green" ? "#7dff70" : "#ffd584";
             const youTag = p.id === mpState.clientId ? " (YOU)" : "";
             const hostTag = p.id === mpState.hostId ? " ★" : "";
-            return `<div style="color:${badgeColor}; margin-top:2px;">● ${escapeHtml(p.name)}${youTag}${hostTag} — ${p.team.toUpperCase()}</div>`;
+            const rankIndex = p.id === mpState.clientId ? localRankIndex() : p.rank;
+            const rankBadge = escapeHtml(formatRankBadge(rankIndex));
+            return `<div style="color:${badgeColor}; margin-top:2px;">● ${rankBadge} ${escapeHtml(p.name)}${youTag}${hostTag} — ${p.team.toUpperCase()}</div>`;
           })
           .join("");
       } else {
@@ -9822,10 +10102,12 @@
         endedByHost,
         hostName: endedByHost ? (options && options.hostName) || "Host" : ""
       };
+      awardMatchCareer();
       uiNotify("ui.matchEnded");
     }
 
     function resetGame() {
+      if (!mpState.active) soloMatchSerial += 1;
       gameEnded = false;
       isPlayerKnockedDown = false;
       airstrikePending = false;
