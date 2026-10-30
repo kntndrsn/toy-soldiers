@@ -43,13 +43,13 @@
       {
         "name": "playerPlate",
         "className": "Rectangle",
-        "width": "460px",
+        "width": "180px",
         "height": "60px",
         "thickness": 0,
         "background": "",
         "isPointerBlocker": false,
         "isHitTestVisible": false,
-        "left": "200px",
+        "left": "0px",
         "children": [
           {
             "name": "playerNameBadge",
@@ -87,6 +87,7 @@
             "color": "#0c120cd9",
             "background": "#141414cc",
             "isHitTestVisible": false,
+            "horizontalAlignment": 2,
             "children": [
               {
                 "name": "playerHpFill",

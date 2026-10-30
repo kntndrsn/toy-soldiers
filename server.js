@@ -36,7 +36,8 @@ const MODEL_FILES = new Set([
   "Meshy_AI_rigged_green_All_Animations.glb",
   "Meshy_AI_vintage_toy_m16_rifle.glb",
   "Meshy_AI_p51_mustang.glb",
-  "Meshy_AI_Grenade.glb"
+  "Meshy_AI_Grenade.glb",
+  "Meshy_AI_Toy_Medical_Kit.glb"
 ]);
 
 // Node Material Editor graphs (NME JSON) served at /materials/<file>
@@ -1418,6 +1419,30 @@ function serializeUnitStats(room) {
   return obj;
 }
 
+const HEALTH_PACK_TTL_MS = 30000;
+const HEALTH_PACK_HEAL = 25; // 25% of max health 100
+
+function clearRoomHealthPacks(room) {
+  if (room.healthPacks) room.healthPacks.clear();
+}
+
+function allocateHealthPack(room) {
+  if (!room.healthPacks) room.healthPacks = new Map();
+  const packId = `hp_${room.nextHealthPackId++}`;
+  room.healthPacks.set(packId, { expiresAt: Date.now() + HEALTH_PACK_TTL_MS });
+  return packId;
+}
+
+function syncClientHealthFromUnit(room, unitId, health, alive) {
+  for (const c of room.clients.values()) {
+    if (c.unitId === unitId) {
+      c.health = health;
+      c.alive = alive;
+      break;
+    }
+  }
+}
+
 function resetRoomMatchState(room) {
   room.matchEndTime = Date.now() + room.durationSec * 1000;
   room.matchEnded = false;
@@ -1428,6 +1453,8 @@ function resetRoomMatchState(room) {
   if (room.pendingShots) room.pendingShots.length = 0;
   if (room.pendingDamages) room.pendingDamages.length = 0;
   if (room.pendingRespawns) room.pendingRespawns.length = 0;
+  if (room.pendingHealthPackEvents) room.pendingHealthPackEvents.length = 0;
+  clearRoomHealthPacks(room);
   if (room.disconnectedPlayers) {
     room.disconnectedPlayers.clear();
   }
@@ -1468,6 +1495,8 @@ function endRoomByHost(room) {
   if (room.pendingShots) room.pendingShots.length = 0;
   if (room.pendingDamages) room.pendingDamages.length = 0;
   if (room.pendingRespawns) room.pendingRespawns.length = 0;
+  if (room.pendingHealthPackEvents) room.pendingHealthPackEvents.length = 0;
+  clearRoomHealthPacks(room);
 
   const hostName = room.originalHostName || room.hostName || "Host";
   if (room.clients.size > 0) {
@@ -1535,6 +1564,9 @@ function getOrCreateRoom(
       pendingShots: [],        // Array<ShotEvent> coalesced at 10 Hz
       pendingDamages: [],      // Array<DamageEvent> coalesced at 10 Hz
       pendingRespawns: [],     // Array<RespawnEvent> coalesced at 10 Hz
+      pendingHealthPackEvents: [], // heal / expire events coalesced at 10 Hz
+      healthPacks: new Map(),  // Map<packId, { expiresAt }>
+      nextHealthPackId: 1,
       pendingWorldState: null, // Latest host_world_state coalesced at 10 Hz
       clients: new Map(), // Map<clientId, ClientInfo>
       disconnectedPlayers: new Map(), // Map<clientToken, SavedPlayerSlot>
@@ -2432,15 +2464,18 @@ wss.on("connection", (ws, req) => {
 
         targetStat.health = Math.max(0, targetStat.health - amount);
         let killed = false;
+        let packId = null;
         if (targetStat.health <= 0) {
           targetStat.alive = false;
           targetStat.deaths += 1;
           killed = true;
+          packId = allocateHealthPack(currentRoom);
           if (attackerUnitId && attackerUnitId !== targetUnitId) {
             const attackerStat = getUnitStat(currentRoom, attackerUnitId);
             attackerStat.kills += 1;
           }
         }
+        syncClientHealthFromUnit(currentRoom, targetUnitId, targetStat.health, targetStat.alive);
         currentRoom.statsDirty = true;
         currentRoom.statsDirtyForSync = true;
 
@@ -2470,6 +2505,7 @@ wss.on("connection", (ws, req) => {
           health: targetStat.health,
           alive: targetStat.alive,
           killed,
+          packId,
           shotDir: msg.shotDir || null,
           unitStats: deltaStats
         };
@@ -2483,6 +2519,57 @@ wss.on("connection", (ws, req) => {
           safeSend(ws, dmgEvent);
         } else if (currentRoom.pendingDamages.length < 32) {
           currentRoom.pendingDamages.push(dmgEvent);
+        }
+        break;
+      }
+
+      // Walk-over health pack pickup — authoritative heal (+25) and pack removal
+      case "pickup_health_pack": {
+        if (!currentRoom || currentRoom.matchEnded) break;
+        const packId = String(msg.packId || "");
+        const unitId = String(msg.unitId || "");
+        if (!packId || !unitId || !currentRoom.healthPacks) break;
+        // Only human-controlled units can pick up health packs (not AI).
+        let humanOwner = null;
+        for (const c of currentRoom.clients.values()) {
+          if (c.unitId === unitId) {
+            humanOwner = c;
+            break;
+          }
+        }
+        if (!humanOwner) break;
+        const pack = currentRoom.healthPacks.get(packId);
+        if (!pack || Date.now() >= pack.expiresAt) {
+          if (pack) currentRoom.healthPacks.delete(packId);
+          break;
+        }
+        const unitStat = getUnitStat(currentRoom, unitId);
+        if (!unitStat.alive || unitStat.health <= 0) break;
+
+        currentRoom.healthPacks.delete(packId);
+        unitStat.health = Math.min(100, unitStat.health + HEALTH_PACK_HEAL);
+        syncClientHealthFromUnit(currentRoom, unitId, unitStat.health, unitStat.alive);
+        currentRoom.statsDirty = true;
+        currentRoom.statsDirtyForSync = true;
+
+        const healEvent = {
+          type: "unit_healed",
+          unitId,
+          health: unitStat.health,
+          packId,
+          unitStats: {
+            [unitId]: {
+              kills: unitStat.kills,
+              deaths: unitStat.deaths,
+              health: unitStat.health,
+              alive: unitStat.alive
+            }
+          }
+        };
+        if (currentRoom.clients.size <= 1) {
+          safeSend(ws, healEvent);
+        } else {
+          broadcastToRoom(currentRoom, healEvent, null);
         }
         break;
       }
@@ -2840,26 +2927,49 @@ function removeClientFromRoom(room, clientId) {
 // 10 Hz Unified Room Broadcast Flush (Coalesces player_state, fire_shot, damage_unit, respawn_unit & host_world_state)
 // World snapshots are never echoed back to the simulating host.
 setInterval(() => {
+  const nowMs = Date.now();
   for (const room of rooms.values()) {
+    if (room.healthPacks && room.healthPacks.size > 0) {
+      for (const [packId, pack] of room.healthPacks) {
+        if (nowMs >= pack.expiresAt) {
+          room.healthPacks.delete(packId);
+          if (!room.pendingHealthPackEvents) room.pendingHealthPackEvents = [];
+          if (room.pendingHealthPackEvents.length < 32) {
+            room.pendingHealthPackEvents.push({ type: "health_pack_expired", packId });
+          }
+        }
+      }
+    }
+
     const hasPlayers = room.dirtyPlayers && room.dirtyPlayers.size > 0;
     const hasShots = room.pendingShots && room.pendingShots.length > 0;
     const hasDamages = room.pendingDamages && room.pendingDamages.length > 0;
     const hasRespawns = room.pendingRespawns && room.pendingRespawns.length > 0;
+    const hasHealthPacks = room.pendingHealthPackEvents && room.pendingHealthPackEvents.length > 0;
     const hasWorld = room.pendingWorldState !== null;
 
-    if (!hasPlayers && !hasShots && !hasDamages && !hasRespawns && !hasWorld) continue;
+    if (!hasPlayers && !hasShots && !hasDamages && !hasRespawns && !hasHealthPacks && !hasWorld) continue;
 
     if (room.clients.size <= 1) {
       if (hasPlayers) room.dirtyPlayers.clear();
       if (hasShots) room.pendingShots.length = 0;
       if (hasDamages) room.pendingDamages.length = 0;
       if (hasRespawns) room.pendingRespawns.length = 0;
+      if (hasHealthPacks) room.pendingHealthPackEvents.length = 0;
       room.pendingWorldState = null;
       continue;
     }
 
     // Fast path: only 1 player moved and nothing else happened
-    if (hasPlayers && room.dirtyPlayers.size === 1 && !hasShots && !hasDamages && !hasRespawns && !hasWorld) {
+    if (
+      hasPlayers &&
+      room.dirtyPlayers.size === 1 &&
+      !hasShots &&
+      !hasDamages &&
+      !hasRespawns &&
+      !hasHealthPacks &&
+      !hasWorld
+    ) {
       const single = room.dirtyPlayers.values().next().value;
       room.dirtyPlayers.clear();
       broadcastToRoom(
@@ -2885,6 +2995,7 @@ setInterval(() => {
     const shotsArr = hasShots ? room.pendingShots.slice() : null;
     const damagesArr = hasDamages ? room.pendingDamages.slice() : null;
     const respawnsArr = hasRespawns ? room.pendingRespawns.slice() : null;
+    const healthPackArr = hasHealthPacks ? room.pendingHealthPackEvents.slice() : null;
     const worldObj = room.pendingWorldState;
     const remainingSec =
       Math.round(Math.max(0, (room.matchEndTime - Date.now()) / 1000) * 10) / 10;
@@ -2893,9 +3004,10 @@ setInterval(() => {
     if (hasShots) room.pendingShots.length = 0;
     if (hasDamages) room.pendingDamages.length = 0;
     if (hasRespawns) room.pendingRespawns.length = 0;
+    if (hasHealthPacks) room.pendingHealthPackEvents.length = 0;
     room.pendingWorldState = null;
 
-    if (playersArr && !shotsArr && !damagesArr && !respawnsArr && !worldObj) {
+    if (playersArr && !shotsArr && !damagesArr && !respawnsArr && !healthPackArr && !worldObj) {
       broadcastToRoom(
         room,
         {
@@ -2904,7 +3016,11 @@ setInterval(() => {
         },
         null
       );
-    } else if (worldObj && !playersArr && !shotsArr && !damagesArr && !respawnsArr) {
+    } else if (healthPackArr && !playersArr && !shotsArr && !damagesArr && !respawnsArr && !worldObj) {
+      for (let i = 0; i < healthPackArr.length; i++) {
+        broadcastToRoom(room, healthPackArr[i], null);
+      }
+    } else if (worldObj && !playersArr && !shotsArr && !damagesArr && !respawnsArr && !healthPackArr) {
       broadcastToRoom(
         room,
         {
@@ -2921,7 +3037,8 @@ setInterval(() => {
         players: playersArr,
         shots: shotsArr,
         damages: damagesArr,
-        respawns: respawnsArr
+        respawns: respawnsArr,
+        healthPacks: healthPackArr
       };
       if (worldObj) {
         broadcastToRoom(
@@ -2929,7 +3046,7 @@ setInterval(() => {
           Object.assign({}, tickWithoutWorld, { world: worldObj }),
           room.hostId
         );
-        if (playersArr || shotsArr || damagesArr || respawnsArr) {
+        if (playersArr || shotsArr || damagesArr || respawnsArr || healthPackArr) {
           const hostClient = room.clients.get(room.hostId);
           if (hostClient) safeSend(hostClient.ws, tickWithoutWorld);
         }

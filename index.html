@@ -5257,6 +5257,289 @@
     }
 
     // =========================================================================
+    // HEALTH PACKS — medical kits left at death for 30s; walk-over recovers 25% HP
+    // =========================================================================
+    const HEALTH_PACK_TTL = 30;
+    const HEALTH_PACK_HEAL_FRAC = 0.25;
+    const HEALTH_PACK_MESH_SIZE = 0.55;
+    const HEALTH_PACK_PICKUP_RADIUS = 1.35;
+    const HEALTH_PACK_SPIN = 1.1;
+
+    let medicalKitTemplate = null;
+    let medicalKitTemplateVersion = 0;
+    let nextLocalHealthPackId = 1;
+    const medicalKitPool = [];
+    const healthPacks = [];
+    const pendingHealthPackPickups = new Set();
+
+    function medicalKitNodeMeshes(node) {
+      const meshes = [];
+      if (!node) return meshes;
+      if (node.getTotalVertices && node.getTotalVertices() > 0) meshes.push(node);
+      if (node.getChildMeshes) {
+        // Recurse (false): GLB roots are often holder -> __root__ -> mesh.
+        node.getChildMeshes(false).forEach((mesh) => {
+          if (mesh.getTotalVertices && mesh.getTotalVertices() > 0) meshes.push(mesh);
+        });
+      }
+      return meshes;
+    }
+
+    function measureMedicalKitBounds(rootNode) {
+      let minX = Infinity, minY = Infinity, minZ = Infinity;
+      let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+      medicalKitNodeMeshes(rootNode).forEach((mesh) => {
+        mesh.computeWorldMatrix(true);
+        mesh.refreshBoundingInfo(true, true);
+        const bb = mesh.getBoundingInfo().boundingBox;
+        minX = Math.min(minX, bb.minimumWorld.x);
+        minY = Math.min(minY, bb.minimumWorld.y);
+        minZ = Math.min(minZ, bb.minimumWorld.z);
+        maxX = Math.max(maxX, bb.maximumWorld.x);
+        maxY = Math.max(maxY, bb.maximumWorld.y);
+        maxZ = Math.max(maxZ, bb.maximumWorld.z);
+      });
+      return { minX, minY, minZ, maxX, maxY, maxZ };
+    }
+
+    function attachMedicalKitNodeToPack(pack) {
+      if (!pack || pack.node || !medicalKitTemplate) return;
+      const node = acquireMedicalKitNode();
+      if (!node) return;
+      node.position.set(pack.x, pack.y, pack.z);
+      node.rotationQuaternion = null;
+      node.rotation.set(0, pack.spin || 0, 0);
+      pack.node = node;
+    }
+
+    function bindLoadedMedicalKitTemplate(holder) {
+      medicalKitPool.splice(0).forEach((node) => node.dispose());
+      // Drop any non-GLB visuals that were waiting; reattach real meshes below.
+      for (let i = 0; i < healthPacks.length; i++) {
+        const pack = healthPacks[i];
+        if (pack.node) {
+          pack.node.dispose();
+          pack.node = null;
+        }
+      }
+      medicalKitTemplateVersion += 1;
+      medicalKitTemplate = holder;
+      holder.setEnabled(false);
+      for (let i = 0; i < healthPacks.length; i++) attachMedicalKitNodeToPack(healthPacks[i]);
+    }
+
+    async function loadMedicalKitAsset() {
+      const container = await BABYLON.LoadAssetContainerAsync(
+        assetUrl("models/Meshy_AI_Toy_Medical_Kit.glb"),
+        scene,
+        { pluginExtension: ".glb" }
+      );
+      container.addAllToScene();
+      container.lights.slice().forEach((light) => light.dispose());
+      container.cameras.slice().forEach((cam) => cam.dispose());
+      const holder = new BABYLON.TransformNode("medicalKitSource", scene);
+      container.rootNodes.forEach((node) => { node.parent = holder; });
+      holder.rotationQuaternion = null;
+      holder.rotation.set(0, 0, 0);
+      holder.scaling.setAll(1);
+      holder.position.set(0, 0, 0);
+      holder.computeWorldMatrix(true);
+      const unscaled = measureMedicalKitBounds(holder);
+      const longest = Math.max(
+        unscaled.maxX - unscaled.minX,
+        unscaled.maxY - unscaled.minY,
+        unscaled.maxZ - unscaled.minZ
+      );
+      if (!(longest > 1e-4)) {
+        holder.dispose();
+        container.dispose();
+        throw new Error("Medical kit GLB has no measurable bounds");
+      }
+      holder.scaling.setAll(HEALTH_PACK_MESH_SIZE / longest);
+      holder.computeWorldMatrix(true);
+      const fitted = measureMedicalKitBounds(holder);
+      holder.position.set(
+        -(fitted.minX + fitted.maxX) * 0.5,
+        -fitted.minY,
+        -(fitted.minZ + fitted.maxZ) * 0.5
+      );
+      medicalKitNodeMeshes(holder).forEach((mesh) => {
+        mesh.isPickable = false;
+        const mat = mesh.material;
+        if (mat) {
+          if (typeof mat.metallic === "number" && mat.metallic > 0.35) mat.metallic = 0.15;
+          if (typeof mat.roughness === "number" && mat.roughness < 0.35) mat.roughness = 0.55;
+        }
+      });
+      bindLoadedMedicalKitTemplate(holder);
+    }
+
+    loadMedicalKitAsset().catch((error) => {
+      console.error("Unable to load medical kit mesh:", error);
+    });
+
+    function acquireMedicalKitNode() {
+      if (!medicalKitTemplate) return null;
+      while (medicalKitPool.length) {
+        const pooled = medicalKitPool[medicalKitPool.length - 1];
+        if (pooled.metadata && pooled.metadata.medicalKitVersion === medicalKitTemplateVersion) break;
+        medicalKitPool.pop().dispose();
+      }
+      let node = medicalKitPool.pop();
+      if (!node) {
+        node = medicalKitTemplate.clone("liveMedicalKit");
+        node.metadata = { medicalKitVersion: medicalKitTemplateVersion, shadowed: true };
+        medicalKitNodeMeshes(node).forEach((mesh) => {
+          mesh.isPickable = false;
+          mesh.isVisible = true;
+          mesh.setEnabled(true);
+          if (typeof shadowGen !== "undefined" && shadowGen) shadowGen.addShadowCaster(mesh);
+        });
+      }
+      if (node.rotationQuaternion) node.rotationQuaternion = null;
+      node.setEnabled(true);
+      medicalKitNodeMeshes(node).forEach((mesh) => {
+        mesh.isVisible = true;
+        mesh.setEnabled(true);
+      });
+      return node;
+    }
+
+    function releaseMedicalKitNode(node) {
+      if (!node || (typeof node.isDisposed === "function" && node.isDisposed())) return;
+      if (!node.metadata || node.metadata.medicalKitVersion !== medicalKitTemplateVersion) {
+        node.dispose();
+        return;
+      }
+      node.setEnabled(false);
+      medicalKitPool.push(node);
+    }
+
+    function removeHealthPackAt(index) {
+      if (index < 0 || index >= healthPacks.length) return;
+      const pack = healthPacks[index];
+      pendingHealthPackPickups.delete(pack.id);
+      releaseMedicalKitNode(pack.node);
+      healthPacks.splice(index, 1);
+    }
+
+    function removeHealthPackById(packId) {
+      for (let i = 0; i < healthPacks.length; i++) {
+        if (healthPacks[i].id === packId) {
+          removeHealthPackAt(i);
+          return true;
+        }
+      }
+      pendingHealthPackPickups.delete(packId);
+      return false;
+    }
+
+    function clearHealthPacks() {
+      for (let i = healthPacks.length - 1; i >= 0; i--) removeHealthPackAt(i);
+      pendingHealthPackPickups.clear();
+    }
+
+    function spawnHealthPack(x, z, packId) {
+      if (gameEnded || isSetupOpen) return null;
+      if (packId) {
+        for (let i = 0; i < healthPacks.length; i++) {
+          if (healthPacks[i].id === packId) return healthPacks[i];
+        }
+      }
+      const id = packId || `local_hp_${nextLocalHealthPackId++}`;
+      const y = getSandHeight(x, z) + 0.02;
+      const pack = {
+        id,
+        x,
+        y,
+        z,
+        ttl: HEALTH_PACK_TTL,
+        node: null,
+        spin: Math.random() * Math.PI * 2
+      };
+      healthPacks.push(pack);
+      attachMedicalKitNodeToPack(pack);
+      return pack;
+    }
+
+    function spawnHealthPackForSoldier(soldier, packId) {
+      if (!soldier || !soldier.position) return null;
+      return spawnHealthPack(soldier.position.x, soldier.position.z, packId);
+    }
+
+    function healSoldier(target, amount) {
+      if (!target || !target.alive || gameEnded) return false;
+      const before = target.health;
+      target.health = Math.min(target.maxHealth, target.health + amount);
+      if (target.model) setPlateHealth(target.model, target.health / target.maxHealth);
+      if (target.isPlayer) updateHUD(true);
+      return target.health > before;
+    }
+
+    function applyNetworkHealState(target, newHealth, packId) {
+      if (packId) removeHealthPackById(packId);
+      if (!target || gameEnded) return;
+      target.health = Math.max(0, Math.min(target.maxHealth, newHealth));
+      if (target.alive && target.model) {
+        setPlateHealth(target.model, target.health / target.maxHealth);
+      }
+      if (target.isPlayer) updateHUD(true);
+    }
+
+    function tryPickupHealthPack(pack, soldier) {
+      // Only human players (local or remote) can collect health packs — not AI.
+      if (!pack || !soldier || !soldier.alive) return;
+      if (!soldier.isPlayer && !soldier.isRemotePlayer) return;
+      if (mpState.active) {
+        if (pendingHealthPackPickups.has(pack.id)) return;
+        pendingHealthPackPickups.add(pack.id);
+        sendNetMessage({
+          type: "pickup_health_pack",
+          packId: pack.id,
+          unitId: soldier.unitId
+        });
+        return;
+      }
+      const amount = soldier.maxHealth * HEALTH_PACK_HEAL_FRAC;
+      healSoldier(soldier, amount);
+      removeHealthPackById(pack.id);
+    }
+
+    function updateHealthPacks(dt) {
+      for (let i = healthPacks.length - 1; i >= 0; i--) {
+        const pack = healthPacks[i];
+        pack.ttl -= dt;
+        if (pack.ttl <= 0) {
+          removeHealthPackAt(i);
+          continue;
+        }
+        if (pack.node) {
+          pack.spin += HEALTH_PACK_SPIN * dt;
+          pack.node.rotation.y = pack.spin;
+          pack.node.position.y = pack.y + Math.sin(pack.spin * 2.2) * 0.06;
+        }
+      }
+
+      if (!healthPacks.length || gameEnded || isSetupOpen) return;
+
+      for (let s = 0; s < soldiers.length; s++) {
+        const soldier = soldiers[s];
+        if (!soldier.alive || (!soldier.isPlayer && !soldier.isRemotePlayer)) continue;
+        const sx = soldier.position.x;
+        const sz = soldier.position.z;
+        for (let i = healthPacks.length - 1; i >= 0; i--) {
+          const pack = healthPacks[i];
+          const dx = sx - pack.x;
+          const dz = sz - pack.z;
+          if (dx * dx + dz * dz <= HEALTH_PACK_PICKUP_RADIUS * HEALTH_PACK_PICKUP_RADIUS) {
+            tryPickupHealthPack(pack, soldier);
+            break;
+          }
+        }
+      }
+    }
+
+    // =========================================================================
     // OVERHEAD PLATES (GUI Editor layout: gui/overheadPlates.json)
     // One shared fullscreen AdvancedDynamicTexture hosts every plate; each soldier
     // gets a lightweight control tree parsed from the template and data-bound at runtime.
@@ -5272,6 +5555,9 @@
     };
     // Player plates pivot on their health bar so the bar sits on the anchor at every scale.
     const PLAYER_PLATE_BAR_OFFSET = 23;
+    const PLAYER_PLATE_PAD_X = 28;
+    const PLAYER_PLATE_MIN_WIDTH = 120;
+    const PLAYER_PLATE_MAX_WIDTH = 420;
     const PLATE_REF_DISTANCE = 8;
     const PLATE_MIN_SCALE = 0.45;
     const PLATE_MAX_SCALE = 1.25;
@@ -5363,6 +5649,31 @@
       plate.fill.isVisible = clamped > 0;
     }
 
+    // Size the name badge / plate root to the measured rank+name text width.
+    function fitPlayerPlateToName(plate, label) {
+      if (!plate || !plate.nameText || !plate.badge || !overheadGui) return;
+      const fontSize = plate.nameText.fontSizeInPixels || 18;
+      const weight = plate.nameText.fontWeight || "bold";
+      const family = plate.nameText.fontFamily || "Segoe UI, sans-serif";
+      const ctx = overheadGui.getContext();
+      let textWidth = 0;
+      if (ctx && typeof ctx.measureText === "function") {
+        ctx.save();
+        ctx.font = `${weight} ${fontSize}px ${family}`;
+        textWidth = ctx.measureText(label).width;
+        ctx.restore();
+      } else {
+        textWidth = label.length * fontSize * 0.58;
+      }
+      const width = Math.max(
+        PLAYER_PLATE_MIN_WIDTH,
+        Math.min(PLAYER_PLATE_MAX_WIDTH, Math.ceil(textWidth + PLAYER_PLATE_PAD_X))
+      );
+      const widthPx = width + "px";
+      if (plate.root.width !== widthPx) plate.root.width = widthPx;
+      if (plate.badge.width !== "100%") plate.badge.width = "100%";
+    }
+
     // Binds team, name and health onto the soldier's plate, switching template when a bot becomes a human player.
     function updateSoldierOverheadPlate(soldier) {
       const m = soldier.model;
@@ -5385,6 +5696,7 @@
         if (plate.boundName !== label) {
           plate.boundName = label;
           plate.nameText.text = label;
+          fitPlayerPlateToName(plate, label);
         }
       }
       setPlateHealth(m, soldier.health / soldier.maxHealth);
@@ -9623,6 +9935,11 @@
               handleNetworkMessage(r);
             }
           }
+          if (Array.isArray(msg.healthPacks)) {
+            for (let i = 0; i < msg.healthPacks.length; i++) {
+              handleNetworkMessage(msg.healthPacks[i]);
+            }
+          }
           if (msg.world) {
             if (mpState.spawnJobId && !soldiers.length) {
               mpState.pendingWorld = msg.world;
@@ -9728,6 +10045,19 @@
             noteKillStreak();
           }
           applyNetworkDamageState(target, newHealth, newAlive);
+          if (msg.killed) spawnHealthPackForSoldier(target, msg.packId || null);
+          break;
+        }
+
+        case "unit_healed": {
+          if (msg.unitStats) applyServerUnitStats(msg.unitStats);
+          const healed = soldiersById.get(msg.unitId);
+          applyNetworkHealState(healed, msg.health, msg.packId);
+          break;
+        }
+
+        case "health_pack_expired": {
+          if (msg.packId) removeHealthPackById(msg.packId);
           break;
         }
 
@@ -10173,6 +10503,9 @@
           target.model.overheadGroup.setEnabled(false);
         }
 
+        // Solo deaths drop a local health pack; multiplayer packs come from unit_damaged.packId.
+        if (!mpState.active) spawnHealthPackForSoldier(target, null);
+
         // If the local player was knocked down while the match is still running,
         // show the Respawn prompt for this player ONLY (gameEnded remains false so the battle never freezes!)
         if (target.isPlayer && !gameEnded) {
@@ -10266,6 +10599,7 @@
       airstrikePending = false;
       endAirstrike();
       clearLiveGrenades();
+      clearHealthPacks();
       lastMatchEndInfo = {
         endedByHost,
         hostName: endedByHost ? (options && options.hostName) || "Host" : ""
@@ -10281,6 +10615,7 @@
       airstrikePending = false;
       endAirstrike();
       clearLiveGrenades();
+      clearHealthPacks();
       resetKillStreak();
       matchTimeRemaining =
         mpState.active && mpState.roster && mpState.roster.durationSec
@@ -11185,6 +11520,7 @@
       updateAirstrike(dt);
       updateAirstrikeUI();
       updateLiveGrenades(dt);
+      updateHealthPacks(dt);
       updateKillCredits(dt);
 
       // Update dynamic physics beach ball
