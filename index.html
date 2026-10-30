@@ -1981,12 +1981,16 @@
       return false;
     }
 
+    function omahaDrawPathX(index, z) {
+      // Same snake used by the dirt-draw height blend
+      return OMAHA_DRAWS[index].x + Math.sin(z * 0.045 + index * 0.9) * 4.2;
+    }
+
     function omahaDrawBlend(cx, cz) {
       let best = 0;
       for (let i = 0; i < OMAHA_DRAWS.length; i++) {
         const d = OMAHA_DRAWS[i];
-        // Slight snake so paths read as winding dirt trails
-        const pathX = d.x + Math.sin(cz * 0.045 + i * 0.9) * 4.2;
+        const pathX = omahaDrawPathX(i, cz);
         const lateral = Math.abs(cx - pathX);
         const t = Math.max(0, 1 - lateral / d.halfW);
         const smooth = t * t * (3 - 2 * t);
@@ -2257,7 +2261,6 @@
       omahaLcvp: "omahaLcvp.json",
       omahaHedgehog: "omahaHedgehog.json",
       omahaBelgianGate: "omahaBelgianGate.json",
-      omahaWireCoil: "omahaWireCoil.json",
       omahaSandbag: "omahaSandbag.json",
       omahaCasemate: "omahaCasemate.json",
       omahaTrenchPlank: "omahaTrenchPlank.json"
@@ -2675,7 +2678,6 @@
     const armyTanCanvasMat = createPlasticPBR("armyTanCanvasMat", "#b59257", 0.42);
     const omahaConcreteMat = createPlasticPBR("omahaConcreteMat", "#8a8d86", 0.55);
     const omahaRustMat = createPlasticPBR("omahaRustMat", "#6b3f28", 0.48);
-    const omahaSilverWireMat = createPlasticPBR("omahaSilverWireMat", "#c0c4c8", 0.22);
     const omahaBurlapMat = createPlasticPBR("omahaBurlapMat", "#9a7d4a", 0.62);
     const omahaShingleMat = createPlasticPBR("omahaShingleMat", "#7a7368", 0.58);
     const omahaWoodGateMat = createPlasticPBR("omahaWoodGateMat", "#6e4a28", 0.45);
@@ -3530,7 +3532,7 @@
       water.metadata = { isEnvironment: true, isSand: true };
       water.parent = envRootNode;
 
-      // Shingle bank in segments with gaps at each dirt draw (cover without sealing the beach)
+      // Shingle seawall: staggered chunks with gaps at each dirt draw.
       const shingleZ = 2;
       const shingleGap = 11;
       const shingleEdges = [-WORLD_LIMIT_X + 4];
@@ -3538,48 +3540,105 @@
         shingleEdges.push(d.x - shingleGap * 0.5, d.x + shingleGap * 0.5);
       });
       shingleEdges.push(WORLD_LIMIT_X - 4);
-      for (let i = 0; i + 1 < shingleEdges.length; i += 2) {
-        const x0 = shingleEdges[i];
-        const x1 = shingleEdges[i + 1];
-        const segW = x1 - x0;
-        if (segW < 3) continue;
-        const midX = (x0 + x1) * 0.5;
-        const shingle = BABYLON.MeshBuilder.CreateBox(
-          "omahaShingle_" + i,
-          { width: segW, height: 1.25, depth: 5.8 },
-          scene
-        );
-        shingle.position.set(midX, getSandHeight(midX, shingleZ) + 0.5, shingleZ);
+      const shingleHeights = [0.9, 1.35, 1.15];
+      const shingleWidths = [4.5, 5.75, 7];
+      const shingleChunkGaps = [1.2, 1.5, 1.8];
+      function placeShingleChunk(x, z, width, depth, height, yaw, name) {
+        const shingle = BABYLON.MeshBuilder.CreateBox(name, { width, height, depth }, scene);
+        const groundY = getSandHeight(x, z);
+        shingle.position.set(x, groundY + height * 0.5, z);
+        shingle.rotation.y = yaw;
         shingle.material = omahaShingleMat;
         shingle.receiveShadows = true;
         shingle.metadata = { isEnvironment: true, isToy: true };
         shingle.parent = envRootNode;
         shadowGen.addShadowCaster(shingle);
-        registerOmahaWallObstacle(midX, shingleZ, segW, 5.8, 1.25, getSandHeight(midX, shingleZ));
+        const c = Math.cos(yaw);
+        const s = Math.sin(yaw);
+        registerOmahaWallObstacle(
+          x,
+          z,
+          Math.abs(c) * width + Math.abs(s) * depth,
+          Math.abs(s) * width + Math.abs(c) * depth,
+          height,
+          groundY
+        );
+      }
+      for (let i = 0; i + 1 < shingleEdges.length; i += 2) {
+        const x0 = shingleEdges[i];
+        const x1 = shingleEdges[i + 1];
+        if (x1 - x0 < 3) continue;
+        let cursor = x0;
+        let n = 0;
+        while (cursor < x1 - 2.8) {
+          const remain = x1 - cursor;
+          let width = Math.min(shingleWidths[n % 3], remain);
+          const gap = shingleChunkGaps[n % 3];
+          if (remain - width < gap + 3 && remain <= 8) width = remain;
+          if (width < 3) break;
+          const height = shingleHeights[n % 3];
+          placeShingleChunk(
+            cursor + width * 0.5,
+            shingleZ,
+            width,
+            n % 2 === 0 ? 5.4 : 5.8,
+            height,
+            ((n % 5) - 2) * 0.04,
+            "omahaShingle_" + i + "_" + n
+          );
+          cursor += width;
+          if (cursor >= x1 - 0.2) break;
+          cursor += gap;
+          n++;
+        }
       }
 
-      // Plaster cliff faces BETWEEN draws only (visual). Paths stay clear — no wall AABBs.
+      // Plaster bluff between the snaked draws, plus the outer flanks. Each span is two
+      // staggered faces and both stop shots and movement. The draws themselves stay open.
       const cliffMat = omahaPlasterCliffMat || omahaConcreteMat;
       const cliffZ = WORLD_LIMIT_Z * 0.4;
-      for (let i = 0; i + 1 < OMAHA_DRAWS.length; i++) {
-        const left = OMAHA_DRAWS[i].x + OMAHA_DRAWS[i].halfW + 2;
-        const right = OMAHA_DRAWS[i + 1].x - OMAHA_DRAWS[i + 1].halfW - 2;
-        const segW = right - left;
-        if (segW < 6) continue;
-        const midX = (left + right) * 0.5;
-        const cliff = BABYLON.MeshBuilder.CreateBox(
-          "omahaCliff_" + i,
-          { width: segW * 0.92, height: 3.6, depth: 2.0 },
-          scene
-        );
-        cliff.position.set(midX, getSandHeight(midX, cliffZ) + 1.2, cliffZ);
+      const cliffOuter = WORLD_LIMIT_X - 8;
+      const cliffInset = 1.5;
+      function placeCliffBox(name, x0, x1, z, height, depth) {
+        const width = x1 - x0;
+        if (width < 4) return;
+        const midX = (x0 + x1) * 0.5;
+        const cliff = BABYLON.MeshBuilder.CreateBox(name, { width, height, depth }, scene);
+        const groundY = getSandHeight(midX, z);
+        cliff.position.set(midX, groundY + height * 0.5, z);
         cliff.material = cliffMat;
         cliff.receiveShadows = true;
         cliff.metadata = { isEnvironment: true, isToy: true };
         cliff.isPickable = false;
         cliff.parent = envRootNode;
         shadowGen.addShadowCaster(cliff);
+        registerOmahaWallObstacle(midX, z, width, depth, height, groundY);
       }
+      function placeCliffSpan(x0, x1, id) {
+        const frontInset = Math.min(0.8, Math.max(0, (x1 - x0 - 4) * 0.5));
+        placeCliffBox(
+          "omahaCliff_" + id + "_s",
+          x0 + frontInset,
+          x1 - frontInset,
+          cliffZ - 1.2,
+          3.1,
+          1.8
+        );
+        placeCliffBox("omahaCliff_" + id + "_n", x0, x1, cliffZ + 1.4, 4.2, 2.2);
+      }
+      const cliffSpans = [[-cliffOuter, omahaDrawPathX(0, cliffZ) - OMAHA_DRAWS[0].halfW - cliffInset]];
+      for (let i = 0; i + 1 < OMAHA_DRAWS.length; i++) {
+        cliffSpans.push([
+          omahaDrawPathX(i, cliffZ) + OMAHA_DRAWS[i].halfW + cliffInset,
+          omahaDrawPathX(i + 1, cliffZ) - OMAHA_DRAWS[i + 1].halfW - cliffInset
+        ]);
+      }
+      const lastDraw = OMAHA_DRAWS.length - 1;
+      cliffSpans.push([
+        omahaDrawPathX(lastDraw, cliffZ) + OMAHA_DRAWS[lastDraw].halfW + cliffInset,
+        cliffOuter
+      ]);
+      cliffSpans.forEach((span, id) => placeCliffSpan(span[0], span[1], id));
 
       // LCVPs in shallows — ramp open toward beach (+Z). Side hull collision only so the ramp stays usable.
       // Pin root Y so the visual deck (~local y 0.31) lines up with the sand berm (floorY 0.32).
@@ -3601,49 +3660,108 @@
         registerOmahaWallObstacle(x, lcvpZ - 3.5, 2.9, 0.4, 1.8, lcvpRootY); // stern
       });
 
-      // Sparse tidal-flat obstacles (keep draws clear)
-      const hedgehogs = [
-        [-55, -40], [-30, -26], [-12, -44], [8, -30], [26, -48], [44, -24], [60, -36],
-        [-48, -14], [0, -22], [32, -12]
-      ];
-      hedgehogs.forEach(([x, z]) => {
-        if (omahaDrawBlend(x, z) > 0.45) return;
-        placeOmahaProp("omahaHedgehog", x, z, omahaRustMat, 2.4, 2.4, 2.2, Math.random() * Math.PI);
+      // Tidal-flat belt. Seaward row pairs hedgehogs in each inter-draw gap; the landward
+      // row places one. One Belgian gate per gap faces the beach. Draws stay clear.
+      const hedgehogRows = [-46, -22];
+      let hedgehogN = 0;
+      hedgehogRows.forEach((z, row) => {
+        const xs = [];
+        const leftOuter = -WORLD_LIMIT_X + 8;
+        const rightOuter = WORLD_LIMIT_X - 8;
+        const leftInner = omahaDrawPathX(0, z) - OMAHA_DRAWS[0].halfW - 3;
+        const rightInner =
+          omahaDrawPathX(OMAHA_DRAWS.length - 1, z) +
+          OMAHA_DRAWS[OMAHA_DRAWS.length - 1].halfW +
+          3;
+        if (leftInner - leftOuter >= 3) xs.push((leftOuter + leftInner) * 0.5);
+        for (let i = 0; i + 1 < OMAHA_DRAWS.length; i++) {
+          const left = omahaDrawPathX(i, z) + OMAHA_DRAWS[i].halfW + 2.5;
+          const right = omahaDrawPathX(i + 1, z) - OMAHA_DRAWS[i + 1].halfW - 2.5;
+          const span = right - left;
+          if (span <= 3) continue;
+          xs.push(left + span * (row === 0 ? 0.3 : 0.42));
+          if (row === 0 && span > 7.2) xs.push(left + span * 0.72);
+        }
+        if (rightOuter - rightInner >= 3) xs.push((rightInner + rightOuter) * 0.5);
+        xs.forEach((x) => {
+          if (Math.abs(x) > WORLD_LIMIT_X - 6) return;
+          if (omahaDrawBlend(x, z) > 0.45) return;
+          placeOmahaProp(
+            "omahaHedgehog",
+            x,
+            z,
+            omahaRustMat,
+            2.4,
+            2.4,
+            2.2,
+            (hedgehogN * 2.399) % Math.PI,
+            -0.12
+          );
+          hedgehogN++;
+        });
       });
-      [[-38, -20], [18, -18], [52, -42]].forEach(([x, z]) => {
-        placeOmahaProp("omahaBelgianGate", x, z, omahaWoodGateMat, 4.0, 2.2, 2.2, (Math.random() - 0.5) * 0.6);
-      });
-
-      // Wire behind shingle — skip coils that sit in draw gaps
-      const wireXs = [-72, -50, -28, -4, 20, 44, 68];
-      wireXs.forEach((x) => {
-        if (omahaDrawBlend(x, 6) > 0.4) return;
-        placeOmahaProp("omahaWireCoil", x, 6.5, omahaSilverWireMat, 2.6, 2.6, 1.45, 0);
-      });
-
-      // Trenches / sandbags beside draws on the bluff (not blocking the path floors)
-      const trenchSegs = [
-        { x: -50, z: 30, yaw: 0.2 },
-        { x: -26, z: 36, yaw: -0.35 },
-        { x: -2, z: 42, yaw: 0.25 },
-        { x: 22, z: 34, yaw: -0.2 },
-        { x: 46, z: 40, yaw: 0.3 },
-        { x: 70, z: 32, yaw: -0.15 }
-      ];
-      trenchSegs.forEach((seg) => {
-        placeOmahaProp("omahaSandbag", seg.x, seg.z, omahaBurlapMat, 2.3, 1.1, 1.15, seg.yaw);
+      const gateZ = -4;
+      for (let i = 0; i + 1 < OMAHA_DRAWS.length; i++) {
+        const left = omahaDrawPathX(i, gateZ) + OMAHA_DRAWS[i].halfW;
+        const right = omahaDrawPathX(i + 1, gateZ) - OMAHA_DRAWS[i + 1].halfW;
+        const midX = (left + right) * 0.5;
+        if (right - left < 5 || omahaDrawBlend(midX, gateZ) > 0.45) continue;
         placeOmahaProp(
-          "omahaTrenchPlank",
-          seg.x + 1.4,
-          seg.z - 1.2,
+          "omahaBelgianGate",
+          midX,
+          gateZ,
           omahaWoodGateMat,
-          2.8,
-          0.4,
-          0.25,
-          seg.yaw + Math.PI / 2,
-          0.05
+          4.0,
+          2.2,
+          2.2,
+          ((i % 3) - 1) * 0.06
         );
-        registerOmahaWallObstacle(seg.x, seg.z + 1.1, 3.2, 0.55, 1.35);
+      }
+
+      // Sandbag fighting positions: draw-mouth flanks at the toe, short walls on the plateau lip.
+      const toeZ = 16;
+      OMAHA_DRAWS.forEach((d, i) => {
+        const pathX = omahaDrawPathX(i, toeZ);
+        [-1, 1].forEach((side) => {
+          const x = pathX + side * (d.halfW + 3.2);
+          if (Math.abs(x) > WORLD_LIMIT_X - 6) return;
+          if (omahaDrawBlend(x, toeZ) > 0.2) return;
+          placeOmahaProp("omahaSandbag", x, toeZ, omahaBurlapMat, 2.3, 1.1, 1.15, 0);
+        });
+      });
+      const lipZ = 52;
+      [-72, -28, 19, 72].forEach((cx) => {
+        [-1.2, 1.2].forEach((dx) => {
+          const x = cx + dx;
+          if (Math.abs(x) > WORLD_LIMIT_X - 6) return;
+          if (omahaDrawBlend(x, lipZ) > 0.35) return;
+          placeOmahaProp("omahaSandbag", x, lipZ, omahaBurlapMat, 2.3, 1.1, 1.15, 0);
+        });
+      });
+
+      // Driftwood planks are visual only. A short AABB would still block the 2D nav grid.
+      const driftwood = [];
+      const driftZs = [-8, -6, -9, -7, -5];
+      for (let i = 0; i + 1 < OMAHA_DRAWS.length; i++) {
+        const z = driftZs[i];
+        const left = omahaDrawPathX(i, z) + OMAHA_DRAWS[i].halfW + 1.5;
+        const right = omahaDrawPathX(i + 1, z) - OMAHA_DRAWS[i + 1].halfW - 1.5;
+        driftwood.push({ x: (left + right) * 0.5, z, yaw: (i - 2) * 0.35 });
+      }
+      driftwood.push({ x: -76, z: -7, yaw: 0.8 });
+      driftwood.push({ x: 76, z: -6, yaw: -0.6 });
+      [0, 2, 4].forEach((i) => {
+        const z = 9;
+        const d = OMAHA_DRAWS[i];
+        driftwood.push({
+          x: omahaDrawPathX(i, z) + d.halfW + 1.8,
+          z,
+          yaw: 0.7 + i * 0.15
+        });
+      });
+      driftwood.forEach((p) => {
+        if (omahaDrawBlend(p.x, p.z) > 0.55) return;
+        placeOmahaProp("omahaTrenchPlank", p.x, p.z, omahaWoodGateMat, 0, 0, 0, p.yaw, 0);
       });
 
       // Casemates on plateau facing beach (−Z embrasure). Rear entry opens to +Z (north).
