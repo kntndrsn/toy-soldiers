@@ -13,6 +13,7 @@ const GEOMETRY_DIR = path.join(__dirname, "geometry");
 const PARTICLES_DIR = path.join(__dirname, "particles");
 const GUI_DIR = path.join(__dirname, "gui");
 const FLOWGRAPHS_DIR = path.join(__dirname, "flowgraphs");
+const VENDOR_DIR = path.join(__dirname, "vendor");
 
 const FAVICON_MIME_TYPES = {
   ".png": "image/png",
@@ -84,6 +85,14 @@ const GRAPH_ROUTES = [
   { prefix: "flowgraphs/", dir: FLOWGRAPHS_DIR, files: FLOWGRAPH_FILES }
 ];
 
+// Vendor scripts served at /vendor/<file>
+const VENDOR_FILES = new Set([
+  "babylon.js",
+  "babylon.gui.min.js",
+  "babylonjs.loaders.min.js",
+  "yuka.min.js"
+]);
+
 // ============================================================================
 // 0. BUILD VERSION & CONTENT-HASHED ASSET MANIFEST (CACHE BUSTING)
 // ============================================================================
@@ -142,16 +151,16 @@ const buildVersionJson = JSON.stringify({ ok: true, ...buildManifest });
 const indexEntry = assetEntries.get("index.html");
 const renderedIndexHtml = indexEntry
   ? Buffer.from(
-      indexEntry.content
-        .toString("utf8")
-        .replace(
-          BUILD_MANIFEST_MARKER,
-          "<script>window.__TS_BUILD__=" +
-            JSON.stringify(buildManifest).replace(/</g, "\\u003c") +
-            ";</script>"
-        ),
-      "utf8"
-    )
+    indexEntry.content
+      .toString("utf8")
+      .replace(
+        BUILD_MANIFEST_MARKER,
+        "<script>window.__TS_BUILD__=" +
+        JSON.stringify(buildManifest).replace(/</g, "\\u003c") +
+        ";</script>"
+      ),
+    "utf8"
+  )
   : null;
 
 console.log(`[build] ${buildVersion} (${assetEntries.size} assets hashed at startup)`);
@@ -969,7 +978,7 @@ const server = http.createServer((req, res) => {
         const params = new URLSearchParams(req.url.slice(qIdx + 1));
         const tok = params.get("clientToken");
         if (tok) reqClientToken = String(tok).trim().slice(0, 64);
-      } catch {}
+      } catch { }
     }
     const activeRooms = getRoomsSummary(reqClientToken);
     res.writeHead(200, {
@@ -997,7 +1006,7 @@ const server = http.createServer((req, res) => {
       try {
         const params = new URLSearchParams(req.url.slice(qIdx + 1));
         recordPresence(params.get("id"), params.get("mode"));
-      } catch {}
+      } catch { }
     }
     res.writeHead(200, {
       "Content-Type": "application/json",
@@ -1199,6 +1208,27 @@ const server = http.createServer((req, res) => {
       sendVersionedAsset(req, res, graphRoute.prefix + graphName, "application/json; charset=utf-8");
       return;
     }
+  }
+
+  // Serve vendor scripts at /vendor/<file>
+  const vendorAssetName = strippedPath.startsWith("vendor/")
+    ? strippedPath.slice("vendor/".length)
+    : strippedPath;
+  if (VENDOR_FILES.has(vendorAssetName)) {
+    const filePath = path.join(VENDOR_DIR, vendorAssetName);
+    fs.readFile(filePath, (err, content) => {
+      if (err) {
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end("Not Found");
+        return;
+      }
+      res.writeHead(200, {
+        "Content-Type": "application/javascript",
+        "Cache-Control": "public, max-age=31536000, immutable"
+      });
+      res.end(content);
+    });
+    return;
   }
 
   res.writeHead(404, { "Content-Type": "text/plain" });
@@ -1479,7 +1509,7 @@ function isRoomOwner(room, clientId, clientToken) {
   if (room.originalHostToken) {
     return Boolean(
       (clientToken && room.originalHostToken === clientToken) ||
-        (room.originalHostClientId && room.originalHostClientId === clientId)
+      (room.originalHostClientId && room.originalHostClientId === clientId)
     );
   }
   return room.hostId === clientId;
@@ -1686,7 +1716,7 @@ wss.on("connection", (ws, req) => {
     ddosTelemetry.blockedConnections++;
     try {
       ws.close(1008, "Connection rate limit exceeded");
-    } catch {}
+    } catch { }
     return;
   }
 
@@ -1725,7 +1755,7 @@ wss.on("connection", (ws, req) => {
         ipRec.bannedUntil = now + IP_BAN_DURATION_MS;
         try {
           ws.close(1008, "Malformed packets");
-        } catch {}
+        } catch { }
       }
       return;
     }
@@ -1762,7 +1792,7 @@ wss.on("connection", (ws, req) => {
         ddosTelemetry.blockedConnections++;
         try {
           ws.close(1008, "Rate limit exceeded");
-        } catch {}
+        } catch { }
       }
       return;
     }
@@ -1772,7 +1802,7 @@ wss.on("connection", (ws, req) => {
       if (rateState.violations >= 8) {
         try {
           ws.close(1008, "Rate limit exceeded");
-        } catch {}
+        } catch { }
       }
       return;
     }
@@ -1839,7 +1869,7 @@ wss.on("connection", (ws, req) => {
                   existingHostRoom.clients.delete(cid);
                   try {
                     c.ws.close(4001, "Duplicate session replaced");
-                  } catch {}
+                  } catch { }
                 }
               }
             }
@@ -2078,9 +2108,9 @@ wss.on("connection", (ws, req) => {
         const existingRoom = rooms.get(targetCode);
         const isReturningHost = Boolean(
           existingRoom &&
-            clientToken &&
-            existingRoom.originalHostToken &&
-            existingRoom.originalHostToken === clientToken
+          clientToken &&
+          existingRoom.originalHostToken &&
+          existingRoom.originalHostToken === clientToken
         );
 
         if (existingRoom && (existingRoom.endedByHost || existingRoom.matchEnded)) {
@@ -2158,7 +2188,7 @@ wss.on("connection", (ws, req) => {
               if (room.dirtyPlayers) room.dirtyPlayers.delete(cid);
               try {
                 c.ws.close(4001, "Duplicate session replaced");
-              } catch {}
+              } catch { }
             }
           }
           if (!restoredSlot && room.disconnectedPlayers && room.disconnectedPlayers.has(clientToken)) {
@@ -2242,14 +2272,14 @@ wss.on("connection", (ws, req) => {
           restoredSlot && restoredSlot.team === finalTeam && typeof restoredSlot.z === "number"
             ? restoredSlot.z
             : finalTeam === "green"
-            ? -randZMag
-            : randZMag;
+              ? -randZMag
+              : randZMag;
         const spawnYaw =
           restoredSlot && restoredSlot.team === finalTeam && typeof restoredSlot.yaw === "number"
             ? restoredSlot.yaw
             : finalTeam === "green"
-            ? 0
-            : Math.PI;
+              ? 0
+              : Math.PI;
 
         const clientInfo = {
           id: clientId,
@@ -2402,8 +2432,8 @@ wss.on("connection", (ws, req) => {
           msg.ball !== undefined && msg.ball !== null
             ? msg.ball
             : prevWorld && prevWorld.ball
-            ? prevWorld.ball
-            : null;
+              ? prevWorld.ball
+              : null;
         currentRoom.lastWorldState = {
           remainingSec,
           matchEnded: currentRoom.matchEnded,
@@ -2449,9 +2479,9 @@ wss.on("connection", (ws, req) => {
           const sender = currentRoom.clients.get(clientId);
           const targetIsHuman = Array.from(currentRoom.clients.values()).some((c) => c.unitId === targetUnitId);
           if (currentRoom.mapType !== "kitchen" || !currentRoom.unitStats.has(targetUnitId) || !sender ||
-              (sender.unitId !== targetUnitId && (currentRoom.hostId !== clientId || targetIsHuman)) ||
-              !pos || ![pos.x, pos.y, pos.z].every(Number.isFinite) ||
-              (Math.abs(pos.x) <= 48 && Math.abs(pos.z) <= 64)) break;
+            (sender.unitId !== targetUnitId && (currentRoom.hostId !== clientId || targetIsHuman)) ||
+            !pos || ![pos.x, pos.y, pos.z].every(Number.isFinite) ||
+            (Math.abs(pos.x) <= 48 && Math.abs(pos.z) <= 64)) break;
           fallPosition = { x: pos.x, y: pos.y, z: pos.z };
         }
         const attackerUnitId = !tableFall && msg.attackerUnitId ? String(msg.attackerUnitId) : null;
@@ -2723,7 +2753,7 @@ wss.on("connection", (ws, req) => {
         const pullRadius = Number(msg.pullRadius);
         const radius = Math.max(6, Math.min(60, Number.isFinite(pullRadius) ? pullRadius : 22));
         if (diveDist < 8 || diveDist > 280 || nadir.y > start.y - 4 ||
-            awayDist < 8 || awayDist > 280 || end.y < nadir.y + 4) {
+          awayDist < 8 || awayDist > 280 || end.y < nadir.y + 4) {
           safeSend(ws, { type: "airstrike_rejected", reason: "bad_path" });
           break;
         }
@@ -3064,7 +3094,7 @@ setInterval(() => {
       if (client.ws && client.ws.readyState === WebSocket.OPEN) {
         try {
           client.ws.ping();
-        } catch {}
+        } catch { }
       }
     }
   }
