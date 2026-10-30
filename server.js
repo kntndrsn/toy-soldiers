@@ -43,7 +43,10 @@ const MODEL_FILES = new Set([
 
 // Node Material Editor graphs (NME JSON) served at /materials/<file>
 const MATERIAL_FILES = new Set([
-  "sandboxSand.json"
+  "sandboxSand.json",
+  "omahaWetSand.json",
+  "omahaResinWater.json",
+  "omahaPlasterCliff.json"
 ]);
 
 // Node Geometry Editor graphs (NGE JSON) served at /geometry/<file>
@@ -56,14 +59,24 @@ const GEOMETRY_FILES = new Set([
   "armyJeep.json",
   "shoeboxShell.json",
   "tissueSheet.json",
-  "kitchenPlate.json"
+  "kitchenPlate.json",
+  "omahaFrame.json",
+  "omahaLcvp.json",
+  "omahaHedgehog.json",
+  "omahaBelgianGate.json",
+  "omahaWireCoil.json",
+  "omahaSandbag.json",
+  "omahaCasemate.json",
+  "omahaTrenchPlank.json"
 ]);
 
 // Node Particle Editor graphs (NPE JSON) served at /particles/<file>
 const PARTICLE_FILES = new Set([
   "sandPuff.json",
   "plasticSparks.json",
-  "grenadeExplosion.json"
+  "grenadeExplosion.json",
+  "omahaSandPuff.json",
+  "omahaWaterSplash.json"
 ]);
 
 // GUI Editor layouts (AdvancedDynamicTexture JSON) served at /gui/<file>
@@ -886,7 +899,7 @@ function renderPerfDashboardHtml() {
                 "<tr>" +
                 "<td>" + (c.clientId || "local") + "</td>" +
                 "<td>" + (c.mode || "solo") + (c.roomCode ? " (" + c.roomCode + ")" : "") + "</td>" +
-                "<td>" + (c.mapType === "kitchen" ? "Kitchen Table" : c.mapType === "shoebox" ? "Shoebox" : "Sandbox") + "</td>" +
+                "<td>" + (c.mapType === "omaha" ? "Omaha Beach" : c.mapType === "kitchen" ? "Kitchen Table" : c.mapType === "shoebox" ? "Shoebox" : "Sandbox") + "</td>" +
                 "<td>" + (c.aliveUnits || 0) + "/" + (c.totalUnits || 0) + "</td>" +
                 "<td style='color:#84ff78;font-weight:bold;'>" + (c.fps || 0) + "</td>" +
                 "<td>" + (c.frameMs || 0) + "</td>" +
@@ -919,7 +932,7 @@ function renderPerfDashboardHtml() {
               (r) =>
                 "<tr>" +
                 "<td>" + r.roomCode + "</td>" +
-                "<td>" + (r.mapType === "kitchen" ? "Kitchen Table" : r.mapType === "shoebox" ? "Shoebox" : "Sandbox") + "</td>" +
+                "<td>" + (r.mapType === "omaha" ? "Omaha Beach" : r.mapType === "kitchen" ? "Kitchen Table" : r.mapType === "shoebox" ? "Shoebox" : "Sandbox") + "</td>" +
                 "<td>" + (r.hardcoreMode ? "Yes" : "No") + "</td>" +
                 "<td>" + (r.hasPassword ? "🔒 Protected" : "Open") + "</td>" +
                 "<td>" + r.playersOnline + "</td>" +
@@ -1332,8 +1345,23 @@ function mergeAiPacked(prevPacked, nextPacked, isDelta) {
 }
 
 function resolveMapType(mapType, limit) {
+  if (mapType === "omaha") return "omaha";
   if (mapType === "kitchen") return "kitchen";
   return mapType === "shoebox" || Number(limit) <= 50 ? "shoebox" : "sandbox";
+}
+
+function mapTypeLabel(mapType) {
+  if (mapType === "omaha") return "Omaha Beach";
+  if (mapType === "kitchen") return "Kitchen Table";
+  if (mapType === "shoebox") return "Shoebox";
+  return "Sandbox";
+}
+
+function mapTypeRoomPrefix(mapType) {
+  if (mapType === "omaha") return "OMAH";
+  if (mapType === "kitchen") return "KITC";
+  if (mapType === "shoebox") return "SHOE";
+  return "SAND";
 }
 
 function normalizeAiSkill(raw) {
@@ -1352,11 +1380,20 @@ function clampRank(value) {
 }
 
 function resolveWorldLimit(mapType, limit) {
+  if (mapType === "omaha") return 80;
   return mapType === "kitchen" ? 64 : mapType === "shoebox" ? 28
     : Math.max(50, Math.min(130, Number(limit) || 80));
 }
 
 function getSpawnBounds(room) {
+  if (room.mapType === "omaha") {
+    // Magnitude used for both teams (green → −Z shallows, tan → +Z behind casemates)
+    return {
+      maxX: 70,
+      minZ: 64,
+      maxZ: 69
+    };
+  }
   return {
     maxX: room.mapType === "kitchen" ? 38 : room.mapType === "shoebox" ? 18 : Math.max(30, room.worldLimit - 10),
     minZ: room.mapType === "shoebox" ? 10 : Math.max(18, room.worldLimit * 0.35),
@@ -1365,7 +1402,7 @@ function getSpawnBounds(room) {
 }
 
 function sanitizeCode(raw, mapType = "sandbox") {
-  const fallbackPrefix = mapType === "kitchen" ? "KITC" : mapType === "shoebox" ? "SHOE" : "SAND";
+  const fallbackPrefix = mapTypeRoomPrefix(mapType);
   const cleaned = String(raw || "")
     .toUpperCase()
     .replace(/[^A-Z0-9_-]/g, "")
@@ -1374,14 +1411,29 @@ function sanitizeCode(raw, mapType = "sandbox") {
 }
 
 function allocateUniqueRoomCode(requestedRaw, mapType = "sandbox") {
-  const prefix = mapType === "kitchen" ? "KITC" : mapType === "shoebox" ? "SHOE" : "SAND";
+  const prefix = mapTypeRoomPrefix(mapType);
   const cleaned = sanitizeCode(requestedRaw, mapType);
   // If the requested code matches the selected map prefix and is unused, keep it
   const matchesMapPrefix = cleaned.startsWith(prefix);
-  if (cleaned && cleaned !== "SAND1" && cleaned !== "SHOE1" && cleaned !== "KITC1" && matchesMapPrefix && !rooms.has(cleaned)) {
+  if (
+    cleaned &&
+    cleaned !== "SAND1" &&
+    cleaned !== "SHOE1" &&
+    cleaned !== "KITC1" &&
+    cleaned !== "OMAH1" &&
+    matchesMapPrefix &&
+    !rooms.has(cleaned)
+  ) {
     return cleaned;
   }
-  if (cleaned && !cleaned.startsWith("SAND") && !cleaned.startsWith("SHOE") && !cleaned.startsWith("KITC") && !rooms.has(cleaned)) {
+  if (
+    cleaned &&
+    !cleaned.startsWith("SAND") &&
+    !cleaned.startsWith("SHOE") &&
+    !cleaned.startsWith("KITC") &&
+    !cleaned.startsWith("OMAH") &&
+    !rooms.has(cleaned)
+  ) {
     return cleaned;
   }
   for (let attempt = 0; attempt < 200; attempt++) {
@@ -1875,13 +1927,14 @@ wss.on("connection", (ws, req) => {
             }
 
             // Update generated room codes when the host changes maps.
-            const prefix = requestedMapType === "kitchen" ? "KITC" : requestedMapType === "shoebox" ? "SHOE" : "SAND";
+            const prefix = mapTypeRoomPrefix(requestedMapType);
             const cleanedReq = sanitizeCode(msg.roomCode, requestedMapType);
             let nextRoomCode = existingHostRoom.code;
             if (
               (existingHostRoom.code.startsWith("SAND") ||
                 existingHostRoom.code.startsWith("SHOE") ||
-                existingHostRoom.code.startsWith("KITC")) &&
+                existingHostRoom.code.startsWith("KITC") ||
+                existingHostRoom.code.startsWith("OMAH")) &&
               !existingHostRoom.code.startsWith(prefix)
             ) {
               nextRoomCode = allocateUniqueRoomCode(cleanedReq, requestedMapType);
@@ -1891,6 +1944,7 @@ wss.on("connection", (ws, req) => {
               !cleanedReq.startsWith("SAND") &&
               !cleanedReq.startsWith("SHOE") &&
               !cleanedReq.startsWith("KITC") &&
+              !cleanedReq.startsWith("OMAH") &&
               !rooms.has(cleanedReq)
             ) {
               nextRoomCode = cleanedReq;
@@ -2399,6 +2453,7 @@ wss.on("connection", (ws, req) => {
         c.pitch = Math.round((Number(msg.pitch) || 0) * 100) / 100;
         c.moveBlend = Math.round((Number(msg.moveBlend) || 0) * 100) / 100;
         c.strideDir = Math.round((Number(msg.strideDir) || 0) * 100) / 100;
+        c.crouching = Boolean(msg.crouching);
 
         // Skip broadcast if this player is the only human in the room
         if (currentRoom.clients.size <= 1) break;
@@ -2413,7 +2468,8 @@ wss.on("connection", (ws, req) => {
           yaw: c.yaw,
           pitch: c.pitch,
           moveBlend: c.moveBlend,
-          strideDir: c.strideDir
+          strideDir: c.strideDir,
+          crouching: c.crouching
         });
         break;
       }
@@ -2843,7 +2899,12 @@ wss.on("connection", (ws, req) => {
           if (msg.tanTotal) {
             currentRoom.tanTotal = Math.max(1, Math.min(MAX_BOTS_PER_TEAM + 1, Math.floor(Number(msg.tanTotal))));
           }
-          if (msg.mapType === "shoebox" || msg.mapType === "sandbox" || msg.mapType === "kitchen") {
+          if (
+            msg.mapType === "shoebox" ||
+            msg.mapType === "sandbox" ||
+            msg.mapType === "kitchen" ||
+            msg.mapType === "omaha"
+          ) {
             currentRoom.mapType = msg.mapType;
           }
           if (msg.worldLimit) {

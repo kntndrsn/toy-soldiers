@@ -780,6 +780,37 @@
       margin-top: 2px;
     }
 
+    /* Crouch toggle — left side, beside / above the move stick */
+    #mobile-crouch-btn {
+      position: absolute;
+      left: 178px;
+      bottom: 48px;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: rgba(30, 40, 30, 0.72);
+      border: 2px solid rgba(152, 255, 140, 0.75);
+      color: #d8ffd2;
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 0.3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      touch-action: none;
+      cursor: pointer;
+      z-index: 2;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      user-select: none;
+    }
+
+    #mobile-crouch-btn.active {
+      transform: scale(0.92);
+      background: rgba(65, 145, 55, 0.88);
+      box-shadow: 0 0 16px rgba(180, 255, 160, 0.45);
+    }
+
     /* Secondary Jump / Hop Button near Right Thumb */
     #mobile-jump-btn {
       position: absolute;
@@ -1261,11 +1292,19 @@
         bottom: 120px;
       }
 
+      #mobile-crouch-btn {
+        width: 56px;
+        height: 56px;
+        left: 26px;
+        bottom: 140px;
+        font-size: 10px;
+      }
+
       #mobile-grenade-btn {
         width: 52px;
         height: 52px;
         left: 6px;
-        bottom: 148px;
+        bottom: 208px;
         font-size: 9px;
       }
 
@@ -1314,6 +1353,14 @@
         height: 54px;
         right: 116px;
         bottom: 24px;
+      }
+
+      #mobile-crouch-btn {
+        width: 52px;
+        height: 52px;
+        left: 132px;
+        bottom: 24px;
+        font-size: 9px;
       }
 
       #mobile-grenade-btn {
@@ -1388,6 +1435,7 @@
     <div id="right-touch-zone"></div>
 
     <div id="mobile-grenade-btn" title="Grenade (G)">NADE</div>
+    <div id="mobile-crouch-btn" role="button" title="Crouch (C)" aria-label="Toggle crouch" aria-pressed="false">CROUCH</div>
     <div id="mobile-jump-btn">JUMP</div>
     <div id="mobile-aim-btn" role="button" title="Aim (right click)" aria-label="Aim down sights" aria-pressed="false">
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1510,6 +1558,7 @@
             <option value="sandbox" selected>Sandbox</option>
             <option value="shoebox">Shoebox</option>
             <option value="kitchen">Kitchen Table</option>
+            <option value="omaha">Omaha Beach</option>
           </select>
         </div>
 
@@ -1527,6 +1576,9 @@
 
       <div id="kitchen-map-hint" style="display: none; font-size: 12px; color: #ffd584; margin-bottom: 10px;">
         Fight among six place settings and the floral centerpiece. Watch your step: falling off the table is fatal!
+      </div>
+      <div id="omaha-map-hint" style="display: none; font-size: 12px; color: #b8d4e8; margin-bottom: 10px;">
+        Attackers (green) land in the southern shallows. Defenders (tan) hold the northern bluffs and casemates.
       </div>
 
       <!-- Row 4: Time Limit & Hardcore Mode -->
@@ -1736,6 +1788,41 @@
     sunLight.specular = new BABYLON.Color3(1.0, 0.95, 0.85);
     sunLight.intensity = 1.45;
 
+    const defaultMapLighting = {
+      hemiIntensity: 0.75,
+      hemiDiffuse: hemiLight.diffuse.clone(),
+      hemiGround: hemiLight.groundColor.clone(),
+      sunIntensity: 1.45,
+      sunDiffuse: sunLight.diffuse.clone(),
+      sunSpecular: sunLight.specular.clone(),
+      sunPosition: sunLight.position.clone(),
+      sunDirection: sunLight.direction.clone()
+    };
+
+    function applyMapLighting(mapType) {
+      if (mapType === "omaha") {
+        hemiLight.intensity = 1.05;
+        hemiLight.diffuse.set(0.78, 0.84, 0.92);
+        hemiLight.groundColor.set(0.42, 0.44, 0.4);
+        sunLight.intensity = 0.85;
+        sunLight.diffuse.set(0.82, 0.86, 0.92);
+        sunLight.specular.set(0.7, 0.74, 0.8);
+        sunLight.position.set(38, 88, 28);
+        sunLight.direction.copyFrom(
+          new BABYLON.Vector3(-0.35, -0.92, -0.25).normalize()
+        );
+        return;
+      }
+      hemiLight.intensity = defaultMapLighting.hemiIntensity;
+      hemiLight.diffuse.copyFrom(defaultMapLighting.hemiDiffuse);
+      hemiLight.groundColor.copyFrom(defaultMapLighting.hemiGround);
+      sunLight.intensity = defaultMapLighting.sunIntensity;
+      sunLight.diffuse.copyFrom(defaultMapLighting.sunDiffuse);
+      sunLight.specular.copyFrom(defaultMapLighting.sunSpecular);
+      sunLight.position.copyFrom(defaultMapLighting.sunPosition);
+      sunLight.direction.copyFrom(defaultMapLighting.sunDirection);
+    }
+
     const shadowGen = new BABYLON.ShadowGenerator(2048, sunLight);
     shadowGen.usePercentageCloserFiltering = true;
     shadowGen.filteringQuality = BABYLON.ShadowGenerator.QUALITY_MEDIUM;
@@ -1799,6 +1886,7 @@
     var tsNavGraphReady = false;
 
     function resolveMapType(mapType, limit) {
+      if (mapType === "omaha") return "omaha";
       if (mapType === "kitchen") return "kitchen";
       return mapType === "shoebox" || Number(limit) <= 50 ? "shoebox" : "sandbox";
     }
@@ -1845,6 +1933,90 @@
       return h;
     }
 
+    // Shell-blast bowls: deep crouch cover + raised lips so craters read on the mesh
+    const OMAHA_CRATERS = [
+      { x: -32, z: -36, r: 5.2, d: 1.45 },
+      { x: -12, z: -42, r: 4.6, d: 1.35 },
+      { x: 10, z: -30, r: 5.8, d: 1.55 },
+      { x: 34, z: -40, r: 4.8, d: 1.4 },
+      { x: -50, z: -22, r: 4.4, d: 1.25 },
+      { x: 2, z: -18, r: 5.0, d: 1.5 },
+      { x: 52, z: -26, r: 4.5, d: 1.3 },
+      { x: -22, z: -12, r: 4.2, d: 1.2 },
+      { x: 22, z: -14, r: 4.0, d: 1.28 },
+      { x: -40, z: -48, r: 3.8, d: 1.15 },
+      { x: 44, z: -8, r: 3.6, d: 1.1 },
+      { x: -6, z: -52, r: 4.1, d: 1.22 }
+    ];
+
+    // Dirt draws / ravines up the bluff — spaced across the beach (Easy/Dog Red style)
+    const OMAHA_DRAWS = [
+      { x: -62, halfW: 5.2 },
+      { x: -38, halfW: 4.8 },
+      { x: -14, halfW: 5.5 },
+      { x: 10, halfW: 5.0 },
+      { x: 34, halfW: 4.8 },
+      { x: 58, halfW: 5.2 }
+    ];
+
+    // LCVP berths in the shallows (must match buildOmahaEnvironment placement)
+    const OMAHA_LCVP_X = [-48, -16, 16, 48];
+
+    // Casemate centers on the plateau (WORLD_LIMIT_Z resolved at build/spawn time)
+    function getOmahaCasemates() {
+      return [
+        { x: -36, z: WORLD_LIMIT_Z - 10 },
+        { x: 0, z: WORLD_LIMIT_Z - 8 },
+        { x: 38, z: WORLD_LIMIT_Z - 11 }
+      ];
+    }
+
+    function isInsideOmahaCasemate(x, z) {
+      if (builtMapType !== "omaha") return false;
+      const list = getOmahaCasemates();
+      for (let i = 0; i < list.length; i++) {
+        const c = list[i];
+        if (Math.abs(x - c.x) < 2.35 && Math.abs(z - c.z) < 2.15) return true;
+      }
+      return false;
+    }
+
+    function omahaDrawBlend(cx, cz) {
+      let best = 0;
+      for (let i = 0; i < OMAHA_DRAWS.length; i++) {
+        const d = OMAHA_DRAWS[i];
+        // Slight snake so paths read as winding dirt trails
+        const pathX = d.x + Math.sin(cz * 0.045 + i * 0.9) * 4.2;
+        const lateral = Math.abs(cx - pathX);
+        const t = Math.max(0, 1 - lateral / d.halfW);
+        const smooth = t * t * (3 - 2 * t);
+        if (smooth > best) best = smooth;
+      }
+      return best;
+    }
+
+    function omahaLcvpDeckHeight(cx, cz) {
+      // Raise a sand berm under each Higgins boat: flat cargo floor + gentle ramp to beach (+Z)
+      const boatZ = -WORLD_LIMIT_Z + 10;
+      const floorY = 0.32;
+      let best = -Infinity;
+      for (let i = 0; i < OMAHA_LCVP_X.length; i++) {
+        const bx = OMAHA_LCVP_X[i];
+        const lx = cx - bx;
+        const lz = cz - boatZ;
+        if (Math.abs(lx) > 1.45) continue;
+        if (lz >= -3.4 && lz <= 2.55) {
+          // Interior deck
+          best = Math.max(best, floorY);
+        } else if (lz > 2.55 && lz < 6.2 && Math.abs(lx) < 1.35) {
+          // Ramp berm: floor → surrounding beach
+          const u = (lz - 2.55) / (6.2 - 2.55);
+          best = Math.max(best, floorY * (1 - u));
+        }
+      }
+      return best;
+    }
+
     // Analytical height function for sculpted sand dunes, hills, and hollows (flat cardboard floor in Shoe Box)
     function getSandHeight(x, z) {
       if (builtMapType === "kitchen") {
@@ -1855,6 +2027,66 @@
       }
       const cx = Math.max(-WORLD_LIMIT_X, Math.min(WORLD_LIMIT_X, x));
       const cz = Math.max(-WORLD_LIMIT_Z, Math.min(WORLD_LIMIT_Z, z));
+
+      if (builtMapType === "omaha") {
+        const Lz = WORLD_LIMIT_Z;
+        const zn = cz / Lz; // -1 south … +1 north
+        const draw = omahaDrawBlend(cx, cz);
+        let h = 0;
+
+        if (zn < -0.68) {
+          // Deep resin shallows under the landers
+          h = -0.28 + Math.sin(cx * 0.05) * 0.05 + Math.cos(cz * 0.08) * 0.04;
+        } else if (zn < -0.08) {
+          // Tidal flat: gold wet sand with ripples + deep shell craters
+          const t = (zn + 0.68) / 0.6;
+          h =
+            -0.08 +
+            t * 0.35 +
+            Math.sin(cx * 0.09) * Math.cos(cz * 0.07) * 0.28 +
+            Math.sin(cx * 0.22 + cz * 0.15) * 0.12 +
+            Math.cos(cx * 0.045) * 0.08;
+          for (let i = 0; i < OMAHA_CRATERS.length; i++) {
+            const c = OMAHA_CRATERS[i];
+            const dx = cx - c.x;
+            const dz = cz - c.z;
+            const d2 = dx * dx + dz * dz;
+            const rr = c.r * c.r;
+            // Bowl floor
+            h -= Math.exp(-d2 / rr) * c.d;
+            // Raised rim lip (visible shell-blast rings)
+            const rim = Math.exp(-Math.pow(Math.sqrt(d2) - c.r * 0.72, 2) / (c.r * 0.22)) * (c.d * 0.38);
+            h += rim;
+          }
+        } else if (zn < 0.14) {
+          // Shingle / pebble bank — first continuous rise; draws cut gaps
+          const t = (zn + 0.08) / 0.22;
+          const bank = 0.35 + t * 1.55 + Math.sin(cx * 0.11) * 0.1;
+          const gap = 0.4 + t * 0.55; // lowered bank through draws
+          h = bank * (1 - draw) + gap * draw;
+        } else if (zn < 0.82) {
+          // Bluff face: steep plaster rise, carved by dirt pathways all along the beach
+          const t = (zn - 0.14) / 0.68;
+          const steep = 1.9 + t * t * 4.6 + Math.sin(cx * 0.1) * 0.35;
+          // Gentle usable dirt ramp through each draw (shingle → plateau)
+          const pathH = 1.85 + t * 3.9;
+          h = steep * (1 - draw) + pathH * draw;
+          // Extra earthen lips beside paths so the draw reads as a cut
+          const shoulder = draw * (1 - draw) * 4;
+          h += shoulder * 0.55;
+        } else {
+          h = 5.75 + Math.sin(cx * 0.05) * 0.18;
+        }
+
+        const deck = omahaLcvpDeckHeight(cx, cz);
+        if (deck > -Infinity) h = Math.max(h, deck);
+
+        const edgeFade = Math.min(
+          1,
+          Math.min(WORLD_LIMIT_X - Math.abs(cx), WORLD_LIMIT_Z - Math.abs(cz)) / 4
+        );
+        return Math.max(-1.55, h * Math.max(0.25, edgeFade));
+      }
 
       let h =
         Math.sin(cx * 0.085) * Math.cos(cz * 0.08) * 1.18 +
@@ -1959,14 +2191,21 @@
     // Shading only; no vertex displacement, so getSandHeight() remains the authoritative surface.
     // The ground stays hidden until the node material has compiled (or is shown bare if it failed).
     let sandNodeMat = null;
+    let omahaWetSandMat = null;
+    let omahaResinWaterMat = null;
+    let omahaPlasterCliffMat = null;
     let sandNodeMatFailed = false;
+    let omahaMatsFailed = false;
     let activeSandMesh = null;
 
     function applySandNodeMaterial() {
-      if (!sandNodeMat || !activeSandMesh || activeSandMesh.isDisposed()) return;
-      const limitInput = sandNodeMat.getBlockByName("worldLimit");
+      if (!activeSandMesh || activeSandMesh.isDisposed()) return;
+      const mat =
+        builtMapType === "omaha" ? omahaWetSandMat || sandNodeMat : sandNodeMat;
+      if (!mat) return;
+      const limitInput = mat.getBlockByName("worldLimit");
       if (limitInput) limitInput.value = WORLD_LIMIT;
-      activeSandMesh.material = sandNodeMat;
+      activeSandMesh.material = mat;
       activeSandMesh.isVisible = true;
     }
 
@@ -1979,6 +2218,24 @@
         await mat.forceCompilationAsync(activeSandMesh);
       }
       sandNodeMat = mat;
+      applySandNodeMaterial();
+    }
+
+    async function loadOmahaNodeMaterials() {
+      const specs = [
+        { key: "omahaWetSand", file: "omahaWetSand.json", assign: (m) => { omahaWetSandMat = m; } },
+        { key: "omahaResinWater", file: "omahaResinWater.json", assign: (m) => { omahaResinWaterMat = m; } },
+        { key: "omahaPlasterCliff", file: "omahaPlasterCliff.json", assign: (m) => { omahaPlasterCliffMat = m; } }
+      ];
+      await Promise.all(
+        specs.map(async (spec) => {
+          const res = await fetch(assetUrl("materials/" + spec.file));
+          if (!res.ok) throw new Error(spec.file + ": HTTP " + res.status);
+          const mat = BABYLON.NodeMaterial.Parse(await res.json(), scene);
+          mat.name = spec.key;
+          spec.assign(mat);
+        })
+      );
       applySandNodeMaterial();
     }
 
@@ -1995,7 +2252,15 @@
       armyJeep: "armyJeep.json",
       shoeboxShell: "shoeboxShell.json",
       tissueSheet: "tissueSheet.json",
-      kitchenPlate: "kitchenPlate.json"
+      kitchenPlate: "kitchenPlate.json",
+      omahaFrame: "omahaFrame.json",
+      omahaLcvp: "omahaLcvp.json",
+      omahaHedgehog: "omahaHedgehog.json",
+      omahaBelgianGate: "omahaBelgianGate.json",
+      omahaWireCoil: "omahaWireCoil.json",
+      omahaSandbag: "omahaSandbag.json",
+      omahaCasemate: "omahaCasemate.json",
+      omahaTrenchPlank: "omahaTrenchPlank.json"
     };
     const propGraphs = new Map();
     const propVertexDataCache = new Map();
@@ -2068,6 +2333,7 @@
     }
 
     async function loadPropGraphs() {
+      propVertexDataCache.clear();
       const results = await Promise.allSettled(
         Object.entries(PROP_GRAPH_FILES).map(async ([key, file]) => {
           const res = await fetch(assetUrl("geometry/" + file));
@@ -2407,6 +2673,12 @@
     const armyDarkOliveMat = createPlasticPBR("armyDarkOliveMat", "#233814", 0.22);
     const armyCanvasMat = createPlasticPBR("armyCanvasMat", "#576e38", 0.42);
     const armyTanCanvasMat = createPlasticPBR("armyTanCanvasMat", "#b59257", 0.42);
+    const omahaConcreteMat = createPlasticPBR("omahaConcreteMat", "#8a8d86", 0.55);
+    const omahaRustMat = createPlasticPBR("omahaRustMat", "#6b3f28", 0.48);
+    const omahaSilverWireMat = createPlasticPBR("omahaSilverWireMat", "#c0c4c8", 0.22);
+    const omahaBurlapMat = createPlasticPBR("omahaBurlapMat", "#9a7d4a", 0.62);
+    const omahaShingleMat = createPlasticPBR("omahaShingleMat", "#7a7368", 0.58);
+    const omahaWoodGateMat = createPlasticPBR("omahaWoodGateMat", "#6e4a28", 0.45);
 
     function createCardboardMaterial() {
       const tex = new BABYLON.DynamicTexture("cardboardTex", 256, scene, true);
@@ -3161,12 +3433,268 @@
       }
     }
 
+    function placeOmahaProp(graph, x, z, materials, width, depth, height, yaw = 0, yOffset = 0) {
+      const root = new BABYLON.TransformNode(graph + "_" + x + "_" + z, scene);
+      const groundY = getSandHeight(x, z);
+      root.position.set(x, groundY + yOffset, z);
+      root.rotation.y = yaw;
+      mountProceduralProp({
+        graph,
+        root,
+        materials,
+        castShadows: true,
+        metadata: { isEnvironment: true, isToy: true }
+      });
+      if (width > 0 && depth > 0 && height > 0) {
+        const c = Math.cos(yaw);
+        const s = Math.sin(yaw);
+        const spanX = Math.abs(c) * width + Math.abs(s) * depth;
+        const spanZ = Math.abs(s) * width + Math.abs(c) * depth;
+        registerToyObstacle(root, x, z, spanX, spanZ, height);
+      } else {
+        root.parent = envRootNode;
+      }
+      return root;
+    }
+
+    function registerOmahaWallObstacle(cx, cz, width, depth, height, baseY) {
+      const groundY = getSandHeight(cx, cz);
+      const bottom = baseY != null ? baseY : groundY;
+      const obs = {
+        cx,
+        cz,
+        radius: Math.hypot(width / 2, depth / 2),
+        minX: cx - width / 2,
+        maxX: cx + width / 2,
+        minZ: cz - depth / 2,
+        maxZ: cz + depth / 2,
+        maxY: bottom + height
+      };
+      // Elevated slabs (embrasure lintel / cheek walls) must not extend to the floor —
+      // otherwise castEnvironmentRay treats them as solid from minY≈-1.5 and seals the hole.
+      if (baseY != null && baseY > groundY + 0.05) {
+        obs.minY = baseY;
+      }
+      obstacles.push(obs);
+    }
+
+    function buildOmahaEnvironment() {
+      const groundW = WORLD_LIMIT_X * 2;
+      const groundD = WORLD_LIMIT_Z * 2;
+      // Higher tessellation so shell craters and dirt draws read on the mesh
+      const sandMesh = BABYLON.MeshBuilder.CreateGround(
+        "omahaSandGround",
+        { width: groundW, height: groundD, subdivisions: 180, updatable: true },
+        scene
+      );
+      const sandPositions = sandMesh.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+      const sandNormals = sandMesh.getVerticesData(BABYLON.VertexBuffer.NormalKind);
+      const sandIndices = sandMesh.getIndices();
+      for (let i = 0; i < sandPositions.length; i += 3) {
+        sandPositions[i + 1] = getSandHeight(sandPositions[i], sandPositions[i + 2]);
+      }
+      BABYLON.VertexData.ComputeNormals(sandPositions, sandIndices, sandNormals);
+      sandMesh.updateVerticesData(BABYLON.VertexBuffer.PositionKind, sandPositions);
+      sandMesh.updateVerticesData(BABYLON.VertexBuffer.NormalKind, sandNormals);
+      sandMesh.refreshBoundingInfo();
+      sandMesh.isVisible = omahaMatsFailed && sandNodeMatFailed;
+      sandMesh.receiveShadows = true;
+      sandMesh.metadata = { isEnvironment: true, isSand: true };
+      sandMesh.parent = envRootNode;
+      activeSandMesh = sandMesh;
+      applySandNodeMaterial();
+
+      const frameRoot = new BABYLON.TransformNode("omahaFrame", scene);
+      frameRoot.parent = envRootNode;
+      mountProceduralProp({
+        graph: "omahaFrame",
+        params: { limitX: WORLD_LIMIT_X, limitZ: WORLD_LIMIT_Z },
+        root: frameRoot,
+        materials: woodMat,
+        castShadows: true,
+        metadata: { isEnvironment: true, isWall: true }
+      });
+
+      // Resin water covers the full LCVP landing band (south edge through boat footprints)
+      // Boats sit at z = -WORLD_LIMIT_Z+10; hull spans ~±4.5 in Z from that center.
+      const waterDepth = WORLD_LIMIT_Z * 0.48;
+      const waterZ = -WORLD_LIMIT_Z + waterDepth * 0.5;
+      const water = BABYLON.MeshBuilder.CreateGround(
+        "omahaResinWater",
+        { width: groundW * 0.98, height: waterDepth, subdivisions: 16 },
+        scene
+      );
+      water.position.set(0, -0.12, waterZ);
+      water.material = omahaResinWaterMat || lawnMat;
+      water.receiveShadows = true;
+      water.metadata = { isEnvironment: true, isSand: true };
+      water.parent = envRootNode;
+
+      // Shingle bank in segments with gaps at each dirt draw (cover without sealing the beach)
+      const shingleZ = 2;
+      const shingleGap = 11;
+      const shingleEdges = [-WORLD_LIMIT_X + 4];
+      OMAHA_DRAWS.forEach((d) => {
+        shingleEdges.push(d.x - shingleGap * 0.5, d.x + shingleGap * 0.5);
+      });
+      shingleEdges.push(WORLD_LIMIT_X - 4);
+      for (let i = 0; i + 1 < shingleEdges.length; i += 2) {
+        const x0 = shingleEdges[i];
+        const x1 = shingleEdges[i + 1];
+        const segW = x1 - x0;
+        if (segW < 3) continue;
+        const midX = (x0 + x1) * 0.5;
+        const shingle = BABYLON.MeshBuilder.CreateBox(
+          "omahaShingle_" + i,
+          { width: segW, height: 1.25, depth: 5.8 },
+          scene
+        );
+        shingle.position.set(midX, getSandHeight(midX, shingleZ) + 0.5, shingleZ);
+        shingle.material = omahaShingleMat;
+        shingle.receiveShadows = true;
+        shingle.metadata = { isEnvironment: true, isToy: true };
+        shingle.parent = envRootNode;
+        shadowGen.addShadowCaster(shingle);
+        registerOmahaWallObstacle(midX, shingleZ, segW, 5.8, 1.25, getSandHeight(midX, shingleZ));
+      }
+
+      // Plaster cliff faces BETWEEN draws only (visual). Paths stay clear — no wall AABBs.
+      const cliffMat = omahaPlasterCliffMat || omahaConcreteMat;
+      const cliffZ = WORLD_LIMIT_Z * 0.4;
+      for (let i = 0; i + 1 < OMAHA_DRAWS.length; i++) {
+        const left = OMAHA_DRAWS[i].x + OMAHA_DRAWS[i].halfW + 2;
+        const right = OMAHA_DRAWS[i + 1].x - OMAHA_DRAWS[i + 1].halfW - 2;
+        const segW = right - left;
+        if (segW < 6) continue;
+        const midX = (left + right) * 0.5;
+        const cliff = BABYLON.MeshBuilder.CreateBox(
+          "omahaCliff_" + i,
+          { width: segW * 0.92, height: 3.6, depth: 2.0 },
+          scene
+        );
+        cliff.position.set(midX, getSandHeight(midX, cliffZ) + 1.2, cliffZ);
+        cliff.material = cliffMat;
+        cliff.receiveShadows = true;
+        cliff.metadata = { isEnvironment: true, isToy: true };
+        cliff.isPickable = false;
+        cliff.parent = envRootNode;
+        shadowGen.addShadowCaster(cliff);
+      }
+
+      // LCVPs in shallows — ramp open toward beach (+Z). Side hull collision only so the ramp stays usable.
+      // Pin root Y so the visual deck (~local y 0.31) lines up with the sand berm (floorY 0.32).
+      const lcvpZ = -WORLD_LIMIT_Z + 10;
+      const lcvpRootY = 0.01;
+      OMAHA_LCVP_X.forEach((x) => {
+        const root = new BABYLON.TransformNode("omahaLcvp_" + x, scene);
+        root.position.set(x, lcvpRootY, lcvpZ);
+        root.parent = envRootNode;
+        mountProceduralProp({
+          graph: "omahaLcvp",
+          root,
+          materials: armyOliveMat,
+          castShadows: true,
+          metadata: { isEnvironment: true, isToy: true }
+        });
+        registerOmahaWallObstacle(x - 1.45, lcvpZ - 0.4, 0.35, 6.0, 1.9, lcvpRootY);
+        registerOmahaWallObstacle(x + 1.45, lcvpZ - 0.4, 0.35, 6.0, 1.9, lcvpRootY);
+        registerOmahaWallObstacle(x, lcvpZ - 3.5, 2.9, 0.4, 1.8, lcvpRootY); // stern
+      });
+
+      // Sparse tidal-flat obstacles (keep draws clear)
+      const hedgehogs = [
+        [-55, -40], [-30, -26], [-12, -44], [8, -30], [26, -48], [44, -24], [60, -36],
+        [-48, -14], [0, -22], [32, -12]
+      ];
+      hedgehogs.forEach(([x, z]) => {
+        if (omahaDrawBlend(x, z) > 0.45) return;
+        placeOmahaProp("omahaHedgehog", x, z, omahaRustMat, 2.4, 2.4, 2.2, Math.random() * Math.PI);
+      });
+      [[-38, -20], [18, -18], [52, -42]].forEach(([x, z]) => {
+        placeOmahaProp("omahaBelgianGate", x, z, omahaWoodGateMat, 4.0, 2.2, 2.2, (Math.random() - 0.5) * 0.6);
+      });
+
+      // Wire behind shingle — skip coils that sit in draw gaps
+      const wireXs = [-72, -50, -28, -4, 20, 44, 68];
+      wireXs.forEach((x) => {
+        if (omahaDrawBlend(x, 6) > 0.4) return;
+        placeOmahaProp("omahaWireCoil", x, 6.5, omahaSilverWireMat, 2.6, 2.6, 1.45, 0);
+      });
+
+      // Trenches / sandbags beside draws on the bluff (not blocking the path floors)
+      const trenchSegs = [
+        { x: -50, z: 30, yaw: 0.2 },
+        { x: -26, z: 36, yaw: -0.35 },
+        { x: -2, z: 42, yaw: 0.25 },
+        { x: 22, z: 34, yaw: -0.2 },
+        { x: 46, z: 40, yaw: 0.3 },
+        { x: 70, z: 32, yaw: -0.15 }
+      ];
+      trenchSegs.forEach((seg) => {
+        placeOmahaProp("omahaSandbag", seg.x, seg.z, omahaBurlapMat, 2.3, 1.1, 1.15, seg.yaw);
+        placeOmahaProp(
+          "omahaTrenchPlank",
+          seg.x + 1.4,
+          seg.z - 1.2,
+          omahaWoodGateMat,
+          2.8,
+          0.4,
+          0.25,
+          seg.yaw + Math.PI / 2,
+          0.05
+        );
+        registerOmahaWallObstacle(seg.x, seg.z + 1.1, 3.2, 0.55, 1.35);
+      });
+
+      // Casemates on plateau facing beach (−Z embrasure). Rear entry opens to +Z (north).
+      // Do NOT register a roof AABB — non-kitchen collision is XZ-only and a roof box seals the interior.
+      // Embrasure ~0.89–2.09: sill + lintel + left/right cheeks (center gap stays open for shots).
+      getOmahaCasemates().forEach((c) => {
+        placeOmahaProp("omahaCasemate", c.x, c.z, omahaConcreteMat, 0, 0, 0, 0, 0.05);
+        const base = getSandHeight(c.x, c.z);
+        const sill = 0.89;
+        const openTop = 2.09;
+        const openHalfW = 1.59;
+        const frontHalfW = 2.2;
+        const cheekW = frontHalfW - openHalfW;
+        // Side walls stop short of the rear (+Z) doorway so the interior stays walkable
+        registerOmahaWallObstacle(c.x - 2.7, c.z - 0.35, 0.55, 3.5, 3.4, base);
+        registerOmahaWallObstacle(c.x + 2.7, c.z - 0.35, 0.55, 3.5, 3.4, base);
+        // Front sill (below opening) and lintel (above opening)
+        registerOmahaWallObstacle(c.x, c.z - 2.2, 4.4, 0.55, sill, base);
+        registerOmahaWallObstacle(c.x, c.z - 2.2, 4.4, 0.55, 1.15, base + openTop);
+        // Cheeks beside the embrasure (elevated slabs with minY so the hole stays shootable)
+        registerOmahaWallObstacle(
+          c.x - (openHalfW + frontHalfW) * 0.5,
+          c.z - 2.2,
+          cheekW,
+          0.55,
+          openTop - sill,
+          base + sill
+        );
+        registerOmahaWallObstacle(
+          c.x + (openHalfW + frontHalfW) * 0.5,
+          c.z - 2.2,
+          cheekW,
+          0.55,
+          openTop - sill,
+          base + sill
+        );
+        // Rear wall stubs leave a center doorway (~|x| < 0.9)
+        registerOmahaWallObstacle(c.x - 1.75, c.z + 2.3, 1.7, 0.45, 3.4, base);
+        registerOmahaWallObstacle(c.x + 1.75, c.z + 2.3, 1.7, 0.45, 3.4, base);
+      });
+    }
+
     function rebuildSandboxEnvironment(newLimit, newMapType) {
       const targetMapType = resolveMapType(newMapType, newLimit);
       const targetLimit =
         targetMapType === "shoebox"
           ? 28
-          : targetMapType === "kitchen" ? 64
+          : targetMapType === "kitchen"
+          ? 64
+          : targetMapType === "omaha"
+          ? 80
           : Math.max(50, Math.min(130, Number(newLimit) || 80));
 
       if (
@@ -3200,6 +3728,7 @@
       builtWorldLimit = targetLimit;
 
       envRootNode = new BABYLON.TransformNode("envRoot", scene);
+      applyMapLighting(targetMapType);
 
       if (targetMapType === "kitchen") {
         WORLD_LIMIT = 64;
@@ -3224,6 +3753,16 @@
         camera.maxZ = 360;
 
         buildShoeBoxAndBedroomEnvironment();
+      } else if (targetMapType === "omaha") {
+        WORLD_LIMIT = 80;
+        WORLD_LIMIT_X = 88;
+        WORLD_LIMIT_Z = 72;
+        scene.clearColor = new BABYLON.Color4(0.55, 0.6, 0.66, 1);
+        scene.fogColor = new BABYLON.Color3(0.58, 0.62, 0.68);
+        scene.fogStart = WORLD_LIMIT + 40;
+        scene.fogEnd = WORLD_LIMIT * 2.5;
+        camera.maxZ = WORLD_LIMIT * 3.4;
+        buildOmahaEnvironment();
       } else {
         WORLD_LIMIT = targetLimit;
         WORLD_LIMIT_X = targetLimit;
@@ -3287,7 +3826,9 @@
       // The exported Death with Rifle clip has this generated name in the GLB.
       death: "_01a17b40_0b49_7260_98c0_64d66f5e633a",
       // Standing Throw in the updated GLB (generated name, not a literal label).
-      throw: "_01a18105_7a70_737e_aa8e_d79ff5a2b157"
+      throw: "_01a18105_7a70_737e_aa8e_d79ff5a2b157",
+      // Crouch with Rifle (generated name in the updated GLB; inspector uniqueId was 64).
+      crouch: "_01a18df7_995d_756d_88af_b8c1780eafb5"
     });
     const RIFLE_SCALE = 1.08;
     const RIFLE_TRIGGER = new BABYLON.Vector3(0.22, -0.075, 0);
@@ -3298,6 +3839,46 @@
     const DEATH_RIFLE_RELEASE_PROGRESS = 0.25;
     // Crossfade step per animation frame (~8 frames ≈ 0.14 s at 60 fps).
     const SOLDIER_BLEND_SPEED = 0.12;
+
+    // Crouch tuning. Edit these numbers — inches and degrees.
+    // A standing soldier is about 80 inches tall. 1 inch = 0.0254 world units.
+    const CROUCH_TUNE = {
+      // Height of the crouch pose, as a percent of the crouch clip.
+      // 100 = the clip as exported. 60 = much lower. Feet stay near the sand.
+      heightPercent: 70,
+      // Extra lift so the feet sit on the sand. Positive raises the soldier, in inches.
+      raiseFeetInches: 4,
+      // Turn the chest to the soldier's right, in degrees.
+      turnBodyRightDegrees: 15,
+      // Tip the chest forward so the face follows the rifle, in degrees.
+      leanForwardDegrees: 6,
+      // Aim the rifle to the soldier's left, in degrees, relative to the turned chest.
+      // Higher than turnBodyRightDegrees points the rifle left of straight ahead.
+      aimRifleLeftDegrees: 15,
+      // Slide the rifle toward the soldier's left, in inches.
+      pullRifleLeftInches: 0
+    };
+    const CROUCH_INCH = 0.0254;
+
+    function crouchInches(inches) {
+      return inches * CROUCH_INCH;
+    }
+
+    function crouchRadians(degrees) {
+      return (degrees * Math.PI) / 180;
+    }
+
+    function crouchHeightScale() {
+      return Math.max(0.35, CROUCH_TUNE.heightPercent / 100);
+    }
+
+    function applyCrouchBodyScale(model, crouched) {
+      if (!model.bodyRoots) return;
+      const scaleY = crouched ? crouchHeightScale() : 1;
+      for (let i = 0; i < model.bodyRoots.length; i++) {
+        model.bodyRoots[i].scaling.y = scaleY;
+      }
+    }
     const DEATH_FADE_SECONDS = 0.6;
     const DEATH_RIFLE_SINK_DEPTH = 0.35;
     // Safety net in case the death clip's end event never arrives.
@@ -3540,10 +4121,15 @@
       model.rifleDirection.x = 0;
       model.rifleDirection.normalize();
       const pitch = -Math.asin(model.rifleDirection.y);
+      const rifleYaw = model.crouching ? -crouchRadians(CROUCH_TUNE.aimRifleLeftDegrees) : 0;
       BABYLON.Quaternion.RotationYawPitchRollToRef(
-        0, pitch, 0, model.weaponMount.rotationQuaternion
+        rifleYaw, pitch, 0, model.weaponMount.rotationQuaternion
       );
       model.weaponMount.position.copyFrom(model.rightGrip);
+      if (model.crouching) {
+        // Soldier faces +Z; left is -X.
+        model.weaponMount.position.x -= crouchInches(CROUCH_TUNE.pullRifleLeftInches);
+      }
       if (!model.deathStarted) {
         // Keep the entire stock ahead of the body center, including when the rifle tilts.
         const rearReach = RIFLE_REAR_EXTENT * Math.cos(pitch) +
@@ -3636,6 +4222,7 @@
       model.deathFadeTime = 0;
       model.bodyMeshes.forEach((mesh) => { mesh.visibility = 1; });
       model.bodyRoots.forEach((node) => node.setEnabled(true));
+      applyCrouchBodyScale(model, false);
       model.weaponMount.setEnabled(true);
       model.rifleDropped = false;
       model.rifleSettled = false;
@@ -4380,7 +4967,7 @@
             applyDamage(hitSoldier, AIRSTRIKE_DAMAGE, attacker);
           }
         } else if (hitKind === "sand") {
-          spawnImpactFx(hitPoint, getTerrainImpactFx());
+          spawnImpactFx(hitPoint, getTerrainImpactFx(hitPoint));
         } else if (hitKind === "toy") {
           spawnImpactFx(hitPoint, "toyPlastic");
         }
@@ -4829,7 +5416,7 @@
         );
         if (d >= 0) take(d, x0 + dirx * d, y0 + diry * d, z0 + dirz * d);
       } else {
-        const wallTop = builtMapType === "shoebox" ? 5.0 : 3.3;
+        const wallTop = builtMapType === "shoebox" ? 5.0 : builtMapType === "omaha" ? 4.0 : 3.3;
         const wall = (t) => {
           if (!(t > 0 && t < best)) return;
           const y = y0 + diry * t;
@@ -5865,6 +6452,8 @@
         if (!model.deathStarted) {
           model.deathStarted = true;
           model.manualAnimation = false;
+          model.crouching = false;
+          applyCrouchBodyScale(model, false);
           model.visualRoot.position.y = 0;
           model.visualRoot.rotation.setAll(0);
           model.muzzleFlash.isVisible = false;
@@ -5877,9 +6466,20 @@
         return;
       }
       if (model.deathStarted) resetSoldierDeath(model);
-      model.visualRoot.position.y = soldier.stepSmoothY || 0;
-      model.visualRoot.rotation.x = soldier.pitch * 0.3 - model.recoilTimer * 0.05;
-      model.visualRoot.rotation.y = model.animationName === SOLDIER_CLIPS.throw ? GRENADE_THROW_YAW : 0;
+      model.crouching = Boolean(soldier.crouching);
+      applyCrouchBodyScale(model, model.crouching);
+      const footLift = model.crouching ? crouchInches(CROUCH_TUNE.raiseFeetInches) : 0;
+      model.visualRoot.position.y = (soldier.stepSmoothY || 0) + footLift;
+      model.visualRoot.rotation.x =
+        soldier.pitch * (model.crouching ? 0.55 : 0.3) +
+        (model.crouching ? crouchRadians(CROUCH_TUNE.leanForwardDegrees) : 0) -
+        model.recoilTimer * 0.05;
+      model.visualRoot.rotation.y =
+        model.animationName === SOLDIER_CLIPS.throw
+          ? GRENADE_THROW_YAW
+          : model.crouching
+          ? crouchRadians(CROUCH_TUNE.turnBodyRightDegrees)
+          : 0;
       model.visualRoot.rotation.z = model.flinchTimer * 0.07;
       const networkDriven = soldier.isRemotePlayer || (mpState.active && !isMultiplayerAuthority());
       const surfaceY = networkDriven
@@ -5906,7 +6506,12 @@
         return;
       }
       model.wasGrounded = true;
-      setSoldierClip(model, SOLDIER_CLIPS.run, isMoving);
+      // Crouch idle = hold crouch clip; crouch-walk = play the same clip while moving.
+      if (soldier.crouching) {
+        setSoldierClip(model, SOLDIER_CLIPS.crouch, isMoving);
+      } else {
+        setSoldierClip(model, SOLDIER_CLIPS.run, isMoving);
+      }
       syncThrowRifle(model);
     }
 
@@ -5926,7 +6531,7 @@
     let player = null;
     let configuredFriendlyCount = 3; // Default: 3 Friendly AI + You = 4 Green Total (Max 64 bots)
     let configuredEnemyCount = 4;    // Default: 4 Enemy Tan Soldiers (Max 64 bots)
-    let configuredMapType = "sandbox"; // "sandbox" | "shoebox" | "kitchen"
+    let configuredMapType = "sandbox"; // "sandbox" | "shoebox" | "kitchen" | "omaha"
     let configuredMapLimit = 80;     // Default: Large (80 -> 160x160)
     let configuredHardcoreMode = false; // 1-Shot Kill Hardcore Mode
     let configuredAiSkill = "intermediate"; // beginner | intermediate | expert
@@ -6275,7 +6880,8 @@
     }
 
     function generateUniqueRoomCode(mapType) {
-      const prefix = mapType === "kitchen" ? "KITC" : mapType === "shoebox" ? "SHOE" : "SAND";
+      const prefix =
+        mapType === "omaha" ? "OMAH" : mapType === "kitchen" ? "KITC" : mapType === "shoebox" ? "SHOE" : "SAND";
       for (let attempt = 0; attempt < 200; attempt++) {
         const num = Math.floor(100 + Math.random() * 900);
         const code = `${prefix}${num}`;
@@ -6294,16 +6900,18 @@
     }
 
     function findSafeSpawnPoint(baseX, baseZ) {
-      const margin = builtMapType === "shoebox" ? 2.4 : 3.5;
+      const isOmaha = builtMapType === "omaha";
+      const margin = builtMapType === "shoebox" ? 2.4 : isOmaha ? 2.8 : 3.5;
       const boundX = WORLD_LIMIT_X - margin;
       const boundZ = WORLD_LIMIT_Z - margin;
       let x = Math.max(-boundX, Math.min(boundX, baseX));
       let z = Math.max(-boundZ, Math.min(boundZ, baseZ));
 
-      const pad = builtMapType === "shoebox" ? 1.15 : 1.45;
-      const stepDist = builtMapType === "shoebox" ? 2.8 : 4.2;
+      const pad = builtMapType === "shoebox" ? 1.15 : isOmaha ? 1.05 : 1.45;
+      const stepDist = builtMapType === "shoebox" ? 2.8 : isOmaha ? 3.4 : 4.2;
+      const maxAttempts = isOmaha ? 48 : 28;
 
-      for (let attempt = 0; attempt < 28; attempt++) {
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
         let blocked = false;
         for (const obs of obstacles) {
           if (obs.walkable) continue;
@@ -6327,12 +6935,37 @@
       return { x, z };
     }
 
+    function getOmahaTanSpawnSeed(attempt) {
+      // Clear plateau pockets: behind casemate rear doors (+Z) and flanks between bunkers
+      const pockets = [
+        [-55, WORLD_LIMIT_Z - 5],
+        [-20, WORLD_LIMIT_Z - 4.2],
+        [20, WORLD_LIMIT_Z - 4.2],
+        [55, WORLD_LIMIT_Z - 5],
+        [-36, WORLD_LIMIT_Z - 3.6],
+        [0, WORLD_LIMIT_Z - 3.4],
+        [38, WORLD_LIMIT_Z - 3.6],
+        [-48, WORLD_LIMIT_Z - 14],
+        [48, WORLD_LIMIT_Z - 14],
+        [-10, WORLD_LIMIT_Z - 12],
+        [12, WORLD_LIMIT_Z - 12]
+      ];
+      const p = pockets[attempt % pockets.length];
+      return {
+        x: p[0] + (Math.random() - 0.5) * 5.5,
+        z: p[1] + (Math.random() - 0.5) * 1.8
+      };
+    }
+
     function getFormationPoint(team) {
       const isShoebox = builtMapType === "shoebox";
-      const marginX = WORLD_LIMIT_X - (isShoebox ? 2.8 : 4.5);
-      const marginZ = WORLD_LIMIT_Z - (isShoebox ? 3.2 : 5.0);
+      const isOmaha = builtMapType === "omaha";
+      const marginX = WORLD_LIMIT_X - (isShoebox ? 2.8 : isOmaha ? 6.0 : 4.5);
+      const marginZ = WORLD_LIMIT_Z - (isShoebox ? 3.2 : isOmaha ? 3.2 : 5.0);
       // Keep opposing teams far apart on initial spawn while placing every soldier at a random spot in their zone
-      const minCenterBuffer = isShoebox
+      const minCenterBuffer = isOmaha
+        ? Math.max(42, WORLD_LIMIT_Z * 0.72)
+        : isShoebox
         ? Math.max(8.5, WORLD_LIMIT_Z * 0.34)
         : Math.max(20, WORLD_LIMIT_Z * 0.38);
 
@@ -6340,12 +6973,26 @@
       let bestMinAllyDist = -1;
 
       for (let attempt = 0; attempt < 20; attempt++) {
-        const rx = (Math.random() * 2 - 1) * marginX;
-        const zSpan = Math.max(4, marginZ - minCenterBuffer);
-        const rz =
-          team === "green"
-            ? -(minCenterBuffer + Math.random() * zSpan)
-            : minCenterBuffer + Math.random() * zSpan;
+        let rx = (Math.random() * 2 - 1) * marginX;
+        let rz;
+        if (isOmaha) {
+          if (team === "green") {
+            // Shallows / LCVP band
+            const zLo = WORLD_LIMIT_Z - 14;
+            const zHi = WORLD_LIMIT_Z - 6;
+            rz = -(zLo + Math.random() * Math.max(2, zHi - zLo));
+          } else {
+            const seed = getOmahaTanSpawnSeed(attempt);
+            rx = seed.x;
+            rz = seed.z;
+          }
+        } else {
+          const zSpan = Math.max(4, marginZ - minCenterBuffer);
+          rz =
+            team === "green"
+              ? -(minCenterBuffer + Math.random() * zSpan)
+              : minCenterBuffer + Math.random() * zSpan;
+        }
         const candidate = findSafeSpawnPoint(rx, rz);
 
         let minAllyDist = Infinity;
@@ -6364,20 +7011,39 @@
         }
       }
 
-      return bestPt || findSafeSpawnPoint(0, team === "green" ? -marginZ : marginZ);
+      if (bestPt) return bestPt;
+      if (isOmaha && team === "tan") {
+        const seed = getOmahaTanSpawnSeed(0);
+        return findSafeSpawnPoint(seed.x, seed.z);
+      }
+      return findSafeSpawnPoint(0, team === "green" ? -marginZ : marginZ);
     }
 
     // Picks a random safe respawn point that is far enough away from living enemies (never a fixed spot)
     function findFarthestSafeSpawnPoint(team) {
       const isShoebox = builtMapType === "shoebox";
-      const marginX = WORLD_LIMIT_X - (isShoebox ? 3.0 : 5.5);
-      const marginZ = WORLD_LIMIT_Z - (isShoebox ? 3.2 : 5.5);
+      const isOmaha = builtMapType === "omaha";
+      const marginX = WORLD_LIMIT_X - (isShoebox ? 3.0 : isOmaha ? 6.0 : 5.5);
+      const marginZ = WORLD_LIMIT_Z - (isShoebox ? 3.2 : isOmaha ? 3.2 : 5.5);
       const candidates = [];
 
       // Sample 40 random safe candidate locations across the arena
       for (let i = 0; i < 40; i++) {
-        const rx = (Math.random() * 2 - 1) * marginX;
-        const rz = (Math.random() * 2 - 1) * marginZ;
+        let rx = (Math.random() * 2 - 1) * marginX;
+        let rz;
+        if (isOmaha) {
+          if (team === "green") {
+            const zLo = WORLD_LIMIT_Z - 14;
+            const zHi = WORLD_LIMIT_Z - 6;
+            rz = -(zLo + Math.random() * Math.max(2, zHi - zLo));
+          } else {
+            const seed = getOmahaTanSpawnSeed(i);
+            rx = seed.x;
+            rz = seed.z;
+          }
+        } else {
+          rz = (Math.random() * 2 - 1) * marginZ;
+        }
         candidates.push(findSafeSpawnPoint(rx, rz));
       }
 
@@ -6385,7 +7051,9 @@
       const livingAllies = soldiers.filter((s) => s.alive && s.team === team);
 
       // Safe distance threshold from any living enemy to prevent spawn killing
-      const safeEnemyThreshold = isShoebox
+      const safeEnemyThreshold = isOmaha
+        ? Math.min(48, WORLD_LIMIT_Z * 0.7)
+        : isShoebox
         ? Math.min(20, WORLD_LIMIT_Z * 0.62)
         : Math.min(40, WORLD_LIMIT_Z * 0.58);
 
@@ -6442,6 +7110,8 @@
       const targetWorldLimit =
         targetMapType === "shoebox"
           ? 28
+          : targetMapType === "omaha"
+          ? 80
           : mpState.active && mpState.roster && mpState.roster.worldLimit
           ? mpState.roster.worldLimit
           : configuredMapLimit;
@@ -6455,20 +7125,23 @@
       lastBallSent = null;
       hostKeyframeTimer = 0;
 
+      const localTeamPref =
+        mpTeamSelectEl && mpTeamSelectEl.value === "tan" ? "tan" : "green";
       const greenTotal = Math.min(
         MAX_BOTS_PER_TEAM + 1,
         mpState.active && mpState.roster
           ? mpState.roster.greenTotal
-          : configuredFriendlyCount + 1
+          : configuredFriendlyCount + (localTeamPref === "green" ? 1 : 0)
       );
       const tanTotal = Math.min(
         MAX_BOTS_PER_TEAM + 1,
         mpState.active && mpState.roster
           ? mpState.roster.tanTotal
-          : configuredEnemyCount
+          : configuredEnemyCount + (localTeamPref === "tan" ? 1 : 0)
       );
 
-      const myUnitId = mpState.active ? mpState.myUnitId : "green_0";
+      // Solo respects the Game Setup team dropdown; multiplayer uses the server-assigned unit.
+      const myUnitId = mpState.active ? mpState.myUnitId : `${localTeamPref}_0`;
 
       // Map human players by unitId when in Multiplayer mode
       const humanByUnitId = new Map();
@@ -6577,6 +7250,7 @@
             fireCooldown: isLocalPlayer ? 0 : 0.6 + (i % 4) * 0.35,
             fireRate: isLocalPlayer ? 0.2 : 0.78 + (i % 3) * 0.15,
             moveBlend: 0,
+            crouching: false,
             strafeDir: i % 2 === 0 ? 1 : -1,
             strafeTimer: 1.5 + (i % 3) * 0.6,
             flankSign: pt.x >= 0 ? 1 : -1,
@@ -6600,6 +7274,7 @@
 
           if (isLocalPlayer) {
             player = unit;
+            syncCrouchUi();
           }
           if (chunk && (i + 1) % 12 === 0) {
             await new Promise((resolve) => requestAnimationFrame(() => resolve()));
@@ -6663,10 +7338,25 @@
     const rightTouchZoneEl = document.getElementById("right-touch-zone");
     const mobileFireBtnEl = document.getElementById("mobile-fire-btn");
     const mobileJumpBtnEl = document.getElementById("mobile-jump-btn");
+    const mobileCrouchBtnEl = document.getElementById("mobile-crouch-btn");
     const mobileAimBtnEl = document.getElementById("mobile-aim-btn");
     const openTeamsBtnEl = document.getElementById("open-teams-btn");
     const topRightBarEl = document.getElementById("top-right-bar");
     const hudMenuToggleBtnEl = document.getElementById("hud-menu-toggle-btn");
+
+    function syncCrouchUi() {
+      const on = Boolean(player && player.crouching);
+      if (mobileCrouchBtnEl) {
+        mobileCrouchBtnEl.classList.toggle("active", on);
+        mobileCrouchBtnEl.setAttribute("aria-pressed", on ? "true" : "false");
+      }
+    }
+
+    function toggleCrouching() {
+      if (!player || !player.alive || gameEnded || isSetupOpen) return;
+      player.crouching = !player.crouching;
+      syncCrouchUi();
+    }
 
     function closeTopRightMenu() {
       if (topRightBarEl) topRightBarEl.classList.remove("menu-open");
@@ -6995,6 +7685,21 @@
       mobileJumpBtnEl.classList.remove("active");
     });
 
+    // ----- LEFT-SIDE CROUCH TOGGLE (C / touch) -----
+    if (mobileCrouchBtnEl) {
+      const onCrouchPress = (e) => {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        toggleCrouching();
+      };
+      mobileCrouchBtnEl.addEventListener("touchstart", onCrouchPress, { passive: false });
+      mobileCrouchBtnEl.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        onCrouchPress(e);
+      });
+      mobileCrouchBtnEl.addEventListener("contextmenu", (e) => e.preventDefault());
+    }
+
     // ----- LEFT-SIDE GRENADE BUTTON (HOLD TO AIM, RELEASE TO THROW) -----
     if (mobileAimBtnEl) {
       mobileAimBtnEl.addEventListener("touchstart", (e) => {
@@ -7044,16 +7749,32 @@
     });
 
     // ----- DESKTOP KEYBOARD & MOUSE -----
-    window.addEventListener("keydown", (e) => {
-      const tag = document.activeElement ? document.activeElement.tagName : "";
-      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
-      if (performance.now() - lastTouchInputMs > 700) enableTouchUI(false);
-      if (e.code in keys) keys[e.code] = true;
-      if (e.code === "KeyR") uiNotify("ui.retryRequested");
-      if (e.code === "KeyM") uiNotify("ui.setupRequested");
-      if (e.code === "KeyE" && !e.repeat) requestAirstrike();
-      if (e.code === "KeyG" && !e.repeat) beginGrenadeAim();
-    });
+    // Capture phase so Ctrl+W / Ctrl+shortcuts can be blocked before the browser closes the tab.
+    window.addEventListener(
+      "keydown",
+      (e) => {
+        const tag = document.activeElement ? document.activeElement.tagName : "";
+        const typing = tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA";
+        // Never let Ctrl/Cmd+W (and a few other tab shortcuts) close the game while playing.
+        if (
+          !typing &&
+          !isSetupOpen &&
+          (e.ctrlKey || e.metaKey) &&
+          (e.code === "KeyW" || e.code === "KeyT" || e.code === "KeyN" || e.code === "KeyR")
+        ) {
+          e.preventDefault();
+        }
+        if (typing) return;
+        if (performance.now() - lastTouchInputMs > 700) enableTouchUI(false);
+        if (e.code in keys) keys[e.code] = true;
+        if (e.code === "KeyC" && !e.repeat) toggleCrouching();
+        if (e.code === "KeyR" && !e.ctrlKey && !e.metaKey) uiNotify("ui.retryRequested");
+        if (e.code === "KeyM") uiNotify("ui.setupRequested");
+        if (e.code === "KeyE" && !e.repeat) requestAirstrike();
+        if (e.code === "KeyG" && !e.repeat) beginGrenadeAim();
+      },
+      true
+    );
 
     window.addEventListener("keyup", (e) => {
       if (e.code in keys) keys[e.code] = false;
@@ -7389,12 +8110,16 @@
     // emitter position per frame, so each graph gets a small pool; extra bursts in one frame are dropped.
     const IMPACT_FX_GRAPHS = {
       sandPuff: "sandPuff.json",
-      plasticSparks: "plasticSparks.json"
+      plasticSparks: "plasticSparks.json",
+      omahaSandPuff: "omahaSandPuff.json",
+      omahaWaterSplash: "omahaWaterSplash.json"
     };
     const IMPACT_FX_POOL_SIZE = 6;
     const IMPACT_FX = {
       sandboxSand: { graph: "sandPuff", color: "#e6c373", alpha: 0.85, size: 0.34, lifeTime: 0.6, count: 10 },
       shoeboxDust: { graph: "sandPuff", color: "#c29663", alpha: 0.8, size: 0.3, lifeTime: 0.5, count: 9 },
+      omahaSand: { graph: "omahaSandPuff", color: "#b8924f", alpha: 0.88, size: 0.36, lifeTime: 0.62, count: 11 },
+      omahaWater: { graph: "omahaWaterSplash", color: "#b8dce8", alpha: 0.82, size: 0.32, lifeTime: 0.45, count: 12 },
       greenPlastic: { graph: "plasticSparks", color: "#4be03e", alpha: 1, size: 0.15, lifeTime: 0.4, count: 9 },
       tanPlastic: { graph: "plasticSparks", color: "#ffd584", alpha: 1, size: 0.15, lifeTime: 0.4, count: 9 },
       toyPlastic: { graph: "plasticSparks", color: "#fff0a0", alpha: 1, size: 0.13, lifeTime: 0.35, count: 7 },
@@ -7406,7 +8131,11 @@
     });
     const impactFxPools = new Map();
 
-    function getTerrainImpactFx() {
+    function getTerrainImpactFx(hitPoint) {
+      if (builtMapType === "omaha") {
+        if (hitPoint && hitPoint.z < -WORLD_LIMIT_Z * 0.68) return "omahaWater";
+        return "omahaSand";
+      }
       return builtMapType === "shoebox" ? "shoeboxDust" : "sandboxSand";
     }
 
@@ -7535,9 +8264,11 @@
       }
       const sinY = Math.sin(soldier.yaw);
       const cosY = Math.cos(soldier.yaw);
+      const crouchScale = soldier.crouching ? crouchHeightScale() : 1;
+      const footLift = soldier.crouching ? crouchInches(CROUCH_TUNE.raiseFeetInches) : 0;
       return new BABYLON.Vector3(
         soldier.position.x + sinY * 1.15 + cosY * 0.18,
-        soldier.position.y + 1.54 - Math.sin(soldier.pitch) * 0.65,
+        soldier.position.y + 1.54 * crouchScale + footLift - Math.sin(soldier.pitch) * 0.65,
         soldier.position.z + cosY * 1.15 - sinY * 0.18
       );
     }
@@ -7621,7 +8352,7 @@
       }
 
       // 2. Check outer wooden sandbox / cardboard shoe box walls
-      const wallTop = builtMapType === "shoebox" ? 5.0 : 3.3;
+      const wallTop = builtMapType === "shoebox" ? 5.0 : builtMapType === "omaha" ? 4.0 : 3.3;
       if (dx > 1e-5) {
         const t = (WORLD_LIMIT_X - ox) / dx;
         if (t > 0 && t < closestDist && oy + dy * t <= wallTop) {
@@ -7742,9 +8473,10 @@
         const s = soldiers[i];
         if (!s.alive || s.team === shooter.team) continue;
         const sx = s.position.x, sy = s.position.y, sz = s.position.z;
+        const hitH = s.crouching ? 2.05 * crouchHeightScale() : 2.05;
         const d = intersectRayAABB(
           ox, oy, oz, dx, dy, dz,
-          sx - 0.46, sx + 0.46, sy, sy + 2.05, sz - 0.46, sz + 0.46,
+          sx - 0.46, sx + 0.46, sy, sy + hitH, sz - 0.46, sz + 0.46,
           closestDist
         );
         if (d >= 0 && d < closestDist) {
@@ -7789,7 +8521,7 @@
           });
         }
       } else if (hitKind === "sand") {
-        spawnImpactFx(hitPoint, getTerrainImpactFx());
+        spawnImpactFx(hitPoint, getTerrainImpactFx(hitPoint));
       } else if (hitKind === "toy") {
         spawnImpactFx(hitPoint, "toyPlastic");
       }
@@ -7825,9 +8557,10 @@
         const s = soldiers[i];
         if (!s.alive || s.team === player.team) continue;
         const sx = s.position.x, sy = s.position.y, sz = s.position.z;
+        const hitH = s.crouching ? 2.05 * crouchHeightScale() : 2.05;
         const d = intersectRayAABB(
           ox, oy, oz, dx, dy, dz,
-          sx - 0.48, sx + 0.48, sy, sy + 2.05, sz - 0.48, sz + 0.48,
+          sx - 0.48, sx + 0.48, sy, sy + hitH, sz - 0.48, sz + 0.48,
           aimDist
         );
         if (d > 3 && d < aimDist) {
@@ -8574,6 +9307,11 @@
         configuredMapLimit = 64;
         if (mapSelectEl) mapSelectEl.value = "kitchen";
         if (mapSizeSelectEl) mapSizeSelectEl.value = "64";
+      } else if (savedMap === "omaha") {
+        configuredMapType = "omaha";
+        configuredMapLimit = 80;
+        if (mapSelectEl) mapSelectEl.value = "omaha";
+        if (mapSizeSelectEl) mapSizeSelectEl.value = "80";
       } else if (savedMap === "shoebox" || savedMapSize === "28") {
         configuredMapType = "shoebox";
         configuredMapLimit = 28;
@@ -8679,7 +9417,8 @@
         mpRoomInputEl.value = mpState.persistedHostRoomCode;
         return;
       }
-      const prefix = mapType === "kitchen" ? "KITC" : mapType === "shoebox" ? "SHOE" : "SAND";
+      const prefix =
+        mapType === "omaha" ? "OMAH" : mapType === "kitchen" ? "KITC" : mapType === "shoebox" ? "SHOE" : "SAND";
       const currentVal = (mpRoomInputEl.value || "").trim().toUpperCase();
       const isTakenByOtherRoom =
         activeServerRoomCodes.has(currentVal) &&
@@ -8690,6 +9429,8 @@
         !currentVal ||
         currentVal === "SAND1" ||
         currentVal === "SHOE1" ||
+        currentVal === "KITC1" ||
+        currentVal === "OMAH1" ||
         (!userCustomizedRoomCode && !currentVal.startsWith(prefix)) ||
         (!userCustomizedRoomCode && isTakenByOtherRoom)
       ) {
@@ -8820,6 +9561,7 @@
     }
 
     function getMapSizeLabel(limit, mapType) {
+      if (mapType === "omaha") return "Omaha Beach";
       if (mapType === "kitchen") return "Kitchen Table";
       if (mapType === "shoebox" || limit <= 50) return "Shoebox";
       if (limit <= 65) return "Sandbox (Medium)";
@@ -9314,6 +10056,9 @@
       if (configuredMapType === "kitchen") {
         configuredMapLimit = 64;
         if (mapSizeSelectEl) mapSizeSelectEl.value = "64";
+      } else if (configuredMapType === "omaha") {
+        configuredMapLimit = 80;
+        if (mapSizeSelectEl) mapSizeSelectEl.value = "80";
       } else if (configuredMapType === "shoebox") {
         configuredMapLimit = 28;
         if (mapSizeSelectEl) mapSizeSelectEl.value = "28";
@@ -9326,6 +10071,8 @@
       }
       document.getElementById("kitchen-map-hint").style.display =
         configuredMapType === "kitchen" ? "" : "none";
+      const omahaHint = document.getElementById("omaha-map-hint");
+      if (omahaHint) omahaHint.style.display = configuredMapType === "omaha" ? "" : "none";
       if (prevMapType !== configuredMapType) {
         userCustomizedRoomCode = false;
         updateRoomCodeForSelectedMap(configuredMapType, true);
@@ -9398,10 +10145,15 @@
         password: roomPassword,
         name: playerName,
         team: chosenTeam,
-        greenTotal: configuredFriendlyCount + 1,
-        tanTotal: configuredEnemyCount,
+        greenTotal: configuredFriendlyCount + (chosenTeam === "green" ? 1 : 0),
+        tanTotal: configuredEnemyCount + (chosenTeam === "tan" ? 1 : 0),
         mapType: configuredMapType,
-        worldLimit: configuredMapType === "shoebox" ? 28 : configuredMapLimit,
+        worldLimit:
+          configuredMapType === "shoebox"
+            ? 28
+            : configuredMapType === "omaha"
+            ? 80
+            : configuredMapLimit,
         hardcoreMode: configuredHardcoreMode,
         aiSkill: configuredAiSkill,
         durationSec: configuredDurationSec,
@@ -9516,6 +10268,8 @@
       unit.alive = true;
       unit.respawnTimer = 0;
       unit.moveBlend = 0;
+      unit.crouching = false;
+      if (unit === player) syncCrouchUi();
       unit.velocity.set(0, 0, 0);
       unit.position.set(x, y, z);
       unit.netTargetPos.set(x, y, z);
@@ -9942,6 +10696,7 @@
           unit.pitch = msg.pitch;
           unit.moveBlend = msg.moveBlend;
           unit.strideDir = msg.strideDir || 0;
+          unit.crouching = Boolean(msg.crouching);
           break;
         }
 
@@ -9960,6 +10715,7 @@
             unit.pitch = p.pitch;
             unit.moveBlend = p.moveBlend;
             unit.strideDir = p.strideDir || 0;
+            unit.crouching = Boolean(p.crouching);
           }
           break;
         }
@@ -9982,6 +10738,7 @@
               unit.pitch = p.pitch;
               unit.moveBlend = p.moveBlend;
               unit.strideDir = p.strideDir || 0;
+              unit.crouching = Boolean(p.crouching);
             }
           }
           if (Array.isArray(msg.shots)) {
@@ -10078,7 +10835,7 @@
           spawnTracer(mPos, hPos, tracerColor);
 
           if (msg.hitKind === "sand") {
-            spawnImpactFx(hPos, getTerrainImpactFx());
+            spawnImpactFx(hPos, getTerrainImpactFx(hPos));
           } else if (msg.hitKind === "green") {
             spawnImpactFx(hPos, "greenPlastic");
             playImpactHitSound(hPos, true);
@@ -10254,6 +11011,8 @@
       mapSelectEl.addEventListener("change", () => {
         if (mapSelectEl.value === "kitchen") {
           mapSizeSelectEl.value = "64";
+        } else if (mapSelectEl.value === "omaha") {
+          mapSizeSelectEl.value = "80";
         } else if (mapSelectEl.value === "shoebox") {
           mapSizeSelectEl.value = "28";
         } else if (Number(mapSizeSelectEl.value) <= 50 || mapSizeSelectEl.value === "64") {
@@ -10268,6 +11027,12 @@
       });
     }
     mapSizeSelectEl.addEventListener("change", () => {
+      // Keep Omaha selected when Large (80) is chosen while already on Omaha
+      if (mapSelectEl && mapSelectEl.value === "omaha") {
+        mapSizeSelectEl.value = "80";
+        readHostSetupInputs();
+        return;
+      }
       if (mapSizeSelectEl.value === "64") {
         if (mapSelectEl) mapSelectEl.value = "kitchen";
       } else if (Number(mapSizeSelectEl.value) <= 50) {
@@ -10407,6 +11172,16 @@
             sandNodeMatFailed = true;
             if (activeSandMesh && !activeSandMesh.isDisposed()) activeSandMesh.isVisible = true;
             console.error("Sand node material (materials/sandboxSand.json) failed to load.", error);
+          });
+          await loadOmahaNodeMaterials().catch((error) => {
+            omahaWetSandMat = null;
+            omahaResinWaterMat = null;
+            omahaPlasterCliffMat = null;
+            omahaMatsFailed = true;
+            if (activeSandMesh && !activeSandMesh.isDisposed() && builtMapType === "omaha") {
+              activeSandMesh.isVisible = true;
+            }
+            console.error("Omaha node materials failed to load.", error);
           });
 
           report("Loading map props…");
@@ -10613,8 +11388,14 @@
       "ui.requestNewRound": () => {
         if (mpState.active && !isLocalPlayerHost()) return;
         if (mpState.active) {
-          const gTotal = mpState.roster ? mpState.roster.greenTotal : configuredFriendlyCount + 1;
-          const tTotal = mpState.roster ? mpState.roster.tanTotal : configuredEnemyCount;
+          const soloTeam =
+            mpTeamSelectEl && mpTeamSelectEl.value === "tan" ? "tan" : "green";
+          const gTotal = mpState.roster
+            ? mpState.roster.greenTotal
+            : configuredFriendlyCount + (soloTeam === "green" ? 1 : 0);
+          const tTotal = mpState.roster
+            ? mpState.roster.tanTotal
+            : configuredEnemyCount + (soloTeam === "tan" ? 1 : 0);
           sendNetMessage({
             type: "restart_match",
             clientToken: mpState.clientToken,
@@ -10624,6 +11405,8 @@
             worldLimit:
               getActiveMapType() === "shoebox"
                 ? 28
+                : getActiveMapType() === "omaha"
+                ? 80
                 : (mpState.roster && mpState.roster.worldLimit) || configuredMapLimit,
             hardcoreMode: isHardcoreActive(),
             aiSkill: getActiveAiSkill(),
@@ -11823,10 +12606,12 @@
             player.isGrounded = false;
           }
 
+          // Crouch is a toggle (C / mobile CROUCH); stays until pressed again.
           const moveMag = Math.min(1, moveVec.length());
           const isMoving = moveMag > 0.05;
+          const moveSpeed = player.speed * (player.crouching ? 0.48 : 1);
           if (isMoving) {
-            moveVec.normalize().scaleInPlace(player.speed * moveMag * dt);
+            moveVec.normalize().scaleInPlace(moveSpeed * moveMag * dt);
             player.position.addInPlace(moveVec);
             player.moveBlend = Math.min(1, player.moveBlend + dt * 6);
           } else {
@@ -11854,6 +12639,7 @@
               const qpitch = Math.round(player.pitch * 100);
               const qblend = Math.round(player.moveBlend * 100);
               const qstride = Math.round(strideDir * 100);
+              const qcrouch = player.crouching ? 1 : 0;
               const prev = mpState.lastPlayerState;
               const changed =
                 !prev ||
@@ -11863,7 +12649,8 @@
                 prev.yaw !== qyaw ||
                 prev.pitch !== qpitch ||
                 prev.moveBlend !== qblend ||
-                prev.strideDir !== qstride;
+                prev.strideDir !== qstride ||
+                prev.crouching !== qcrouch;
               if (changed || mpState.playerKeepalive >= 1) {
                 mpState.playerKeepalive = 0;
                 mpState.lastPlayerState = {
@@ -11873,7 +12660,8 @@
                   yaw: qyaw,
                   pitch: qpitch,
                   moveBlend: qblend,
-                  strideDir: qstride
+                  strideDir: qstride,
+                  crouching: qcrouch
                 };
                 sendNetMessage({
                   type: "player_state",
@@ -11883,7 +12671,8 @@
                   yaw: player.yaw,
                   pitch: player.pitch,
                   moveBlend: player.moveBlend,
-                  strideDir
+                  strideDir,
+                  crouching: player.crouching
                 });
               }
             }
@@ -12065,9 +12854,25 @@
         const hipFov = isPortrait ? 1.24 : 1.02;
         const adsFov = isPortrait ? 0.26 : 0.2;
         camera.fov = hipFov + (adsFov - hipFov) * aimBlend;
-        const camDistance = isPortrait ? 6.4 : 5.4;
-        const camHeight = isPortrait ? 2.85 : 2.65;
-        const shoulderOffset = isPortrait ? 0.45 : 0.72;
+        // Inside casemates: pull to near-eye over-shoulder so the roof/walls don't eat the view
+        const inCasemate = isInsideOmahaCasemate(player.position.x, player.position.z);
+        const crouching = Boolean(player.crouching);
+        let camDistance = isPortrait ? 6.4 : 5.4;
+        let camHeight = isPortrait ? 2.85 : 2.65;
+        let shoulderOffset = isPortrait ? 0.45 : 0.72;
+        if (inCasemate) {
+          camDistance = isPortrait ? 1.45 : 1.25;
+          camHeight = isPortrait ? 1.78 : 1.72;
+          shoulderOffset = isPortrait ? 0.18 : 0.28;
+        }
+        const crouchScale = crouching ? crouchHeightScale() : 1;
+        const footLift = crouching ? crouchInches(CROUCH_TUNE.raiseFeetInches) : 0;
+        // Camera drops with CROUCH_TUNE.heightPercent (shorter pose) and rises with raiseFeetInches.
+        const crouchHeadDrop = crouching ? 1.65 * (1 - crouchScale) : 0;
+        if (crouching) {
+          camHeight -= crouchHeadDrop;
+          camDistance *= inCasemate ? 0.92 : 0.88;
+        }
 
         const forward = new BABYLON.Vector3(
           Math.sin(player.yaw),
@@ -12080,17 +12885,17 @@
           -Math.sin(player.yaw)
         );
 
-        const visualY = player.position.y + (player.stepSmoothY || 0);
+        const visualY = player.position.y + (player.stepSmoothY || 0) + footLift;
         const headOrigin = new BABYLON.Vector3(
           player.position.x,
-          visualY + 1.65,
+          visualY + 1.65 - crouchHeadDrop,
           player.position.z
         );
 
         const idealCamPos = player.position
           .subtract(forward.scale(camDistance))
           .add(right.scale(shoulderOffset));
-        idealCamPos.y = visualY + camHeight + Math.sin(player.pitch) * 2.2;
+        idealCamPos.y = visualY + camHeight + Math.sin(player.pitch) * (inCasemate ? 0.55 : 2.2);
 
         // Prevent camera from clipping outside the wooden sandbox / shoe box walls or inside toys
         const camVec = idealCamPos.subtract(headOrigin);
@@ -12123,18 +12928,21 @@
             false
           );
           if (camHit.hitKind !== "air" && camHit.dist < camLen) {
+            // Inside bunkers allow the camera to sit closer before clipping
+            const pad = inCasemate ? 0.18 : 0.45;
+            const minFrac = inCasemate ? 0.05 : 0.15;
             safeFraction = Math.min(
               safeFraction,
-              Math.max(0.15, (camHit.dist - 0.45) / camLen)
+              Math.max(minFrac, (camHit.dist - pad) / camLen)
             );
           }
         }
 
-        safeFraction = Math.max(0.15, Math.min(1.0, safeFraction));
+        safeFraction = Math.max(inCasemate ? 0.05 : 0.15, Math.min(1.0, safeFraction));
         const desiredCamPos = headOrigin.add(camVec.scale(safeFraction));
 
         const sandUnderCam = getSandHeight(desiredCamPos.x, desiredCamPos.z);
-        desiredCamPos.y = Math.max(sandUnderCam + 0.85, desiredCamPos.y);
+        desiredCamPos.y = Math.max(sandUnderCam + (inCasemate ? 1.55 : 0.85), desiredCamPos.y);
 
         camera.position.copyFrom(desiredCamPos);
         if (grenadeCamKick > 0) {
@@ -12144,9 +12952,12 @@
         }
 
         const lookTarget = player.position
-          .add(forward.scale(14))
+          .add(forward.scale(inCasemate ? 10 : 14))
           .add(right.scale(shoulderOffset * 0.45));
-        lookTarget.y = player.position.y + 1.55 - Math.sin(player.pitch) * 6.5;
+        lookTarget.y =
+          player.position.y +
+          (inCasemate ? 1.72 : 1.55) -
+          Math.sin(player.pitch) * (inCasemate ? 3.2 : 6.5);
         if (aimBlend > 0) {
           let aimReach = 1.2;
           const aimHit = castEnvironmentRay(
