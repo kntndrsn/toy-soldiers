@@ -5010,6 +5010,30 @@
       return strike.dir;
     }
 
+    // Enemies still under the original cluster, at the positions they hold right now.
+    function airstrikeAimPoints(strike) {
+      const aim = strike.aim;
+      // Wider than the call-time cluster so soldiers can run and still be caught by the pass.
+      const reach = AIRSTRIKE_CLUSTER_RADIUS * 2;
+      const radiusSq = reach * reach;
+      const pts = [];
+      for (let i = 0; i < soldiers.length; i++) {
+        const soldier = soldiers[i];
+        if (!soldier.alive || soldier.team === strike.team || isSpawnProtected(soldier)) continue;
+        const dx = soldier.position.x - aim.x;
+        const dz = soldier.position.z - aim.z;
+        if (dx * dx + dz * dz > radiusSq) continue;
+        pts.push({
+          x: soldier.position.x,
+          y: soldier.position.y + 1.15,
+          z: soldier.position.z
+        });
+      }
+      if (pts.length) return pts;
+      if (strike.targets && strike.targets.length) return strike.targets;
+      return [strike.aim];
+    }
+
     function fireAirstrikeGuns(strike, pos) {
       const flight = strikeFlightDir(strike);
       const side = BABYLON.Vector3.Cross(flight, BABYLON.Axis.Y);
@@ -5017,11 +5041,11 @@
       else side.normalize();
       const isCaller = Boolean(player && strike.callerUnitId === player.unitId);
       const shotIndex = strike.lastShot;
+      const targets = airstrikeAimPoints(strike);
       for (let wing = 0; wing < mustang.flashes.length; wing++) {
         const flash = mustang.flashes[wing];
         const muzzle = flash.getAbsolutePosition();
         flash.isVisible = true;
-        const targets = strike.targets && strike.targets.length ? strike.targets : [strike.aim];
         const target = targets[(shotIndex + wing) % targets.length];
         const j = ((shotIndex * 3 + wing * 2) % 5) / 5 - 0.5;
         const ax = target.x + side.x * j * 0.3;
@@ -5037,13 +5061,16 @@
         const dirz = dz / mag;
         const maxRange = Math.min(90, mag + 2);
         const envHit = castEnvironmentRay(muzzle.x, muzzle.y, muzzle.z, dirx, diry, dirz, maxRange, true);
-        let closest = envHit.dist;
+        // A dune lip sits just in front of a soldier's feet. Let the round reach a body
+        // standing on that sand; trucks and walls still stop it.
+        const coverDist = envHit.hitKind === "sand" ? Math.min(maxRange, envHit.dist + 3.5) : envHit.dist;
+        let closest = coverDist;
         let hitKind = envHit.hitKind;
         let hitSoldier = null;
         if (isCaller) {
           for (let i = 0; i < soldiers.length; i++) {
             const soldier = soldiers[i];
-            if (!soldier.alive || soldier.team === strike.team) continue;
+            if (!soldier.alive || soldier.team === strike.team || isSpawnProtected(soldier)) continue;
             const d = intersectRayAABB(
               muzzle.x, muzzle.y, muzzle.z, dirx, diry, dirz,
               soldier.position.x - 0.46, soldier.position.x + 0.46,
@@ -5058,7 +5085,8 @@
             }
           }
         }
-        const hitPoint = muzzle.add(new BABYLON.Vector3(dirx, diry, dirz).scale(closest));
+        const impactDist = hitSoldier ? closest : envHit.dist;
+        const hitPoint = muzzle.add(new BABYLON.Vector3(dirx, diry, dirz).scale(impactDist));
         if (hitSoldier && isCaller && player) {
           let attacker = player;
           if (strike.callerUnitId) {
@@ -5838,7 +5866,7 @@
       if (!thrower || !thrower.isPlayer) return;
       for (let i = 0; i < soldiers.length; i++) {
         const target = soldiers[i];
-        if (!target.alive || target.team === thrower.team) continue;
+        if (!target.alive || target.team === thrower.team || isSpawnProtected(target)) continue;
         const dist = soldierBlastDistance(target, pos.x, pos.y, pos.z);
         if (dist >= GRENADE_BLAST_RADIUS) continue;
         const falloff = 1 - dist / GRENADE_BLAST_RADIUS;
@@ -6329,6 +6357,36 @@
       green: { fill: "#52fa47", accent: "#65ff58", text: "#98ff8c" },
       tan: { fill: "#ffb842", accent: "#ffd584", text: "#ffe09e" }
     };
+    const SPAWN_PROTECT_SEC = 3;
+    const SPAWN_PROTECT_FILL = "#4da3ff";
+    const AI_FIRE_RANGE = 22;
+
+    function isSpawnProtected(soldier) {
+      return Boolean(soldier && soldier.spawnProtect > 0);
+    }
+
+    function syncSpawnProtectPlate(soldier) {
+      const plate = soldier.model && soldier.model.plate;
+      if (!plate || !plate.fill) return;
+      const shielded = isSpawnProtected(soldier);
+      const style = TEAM_PLATE_STYLE[soldier.team] || TEAM_PLATE_STYLE.green;
+      const next = shielded ? SPAWN_PROTECT_FILL : style.fill;
+      if (plate.shielded === shielded && plate.fill.background === next) return;
+      plate.shielded = shielded;
+      plate.fill.background = next;
+    }
+
+    function tickSpawnProtection(dt) {
+      for (let i = 0; i < soldiers.length; i++) {
+        const s = soldiers[i];
+        if (!s.spawnProtect || s.spawnProtect <= 0) continue;
+        s.spawnProtect -= dt;
+        if (s.spawnProtect < 0) s.spawnProtect = 0;
+        syncSpawnProtectPlate(s);
+        if (s === player && s.spawnProtect <= 0) updateHUD(true);
+      }
+    }
+
     // Player plates pivot on their health bar so the bar sits on the anchor at every scale.
     const PLAYER_PLATE_BAR_OFFSET = 23;
     const PLAYER_PLATE_PAD_X = 28;
@@ -6476,6 +6534,7 @@
         }
       }
       setPlateHealth(m, soldier.health / soldier.maxHealth);
+      syncSpawnProtectPlate(soldier);
     }
 
     // Per-frame screen-space sizing, distance fade and staggered environment occlusion.
@@ -7365,6 +7424,7 @@
               ? clampRankIndex(remotePlayerInfo.rank)
               : undefined,
             respawnTimer: 0,
+            spawnProtect: isLocalPlayer || isRemotePlayer ? SPAWN_PROTECT_SEC : 0,
             fireCooldown: isLocalPlayer ? 0 : 0.6 + (i % 4) * 0.35,
             fireRate: isLocalPlayer ? 0.2 : 0.78 + (i % 3) * 0.15,
             moveBlend: 0,
@@ -8589,7 +8649,7 @@
       // 3. Check opposing team soldiers analytically (bounding box test)
       for (let i = 0; i < soldiers.length; i++) {
         const s = soldiers[i];
-        if (!s.alive || s.team === shooter.team) continue;
+        if (!s.alive || s.team === shooter.team || isSpawnProtected(s)) continue;
         const sx = s.position.x, sy = s.position.y, sz = s.position.z;
         const hitH = s.crouching ? 2.05 * crouchHeightScale() : 2.05;
         const d = intersectRayAABB(
@@ -8886,7 +8946,7 @@
             });
             applyNetworkDamageState(soldier, 0, false);
           } else {
-            applyDamage(soldier, soldier.maxHealth, null);
+            applyDamage(soldier, soldier.maxHealth, null, { ignoreSpawnProtect: true });
           }
         }
       }
@@ -10385,6 +10445,7 @@
       unit.health = unit.maxHealth;
       unit.alive = true;
       unit.respawnTimer = 0;
+      unit.spawnProtect = unit.isPlayer || unit.isRemotePlayer ? SPAWN_PROTECT_SEC : 0;
       unit.moveBlend = 0;
       unit.crouching = false;
       if (unit === player) syncCrouchUi();
@@ -10502,6 +10563,7 @@
 
       soldiers.forEach((s) => {
         if (s.unitId === mpState.myUnitId) {
+          const becameHuman = !s.isPlayer && !s.isRemotePlayer;
           s.isPlayer = true;
           s.isRemotePlayer = false;
           const customName = (mpNameInputEl.value || "").trim();
@@ -10509,8 +10571,13 @@
           s.name = customName ? `${customName} (You)` : "You";
           s.rank = localRankIndex();
           player = s;
+          if (becameHuman && s.alive) {
+            s.spawnProtect = SPAWN_PROTECT_SEC;
+            syncSpawnProtectPlate(s);
+          }
         } else if (humanMap.has(s.unitId)) {
           const info = humanMap.get(s.unitId);
+          const becameHuman = !s.isPlayer && !s.isRemotePlayer;
           s.isPlayer = false;
           s.isRemotePlayer = true;
           s.rawPlayerName = info.name || "Player";
@@ -10525,11 +10592,18 @@
             const ry = getSandHeight(rx, rz);
             const ryaw = typeof info.yaw === "number" ? info.yaw : s.yaw;
             respawnSingleSoldier(s, rx, ry, rz, ryaw);
+          } else if (becameHuman && s.alive) {
+            s.spawnProtect = SPAWN_PROTECT_SEC;
+            syncSpawnProtectPlate(s);
           }
         } else {
           const wasHuman = s.isPlayer || s.isRemotePlayer;
           s.isPlayer = false;
           s.isRemotePlayer = false;
+          if (s.spawnProtect) {
+            s.spawnProtect = 0;
+            syncSpawnProtectPlate(s);
+          }
           s.rawPlayerName = "";
           s.rank = undefined;
           if (s.botName) {
@@ -11610,8 +11684,9 @@
     restartBtn.addEventListener("click", () => uiNotify("ui.retryRequested"));
     setupAgainBtn.addEventListener("click", () => uiNotify("ui.setupRequested"));
 
-    function applyDamage(target, amount, attacker) {
+    function applyDamage(target, amount, attacker, opts) {
       if (!target.alive || gameEnded || isSetupOpen) return;
+      if (!(opts && opts.ignoreSpawnProtect) && isSpawnProtected(target)) return;
 
       const finalAmount = isHardcoreActive() ? Math.max(amount, target.maxHealth) : amount;
       target.health = Math.max(0, target.health - finalAmount);
@@ -11667,13 +11742,17 @@
       if (healthValueEl) healthValueEl.textContent = hp;
       if (healthBarFillEl) {
         healthBarFillEl.style.width = hp + "%";
-        healthBarFillEl.parentElement.title = `Health ${hp}%`;
+        if (isSpawnProtected(player)) {
+          healthBarFillEl.parentElement.title = `Spawn protection ${Math.ceil(player.spawnProtect)}s`;
+          healthBarFillEl.style.backgroundColor = SPAWN_PROTECT_FILL;
+        } else {
+          healthBarFillEl.parentElement.title = `Health ${hp}%`;
+          if (hp > 50) healthBarFillEl.style.backgroundColor = "#3bd13b";
+          else if (hp > 25) healthBarFillEl.style.backgroundColor = "#f0ad4e";
+          else healthBarFillEl.style.backgroundColor = "#d9534f";
+        }
       }
       updateRankHud();
-
-      if (hp > 50) healthBarFillEl.style.backgroundColor = "#3bd13b";
-      else if (hp > 25) healthBarFillEl.style.backgroundColor = "#f0ad4e";
-      else healthBarFillEl.style.backgroundColor = "#d9534f";
 
       if (matchTimerEl) {
         matchTimerEl.textContent = formatTimeMMSS(matchTimeRemaining);
@@ -12338,28 +12417,39 @@
       aiStepDt = dt;
 
       ai.targetSearchTimer = (ai.targetSearchTimer || 0) - dt;
-      if (ai.targetSearchTimer <= 0 || !ai.cachedTarget || !ai.cachedTarget.alive) {
+      if (
+        ai.targetSearchTimer <= 0 ||
+        !ai.cachedTarget ||
+        !ai.cachedTarget.alive ||
+        isSpawnProtected(ai.cachedTarget)
+      ) {
         ai.targetSearchTimer = profile.targetSearch + (ai.slotIndex % 5) * 0.03;
         let best = null;
-        let bestScore = -Infinity;
+        let bestDist = Infinity;
+        let closest = null;
+        let closestDist = Infinity;
         for (const other of soldiers) {
           if (!other.alive || other.team === ai.team) continue;
           const dx0 = ai.position.x - other.position.x;
           const dz0 = ai.position.z - other.position.z;
           const dSq = dx0 * dx0 + dz0 * dz0;
-          let score = 40000 - dSq;
-          if (other.isPlayer) score += 1800;
-          if (ai.lastSensedTarget === other) score += 900;
-          if (score > bestScore) {
-            bestScore = score;
+          if (dSq < closestDist) {
+            closestDist = dSq;
+            closest = other;
+          }
+          if (isSpawnProtected(other)) continue;
+          if (dSq < bestDist) {
+            bestDist = dSq;
             best = other;
           }
         }
         ai.cachedTarget = best;
+        ai.closestEnemy = closest;
       }
 
       const nearestTarget = ai.cachedTarget;
-      if (!nearestTarget) {
+      const advanceTarget = nearestTarget || ai.closestEnemy;
+      if (!advanceTarget) {
         const hunt = getHuntPosition(ai, profile);
         if (!hunt) {
           ai.moveBlend = Math.max(0, ai.moveBlend - dt * 4);
@@ -12369,7 +12459,7 @@
         }
       }
 
-      const focus = nearestTarget || { position: getHuntPosition(ai, profile), velocity: { x: 0, y: 0, z: 0 }, alive: false };
+      const focus = advanceTarget || { position: getHuntPosition(ai, profile), velocity: { x: 0, y: 0, z: 0 }, alive: false };
       const dx = focus.position.x - ai.position.x;
       const dz = focus.position.z - ai.position.z;
       const dy = focus.position.y - ai.position.y;
@@ -12560,8 +12650,8 @@
       // Shoot with clear LOS, or briefly after LOS (peeking / dune flicker)
       const canFire =
         nearestTarget &&
-        horizDist < 75 &&
-        (canSee || (ai.recentLosTimer > 0 && horizDist < 40));
+        horizDist < AI_FIRE_RANGE &&
+        (canSee || ai.recentLosTimer > 0);
       if (ai.fireCooldown <= 0 && canFire) {
         const muzzlePos = getMuzzleWorldPosition(ai);
         const spread = (ai.team === "green" ? 1.2 : 1.5) * profile.spreadMul;
@@ -12674,6 +12764,7 @@
         if (matchTimeRemaining <= 0) {
           endMatchByTimeLimit();
         }
+        tickSpawnProtection(dt);
       }
 
       // Rebuild O(N) 2D Spatial Hash Grid once per frame before soldier physics/collision checks

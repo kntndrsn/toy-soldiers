@@ -1472,10 +1472,17 @@ function readAirstrikeTargets(list) {
   return targets;
 }
 
+const SPAWN_PROTECT_MS = 3000;
+
+function grantSpawnProtection(st) {
+  if (!st) return;
+  st.protectedUntil = Date.now() + SPAWN_PROTECT_MS;
+}
+
 function getUnitStat(room, unitId) {
   let st = room.unitStats.get(unitId);
   if (!st) {
-    st = { kills: 0, deaths: 0, health: 100, alive: true };
+    st = { kills: 0, deaths: 0, health: 100, alive: true, protectedUntil: 0 };
     room.unitStats.set(unitId, st);
     room.statsDirty = true;
     room.statsDirtyForSync = true;
@@ -1542,14 +1549,15 @@ function resetRoomMatchState(room) {
   }
   room.unitStats.clear();
   for (let i = 0; i < room.greenTotal; i++) {
-    room.unitStats.set(`green_${i}`, { kills: 0, deaths: 0, health: 100, alive: true });
+    room.unitStats.set(`green_${i}`, { kills: 0, deaths: 0, health: 100, alive: true, protectedUntil: 0 });
   }
   for (let i = 0; i < room.tanTotal; i++) {
-    room.unitStats.set(`tan_${i}`, { kills: 0, deaths: 0, health: 100, alive: true });
+    room.unitStats.set(`tan_${i}`, { kills: 0, deaths: 0, health: 100, alive: true, protectedUntil: 0 });
   }
   for (const c of room.clients.values()) {
     c.health = 100;
     c.alive = true;
+    if (c.unitId) grantSpawnProtection(getUnitStat(room, c.unitId));
   }
   room.statsDirty = true;
   room.statsDirtyForSync = true;
@@ -2141,6 +2149,7 @@ wss.on("connection", (ws, req) => {
 
           room.clients.set(clientId, clientInfo);
           currentRoom = room;
+          grantSpawnProtection(getUnitStat(room, clientInfo.unitId));
 
           const rosterSnapshot = serializeRoster(room);
 
@@ -2308,6 +2317,7 @@ wss.on("connection", (ws, req) => {
           room.statsDirtyForSync = true;
           revivedDeadUnit = true;
         }
+        if (!restoredSlot || revivedDeadUnit) grantSpawnProtection(unitStat);
 
         const { maxX: spawnMaxX, minZ: spawnMinZ, maxZ: spawnMaxZ } = getSpawnBounds(room);
         const randX = Math.round((Math.random() * 2 - 1) * spawnMaxX * 100) / 100;
@@ -2547,6 +2557,7 @@ wss.on("connection", (ws, req) => {
 
         const targetStat = getUnitStat(currentRoom, targetUnitId);
         if (!targetStat.alive) break; // Already eliminated; ignore duplicate hit packets
+        if (!tableFall && targetStat.protectedUntil && Date.now() < targetStat.protectedUntil) break;
 
         targetStat.health = Math.max(0, targetStat.health - amount);
         let killed = false;
@@ -2738,6 +2749,7 @@ wss.on("connection", (ws, req) => {
         const targetStat = getUnitStat(currentRoom, targetUnitId);
         targetStat.health = 100;
         targetStat.alive = true;
+        if (!msg.isAI) grantSpawnProtection(targetStat);
         currentRoom.statsDirty = true;
         currentRoom.statsDirtyForSync = true;
 
