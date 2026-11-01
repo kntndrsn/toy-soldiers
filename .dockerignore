@@ -1,0 +1,8 @@
+node_modules
+npm-debug.log
+.git
+.cursor
+.mcp.json
+Dockerfile
+docker-compose.yml
+k6-stress-test.js

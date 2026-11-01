@@ -1370,6 +1370,270 @@ function normalizeAiSkill(raw) {
   return "intermediate";
 }
 
+function normalizeGameMode(raw) {
+  const v = String(raw || "tdm").toLowerCase();
+  if (v === "dm" || v === "ctf") return v;
+  return "tdm";
+}
+
+// Keep in sync with computeFlagStands in index.html.
+const FLAG_PICKUP_RADIUS = 2.2;
+const FLAG_CAPTURE_RADIUS = 4;
+const FLAG_RETURN_MS = 25000;
+
+function computeFlagStands(mapType, worldLimit) {
+  const limitZ =
+    mapType === "kitchen" ? 64
+      : mapType === "shoebox" ? 30
+        : mapType === "omaha" ? 72
+          : Math.max(50, Math.min(130, Number(worldLimit) || 80));
+  if (mapType === "omaha") {
+    return {
+      green: { x: 0, z: -(limitZ - 10) },
+      tan: { x: 0, z: limitZ - 13 }
+    };
+  }
+  const isShoebox = mapType === "shoebox";
+  const marginZ = limitZ - (isShoebox ? 3.2 : 5.0);
+  const minCenterBuffer = isShoebox
+    ? Math.max(8.5, limitZ * 0.34)
+    : Math.max(20, limitZ * 0.38);
+  const zSpan = Math.max(4, marginZ - minCenterBuffer);
+  const standZ = minCenterBuffer + zSpan * 0.35;
+  return {
+    green: { x: 0, z: -standZ },
+    tan: { x: 0, z: standZ }
+  };
+}
+
+function resetRoomFlags(room) {
+  if (!room || normalizeGameMode(room.gameMode) !== "ctf") {
+    if (room) {
+      room.flags = null;
+      room.flagStands = null;
+      room.greenCaptures = 0;
+      room.tanCaptures = 0;
+      room.flagsDirty = false;
+    }
+    return;
+  }
+  const stands = computeFlagStands(room.mapType, room.worldLimit);
+  room.flagStands = stands;
+  room.flags = {
+    green: {
+      team: "green",
+      state: "home",
+      x: stands.green.x,
+      y: 0,
+      z: stands.green.z,
+      carrierId: null,
+      droppedUntil: 0
+    },
+    tan: {
+      team: "tan",
+      state: "home",
+      x: stands.tan.x,
+      y: 0,
+      z: stands.tan.z,
+      carrierId: null,
+      droppedUntil: 0
+    }
+  };
+  room.greenCaptures = 0;
+  room.tanCaptures = 0;
+  room.flagsDirty = true;
+}
+
+function serializeFlags(room) {
+  if (!room || !room.flags) return null;
+  const pack = (flag) => ({
+    state: flag.state,
+    x: Math.round(flag.x * 100) / 100,
+    y: Math.round((flag.y || 0) * 100) / 100,
+    z: Math.round(flag.z * 100) / 100,
+    carrierId: flag.carrierId || null
+  });
+  return {
+    green: pack(room.flags.green),
+    tan: pack(room.flags.tan),
+    greenCaptures: room.greenCaptures || 0,
+    tanCaptures: room.tanCaptures || 0,
+    stands: room.flagStands
+  };
+}
+
+function findUnitPosition(room, unitId, fallback) {
+  if (fallback && [fallback.x, fallback.y, fallback.z].every(Number.isFinite)) {
+    return { x: fallback.x, y: fallback.y, z: fallback.z };
+  }
+  for (const c of room.clients.values()) {
+    if (c.unitId === unitId) {
+      return { x: c.x || 0, y: c.y || 0, z: c.z || 0 };
+    }
+  }
+  const packed = room.lastWorldState && room.lastWorldState.aiPacked;
+  if (Array.isArray(packed)) {
+    for (let i = 0; i < packed.length; i++) {
+      const row = packed[i];
+      if (row && String(row[0]) === unitId) {
+        return { x: row[1] / 100, y: row[2] / 100, z: row[3] / 100 };
+      }
+    }
+  }
+  return { x: 0, y: 0, z: 0 };
+}
+
+function dropCarriedFlag(room, unitId, x, y, z) {
+  if (!room || !room.flags || !unitId) return false;
+  let dropped = false;
+  for (const team of ["green", "tan"]) {
+    const flag = room.flags[team];
+    if (flag.state === "carried" && flag.carrierId === unitId) {
+      flag.state = "dropped";
+      flag.carrierId = null;
+      flag.x = x;
+      flag.y = y || 0;
+      flag.z = z;
+      flag.droppedUntil = Date.now() + FLAG_RETURN_MS;
+      dropped = true;
+    }
+  }
+  if (dropped) room.flagsDirty = true;
+  return dropped;
+}
+
+function collectLiveUnits(room) {
+  const units = new Map();
+  for (const c of room.clients.values()) {
+    if (!c.unitId) continue;
+    const st = room.unitStats.get(c.unitId);
+    if (st && st.alive === false) continue;
+    units.set(c.unitId, {
+      unitId: c.unitId,
+      team: c.team === "tan" ? "tan" : "green",
+      x: c.x || 0,
+      y: c.y || 0,
+      z: c.z || 0
+    });
+  }
+  const packed = room.lastWorldState && room.lastWorldState.aiPacked;
+  if (Array.isArray(packed)) {
+    for (let i = 0; i < packed.length; i++) {
+      const row = packed[i];
+      if (!row || row[0] == null || row[8] === 0) continue;
+      const unitId = String(row[0]);
+      if (units.has(unitId)) continue;
+      const st = room.unitStats.get(unitId);
+      if (st && st.alive === false) continue;
+      units.set(unitId, {
+        unitId,
+        team: unitId.startsWith("tan") ? "tan" : "green",
+        x: row[1] / 100,
+        y: row[2] / 100,
+        z: row[3] / 100
+      });
+    }
+  }
+  return units;
+}
+
+function stepRoomFlags(room, now) {
+  if (!room || room.gameMode !== "ctf" || !room.flags || room.matchEnded) return;
+  const units = collectLiveUnits(room);
+  const teams = ["green", "tan"];
+
+  for (let i = 0; i < teams.length; i++) {
+    const flag = room.flags[teams[i]];
+    if (flag.state === "dropped" && flag.droppedUntil && now >= flag.droppedUntil) {
+      const stand = room.flagStands[teams[i]];
+      flag.state = "home";
+      flag.carrierId = null;
+      flag.x = stand.x;
+      flag.y = 0;
+      flag.z = stand.z;
+      flag.droppedUntil = 0;
+      room.flagsDirty = true;
+    }
+  }
+
+  for (let i = 0; i < teams.length; i++) {
+    const flag = room.flags[teams[i]];
+    if (flag.state !== "carried") continue;
+    const carrier = units.get(flag.carrierId);
+    if (!carrier) {
+      const st = flag.carrierId ? room.unitStats.get(flag.carrierId) : null;
+      if (!st || st.alive === false) {
+        flag.state = "dropped";
+        flag.carrierId = null;
+        flag.droppedUntil = now + FLAG_RETURN_MS;
+        room.flagsDirty = true;
+      }
+      continue;
+    }
+    flag.x = carrier.x;
+    flag.y = carrier.y;
+    flag.z = carrier.z;
+  }
+
+  for (const unit of units.values()) {
+    const own = room.flags[unit.team];
+    const enemyTeam = unit.team === "green" ? "tan" : "green";
+    const enemy = room.flags[enemyTeam];
+    const ownStand = room.flagStands[unit.team];
+    if (
+      own.state === "dropped" &&
+      Math.hypot(unit.x - own.x, unit.z - own.z) <= FLAG_PICKUP_RADIUS
+    ) {
+      const stand = room.flagStands[unit.team];
+      own.state = "home";
+      own.carrierId = null;
+      own.x = stand.x;
+      own.y = 0;
+      own.z = stand.z;
+      own.droppedUntil = 0;
+      room.flagsDirty = true;
+    }
+
+    const carryingEnemy = enemy.state === "carried" && enemy.carrierId === unit.unitId;
+    if (
+      carryingEnemy &&
+      own.state === "home" &&
+      Math.hypot(unit.x - ownStand.x, unit.z - ownStand.z) <= FLAG_CAPTURE_RADIUS
+    ) {
+      const enemyStand = room.flagStands[enemyTeam];
+      enemy.state = "home";
+      enemy.carrierId = null;
+      enemy.x = enemyStand.x;
+      enemy.y = 0;
+      enemy.z = enemyStand.z;
+      enemy.droppedUntil = 0;
+      if (unit.team === "green") room.greenCaptures = (room.greenCaptures || 0) + 1;
+      else room.tanCaptures = (room.tanCaptures || 0) + 1;
+      const st = getUnitStat(room, unit.unitId);
+      st.captures = (st.captures || 0) + 1;
+      room.statsDirty = true;
+      room.statsDirtyForSync = true;
+      room.flagsDirty = true;
+      continue;
+    }
+    if (carryingEnemy) continue;
+    const carryingOwn = own.state === "carried" && own.carrierId === unit.unitId;
+    if (carryingOwn) continue;
+    if (
+      (enemy.state === "home" || enemy.state === "dropped") &&
+      Math.hypot(unit.x - enemy.x, unit.z - enemy.z) <= FLAG_PICKUP_RADIUS
+    ) {
+      enemy.state = "carried";
+      enemy.carrierId = unit.unitId;
+      enemy.x = unit.x;
+      enemy.y = unit.y;
+      enemy.z = unit.z;
+      enemy.droppedUntil = 0;
+      room.flagsDirty = true;
+    }
+  }
+}
+
 // Career rank is owned by the browser. The room only relays the ladder index.
 const MAX_RANK_INDEX = 10;
 
@@ -1482,7 +1746,7 @@ function grantSpawnProtection(st) {
 function getUnitStat(room, unitId) {
   let st = room.unitStats.get(unitId);
   if (!st) {
-    st = { kills: 0, deaths: 0, health: 100, alive: true, protectedUntil: 0 };
+    st = { kills: 0, deaths: 0, captures: 0, health: 100, alive: true, protectedUntil: 0 };
     room.unitStats.set(unitId, st);
     room.statsDirty = true;
     room.statsDirtyForSync = true;
@@ -1499,6 +1763,7 @@ function serializeUnitStats(room) {
     obj[unitId] = {
       kills: st.kills,
       deaths: st.deaths,
+      captures: st.captures || 0,
       health: st.health,
       alive: st.alive
     };
@@ -1549,10 +1814,10 @@ function resetRoomMatchState(room) {
   }
   room.unitStats.clear();
   for (let i = 0; i < room.greenTotal; i++) {
-    room.unitStats.set(`green_${i}`, { kills: 0, deaths: 0, health: 100, alive: true, protectedUntil: 0 });
+    room.unitStats.set(`green_${i}`, { kills: 0, deaths: 0, captures: 0, health: 100, alive: true, protectedUntil: 0 });
   }
   for (let i = 0; i < room.tanTotal; i++) {
-    room.unitStats.set(`tan_${i}`, { kills: 0, deaths: 0, health: 100, alive: true, protectedUntil: 0 });
+    room.unitStats.set(`tan_${i}`, { kills: 0, deaths: 0, captures: 0, health: 100, alive: true, protectedUntil: 0 });
   }
   for (const c of room.clients.values()) {
     c.health = 100;
@@ -1562,6 +1827,7 @@ function resetRoomMatchState(room) {
   room.statsDirty = true;
   room.statsDirtyForSync = true;
   room.airstrikeUntil = 0;
+  resetRoomFlags(room);
 }
 
 function isRoomOwner(room, clientId, clientToken) {
@@ -1619,7 +1885,8 @@ function getOrCreateRoom(
   hardcoreMode,
   password,
   hostToken = null,
-  aiSkill = "intermediate"
+  aiSkill = "intermediate",
+  gameMode = "tdm"
 ) {
   let room = rooms.get(roomCode);
   if (!room) {
@@ -1641,6 +1908,7 @@ function getOrCreateRoom(
       worldLimit: lim,
       hardcoreMode: Boolean(hardcoreMode),
       aiSkill: normalizeAiSkill(aiSkill),
+      gameMode: normalizeGameMode(gameMode),
       durationSec: dur,
       matchEndTime: Date.now() + dur * 1000,
       matchEnded: false,
@@ -1702,6 +1970,9 @@ function serializeRoster(room, opts = {}) {
     worldLimit: room.worldLimit,
     hardcoreMode: Boolean(room.hardcoreMode),
     aiSkill: normalizeAiSkill(room.aiSkill),
+    gameMode: normalizeGameMode(room.gameMode),
+    greenCaptures: room.greenCaptures || 0,
+    tanCaptures: room.tanCaptures || 0,
     durationSec: room.durationSec,
     remainingSec,
     matchEnded: room.matchEnded,
@@ -1711,6 +1982,9 @@ function serializeRoster(room, opts = {}) {
   };
   if (opts.includeUnitStats !== false) {
     roster.unitStats = serializeUnitStats(room);
+  }
+  if (room.gameMode === "ctf" && room.flags) {
+    roster.flags = serializeFlags(room);
   }
   return roster;
 }
@@ -1900,6 +2174,7 @@ wss.on("connection", (ws, req) => {
         const requestedHardcore = Boolean(msg.hardcoreMode);
         const requestedAiSkill = normalizeAiSkill(msg.aiSkill);
         const requestedDuration = Number(msg.durationSec) || 300;
+        const requestedGameMode = normalizeGameMode(msg.gameMode);
 
         if (isHosting) {
           // Check if this host already has an existing room (active or waiting on end screen)
@@ -1983,6 +2258,7 @@ wss.on("connection", (ws, req) => {
             existingHostRoom.worldLimit = requestedLimit;
             existingHostRoom.hardcoreMode = requestedHardcore;
             existingHostRoom.aiSkill = requestedAiSkill;
+            existingHostRoom.gameMode = requestedGameMode;
             existingHostRoom.durationSec = Math.max(60, Math.min(1800, requestedDuration));
 
             const { maxX: spawnMaxX, minZ: spawnMinZ, maxZ: spawnMaxZ } = getSpawnBounds(existingHostRoom);
@@ -2097,7 +2373,8 @@ wss.on("connection", (ws, req) => {
             requestedHardcore,
             suppliedPassword,
             clientToken,
-            requestedAiSkill
+            requestedAiSkill,
+            requestedGameMode
           );
 
           room.hostId = clientId;
@@ -2118,6 +2395,7 @@ wss.on("connection", (ws, req) => {
           room.worldLimit = requestedLimit;
           room.hardcoreMode = requestedHardcore;
           room.aiSkill = requestedAiSkill;
+          room.gameMode = requestedGameMode;
           room.durationSec = Math.max(60, Math.min(1800, requestedDuration));
           resetRoomMatchState(room);
 
@@ -2571,6 +2849,10 @@ wss.on("connection", (ws, req) => {
             const attackerStat = getUnitStat(currentRoom, attackerUnitId);
             attackerStat.kills += 1;
           }
+          if (currentRoom.gameMode === "ctf") {
+            const pos = fallPosition || findUnitPosition(currentRoom, targetUnitId);
+            dropCarriedFlag(currentRoom, targetUnitId, pos.x, pos.y, pos.z);
+          }
         }
         syncClientHealthFromUnit(currentRoom, targetUnitId, targetStat.health, targetStat.alive);
         currentRoom.statsDirty = true;
@@ -2933,6 +3215,9 @@ wss.on("connection", (ws, req) => {
           if (msg.durationSec) {
             currentRoom.durationSec = Math.max(60, Math.min(1800, Number(msg.durationSec)));
           }
+          if (typeof msg.gameMode === "string") {
+            currentRoom.gameMode = normalizeGameMode(msg.gameMode);
+          }
         }
         resetRoomMatchState(currentRoom);
         currentRoom.matchId++;
@@ -2967,6 +3252,9 @@ wss.on("connection", (ws, req) => {
 
 function removeClientFromRoom(room, clientId) {
   const leaving = room.clients.get(clientId);
+  if (leaving && leaving.unitId && room.gameMode === "ctf") {
+    dropCarriedFlag(room, leaving.unitId, leaving.x || 0, leaving.y || 0, leaving.z || 0);
+  }
   room.clients.delete(clientId);
   if (room.dirtyPlayers) {
     room.dirtyPlayers.delete(clientId);
@@ -3032,6 +3320,16 @@ function removeClientFromRoom(room, clientId) {
 setInterval(() => {
   const nowMs = Date.now();
   for (const room of rooms.values()) {
+    if (room.gameMode === "ctf" && !room.matchEnded && room.flags) {
+      stepRoomFlags(room, nowMs);
+      if (room.flagsDirty && room.clients.size > 0) {
+        const flagMsg = { type: "flag_state", flags: serializeFlags(room) };
+        if (room.statsDirty) flagMsg.unitStats = serializeUnitStats(room);
+        broadcastToRoom(room, flagMsg, null);
+        room.flagsDirty = false;
+      }
+    }
+
     if (room.healthPacks && room.healthPacks.size > 0) {
       for (const [packId, pack] of room.healthPacks) {
         if (nowMs >= pack.expiresAt) {
@@ -3217,16 +3515,14 @@ setInterval(() => {
 
     // Staggered 2-second lightweight clock sync (only 12.5% of rooms per 250ms tick)
     if (!room.matchEnded && room.syncSlot === currentSyncSlot) {
-      broadcastToRoom(
-        room,
-        {
-          type: "timer_sync",
-          remainingSec: Math.round(remainingSec * 10) / 10,
-          matchEnded: room.matchEnded,
-          presence: cachedPresence
-        },
-        null
-      );
+      const timerSync = {
+        type: "timer_sync",
+        remainingSec: Math.round(remainingSec * 10) / 10,
+        matchEnded: room.matchEnded,
+        presence: cachedPresence
+      };
+      if (room.gameMode === "ctf" && room.flags) timerSync.flags = serializeFlags(room);
+      broadcastToRoom(room, timerSync, null);
     }
   }
 
